@@ -94,11 +94,15 @@
   .day.sel{border-color:var(--wa-green);background:#d9f2ee}
   .slot-fascia{font-size:11px;font-weight:600;color:var(--muted);padding:7px 14px 3px;text-transform:uppercase;letter-spacing:.4px}
   .slotgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:0 14px}
-  .slot{padding:9px 4px;border-radius:9px;font-size:13.5px;font-weight:600;font-family:inherit;cursor:pointer;border:1px solid transparent}
+  .slot{display:flex;flex-direction:column;align-items:center;gap:1px;padding:7px 3px;border-radius:9px;font-family:inherit;cursor:pointer;border:1px solid transparent;line-height:1.1}
+  .slot b{font-size:13.5px;font-weight:600}
+  .slot small{font-size:10.5px;font-weight:600;opacity:.9}
   .slot.free{background:#eaf7e6;color:#0c5f57;border-color:#bfe6c8}
   .slot.conf{background:#fff4d6;color:#8a6d00;border-color:#f0e3b0}
   .slot.busy{background:#f4f6f7;color:#b9c2c6;border-color:#eef1f2;text-decoration:line-through;cursor:default}
-  .slot.sel{background:var(--wa-green);color:#fff;border-color:var(--wa-green);text-decoration:none}
+  .slot.sel{background:var(--wa-green);color:#fff;border-color:var(--wa-green)}
+  .slot-empty{font-size:13px;color:var(--muted);padding:12px 16px;text-align:center}
+  .luce-hint{font-size:11.5px;color:var(--muted);padding:3px 2px 0}
   .flow-legend{display:flex;gap:13px;padding:8px 14px 0;font-size:11px;color:var(--muted)}
   .flow-legend .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:4px;vertical-align:-1px}
   .dot.free{background:#2ea36b}.dot.conf{background:#e0a52e}.dot.busy{background:#c3cbcf}
@@ -253,25 +257,63 @@ function durataDefault(tipo){ return tipo==='Lezione'?60:90; }
 function lbl(d){ return ['Dom','Lun','Mar','Mer','Gio','Ven','Sab'][d.getDay()]+' '+String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0'); }
 function dateFromOffset(off){ const d=new Date(); d.setDate(d.getDate()+off); return {giorno:lbl(d),dow:d.getDay()}; }
 function addMin(hhmm,min){ const [h,m]=hhmm.split(':').map(Number); const tot=h*60+m+min; return String(Math.floor(tot/60)%24).padStart(2,'0')+':'+String(tot%60).padStart(2,'0'); }
-/* Disponibilità demo: fasce orarie + stato slot deterministico.
-   3 stati (tutti riproducibili nei WhatsApp Flows reali, doc §9):
-   free = libero (voce selezionabile) · conf = su conferma segreteria
-   (description sulla voce) · busy = occupato (enabled:false). */
-const FASCE=[{n:'Mattina',t:['09:00','10:30','12:00']},{n:'Pomeriggio',t:['14:00','15:30','17:00']},{n:'Sera',t:['18:00','19:30','21:00']}];
-const ALLTIMES=FASCE.reduce((a,f)=>a.concat(f.t),[]);
+/* --- LISTINO ESTIVO (prezzi a testa; campo = ×4) --------------------------
+   Modello IBRIDO per tipo di giorno (vedi listino.html):
+   · Lun–Gio: fascia diurna 09:00–18:00 = 8€ (+2 luce → 10, a scelta),
+     avvii ogni 30' · fissi serali 18:00=12, 19:30=13, 21:00=12 (luce inclusa).
+   · Ven: fascia 09:00–17:30 = 8€ (+2 luce) · fissi 17:30/19:00/20:30 = 12.
+   · Sab–Dom: solo fissi ogni 90' (09:00→18:00) = 8€ (luce inclusa).
+   La fascia diurna chiude dove iniziano i fissi; la partita (durata) deve
+   rientrare nella fascia → l'ultimo avvio dipende dalla durata. */
+const LISTINO={
+  weekday:{ fascia:{start:'09:00',end:'18:00',prezzo:8,luceOpt:true},
+            fissi:[{ora:'18:00',prezzo:12},{ora:'19:30',prezzo:13},{ora:'21:00',prezzo:12}] },
+  friday :{ fascia:{start:'09:00',end:'17:30',prezzo:8,luceOpt:true},
+            fissi:[{ora:'17:30',prezzo:12},{ora:'19:00',prezzo:12},{ora:'20:30',prezzo:12}] },
+  weekend:{ fascia:null,
+            fissi:[{ora:'09:00',prezzo:8},{ora:'10:30',prezzo:8},{ora:'12:00',prezzo:8},{ora:'13:30',prezzo:8},{ora:'15:00',prezzo:8},{ora:'16:30',prezzo:8},{ora:'18:00',prezzo:8}] }
+};
+function dayConfig(dow){ if(dow===0||dow===6) return LISTINO.weekend; if(dow===5) return LISTINO.friday; return LISTINO.weekday; }
+function toMin(hhmm){ const [h,m]=hhmm.split(':').map(Number); return h*60+m; }
+function fromMin(x){ return String(Math.floor(x/60)).padStart(2,'0')+':'+String(x%60).padStart(2,'0'); }
+/* Avvii della fascia diurna: ogni 30' finché la partita (durata) rientra nella fascia. */
+function fasciaTimes(fascia,durata){ const res=[]; const end=toMin(fascia.end); let t=toMin(fascia.start);
+  while(t+durata<=end){ res.push(fromMin(t)); t+=30; if(res.length>60) break; } return res; }
+/* Gruppi di slot del giorno, con prezzo e stato. 4 CAMPI = dietro le quinte:
+   un orario è "disponibile" finché ≥1 dei 4 campi è libero (qui slotStatus).
+   Il giocatore vede solo gli orari, mai i campi né il packing.
+   3 stati riproducibili nei WhatsApp Flows reali (doc §9): free = libero ·
+   conf = su conferma segreteria (description) · busy = occupato (nascosto). */
+function daySlotGroups(off,dow,durata){
+  const cfg=dayConfig(dow); durata=durata||90; const groups=[];
+  if(cfg.fascia){
+    groups.push({ name:'Fascia diurna · 8€ · luce a scelta (+2 → 10€)', kind:'fascia',
+      slots:fasciaTimes(cfg.fascia,durata).map(t=>({ora:t,prezzo:cfg.fascia.prezzo,luceOpt:true,status:slotStatus(off,dow,t)})) });
+  }
+  groups.push({ name:(cfg.fascia?'Slot serali':'Slot fissi')+' · luce inclusa', kind:'fisso',
+    slots:cfg.fissi.map(f=>({ora:f.ora,prezzo:f.prezzo,luceOpt:false,status:slotStatus(off,dow,f.ora)})) });
+  return groups;
+}
+function slotMetaFor(off,dow,ora,durata){ const gs=daySlotGroups(off,dow,durata);
+  for(const g of gs){ const s=g.slots.find(x=>x.ora===ora); if(s) return s; } return null; }
+/* Prezzo a testa/campo per uno slot, considerando la luce (solo fasce diurne). */
+function slotPrezzo(meta,luce){ if(!meta) return {testa:0,campo:0,luceApplica:false};
+  const testa=meta.prezzo+(meta.luceOpt&&luce?2:0); return {testa,campo:testa*4,luceApplica:!!(meta.luceOpt&&luce)}; }
 function dayInfo(off){ const d=new Date(); d.setDate(d.getDate()+off);
   return { off, giorno:lbl(d), dow:d.getDay(),
     w: off===0?'oggi':(off===1?'domani':['dom','lun','mar','mer','gio','ven','sab'][d.getDay()]),
     n: String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0') }; }
 function offsetForGiorno(g){ for(let o=0;o<7;o++){ if(dayInfo(o).giorno===g) return o; } return null; }
 function slotStatus(off,dow,ora){
-  const h=parseInt(ora.split(':')[0],10), m=parseInt(ora.split(':')[1],10);
-  if(off===0){ const n=new Date(); if(h*60+m<=n.getHours()*60+n.getMinutes()) return 'busy'; }
-  if(isCritica(dow,ora)) return 'conf';
-  const k=(off*7+h*2+(m?1:0))%10;
-  return (k===2||k===5||k===8)?'busy':'free';
+  const mins=toMin(ora);
+  if(off===0){ const n=new Date(); if(mins<=n.getHours()*60+n.getMinutes()) return 'busy'; }
+  if(isCritica(dow,ora)) return 'conf';            // su conferma segreteria (Ibrido)
+  const k=(off*13+mins)%17;
+  if(k===3||k===11) return 'busy';                 // tutti e 4 i campi occupati → nascosto
+  return 'free';
 }
-function freeSlots(off,dow){ let c=0; FASCE.forEach(f=>f.t.forEach(t=>{ if(slotStatus(off,dow,t)==='free') c++; })); return c; }
+/* Conteggio orari DISPONIBILI del giorno (free + su conferma), per l'indicatore. */
+function availSlots(off,dow){ let c=0; daySlotGroups(off,dow,90).forEach(g=>g.slots.forEach(s=>{ if(s.status!=='busy') c++; })); return c; }
 const GIORNI=['domenica','lunedì','martedì','mercoledì','giovedì','venerdì','sabato'];
 function parseWhen(txt){
   const t=txt.toLowerCase(); const base=new Date(); let target=null;
@@ -495,19 +537,32 @@ function startBooking(text){
 function openBookingFlow(prefill){
   prefill=prefill||{};
   const days=[]; for(let o=0;o<7;o++) days.push(dayInfo(o));
-  const st={ off:0, ora:null, tipo:'Partita', durata:prefill.durata||90, amici:(prefill.amici||[]).slice(), aperta:false, range:prefill.range||'3.5-4.5' };
+  const st={ off:0, ora:null, tipo:'Partita', durata:prefill.durata||90, amici:(prefill.amici||[]).slice(), aperta:false, range:prefill.range||'3.5-4.5', luce:false };
+  let luceRow=null,luceCb=null,luceHint=null;
   if(prefill.giorno){ const m=days.filter(d=>d.giorno===prefill.giorno)[0]; if(m) st.off=m.off; }
-  else{ for(let i=0;i<days.length;i++){ if(freeSlots(days[i].off,days[i].dow)>0){ st.off=days[i].off; break; } } }
+  else{ for(let i=0;i<days.length;i++){ if(availSlots(days[i].off,days[i].dow)>0){ st.off=days[i].off; break; } } }
   const body=el('flow');
   // Quando: prossimi 7 giorni con conteggio slot liberi
   body.appendChild(fieldLabel('Quando'));
   const dayRow=el('days'); body.appendChild(dayRow);
   // Orari del giorno, per fascia, a 3 stati
   const slotBox=el('slotbox'); body.appendChild(slotBox);
-  body.appendChild(el('flow-legend','<span><i class="dot free"></i>Libero</span><span><i class="dot conf"></i>Su conferma</span><span><i class="dot busy"></i>Occupato</span>'));
+  body.appendChild(el('flow-legend','<span><i class="dot free"></i>Libero</span><span><i class="dot conf"></i>Su conferma</span>'));
+  // Illuminazione: a scelta SOLO sulle fasce diurne (nei fissi è inclusa)
+  body.appendChild(fieldLabel('Illuminazione'));
+  const luceWrap=el('friend-list');
+  luceRow=document.createElement('label'); luceRow.className='friend-row';
+  luceCb=document.createElement('input'); luceCb.type='checkbox';
+  const luceSp=document.createElement('span'); luceSp.innerHTML='💡 Con illuminazione <b>+2 €</b> a testa';
+  luceRow.appendChild(luceCb); luceRow.appendChild(luceSp); luceWrap.appendChild(luceRow);
+  luceHint=el('luce-hint','Solo per gli orari di fascia diurna'); luceWrap.appendChild(luceHint);
+  body.appendChild(luceWrap);
+  luceCb.onchange=()=>{ st.luce=luceCb.checked; updSum(); };
   // Durata (solo partite: le lezioni non si prenotano da qui)
   body.appendChild(fieldLabel('Durata'));
-  const durRow=chipRow([{label:"60'",val:60},{label:"90'",val:90},{label:"120'",val:120}],(val,btn,r)=>{ selectOne(r,btn); st.durata=val; updSum(); });
+  const durRow=chipRow([{label:"60'",val:60},{label:"90'",val:90},{label:"120'",val:120}],(val,btn,r)=>{ selectOne(r,btn); st.durata=val;
+    if(st.ora && !slotMetaFor(days[st.off].off,days[st.off].dow,st.ora,st.durata)) st.ora=null;
+    renderSlots(); updSum(); });
   body.appendChild(durRow);
   // Amici
   if(S.friends.length){
@@ -543,15 +598,16 @@ function openBookingFlow(prefill){
     const d=days[st.off];
     closeSheet();
     const names=st.amici.map(friendName).filter(Boolean);
-    addOut('📋 '+d.giorno+' · '+st.ora+' · '+st.tipo+" ("+st.durata+"')"+(names.length?(' · con '+names.join(', ')):'')+(st.aperta?' · aperta ad altri':''));
-    botSay(()=>decideAndPresent({giorno:d.giorno,dow:d.dow,ora:st.ora,tipo:st.tipo,durata:st.durata,amici:st.amici.slice(),aperta:st.aperta,range:st.range}));
+    const pr=slotPrezzo(slotMetaFor(d.off,d.dow,st.ora,st.durata),st.luce);
+    addOut('📋 '+d.giorno+' · '+st.ora+' · '+st.tipo+" ("+st.durata+"') · "+pr.testa+'€/testa'+(names.length?(' · con '+names.join(', ')):'')+(st.aperta?' · aperta ad altri':''));
+    botSay(()=>decideAndPresent({giorno:d.giorno,dow:d.dow,ora:st.ora,tipo:st.tipo,durata:st.durata,amici:st.amici.slice(),aperta:st.aperta,range:st.range,luce:st.luce}));
   };
   body.appendChild(foot);
 
   function renderDays(){
     dayRow.innerHTML='';
     days.forEach(d=>{
-      const c=freeSlots(d.off,d.dow);
+      const c=availSlots(d.off,d.dow);
       const b=document.createElement('button'); b.type='button'; b.className='day'+(d.off===st.off?' sel':'');
       b.innerHTML='<b>'+d.w+'</b><span>'+d.n+'</span><small class="'+(c?'ok':'no')+'">'+(c?c+' liberi':'pieno')+'</small>';
       b.onclick=()=>{ st.off=d.off; st.ora=null; renderDays(); renderSlots(); updSum(); };
@@ -561,34 +617,50 @@ function openBookingFlow(prefill){
   function renderSlots(){
     slotBox.innerHTML='';
     const d=days[st.off];
-    FASCE.forEach(f=>{
-      const h=el('slot-fascia'); h.textContent=f.n; slotBox.appendChild(h);
+    let any=false;
+    daySlotGroups(d.off,d.dow,st.durata).forEach(grp=>{
+      const avail=grp.slots.filter(s=>s.status!=='busy');   // solo orari disponibili (no occupati sbarrati)
+      if(!avail.length) return;
+      any=true;
+      const h=el('slot-fascia'); h.textContent=grp.name; slotBox.appendChild(h);
       const g=el('slotgrid');
-      f.t.forEach(t=>{
-        const s=slotStatus(d.off,d.dow,t);
+      avail.forEach(s=>{
         const b=document.createElement('button'); b.type='button';
-        b.className='slot '+s+(st.ora===t&&s!=='busy'?' sel':'');
-        b.textContent=t;
-        if(s==='busy') b.disabled=true;
-        else b.onclick=()=>{ st.ora=t; renderSlots(); updSum(); };
+        b.className='slot '+s.status+(st.ora===s.ora?' sel':'');
+        b.innerHTML='<b>'+s.ora+'</b><small>'+s.prezzo+'€</small>';
+        b.onclick=()=>{ st.ora=s.ora; renderSlots(); updSum(); };
         g.appendChild(b);
       });
       slotBox.appendChild(g);
     });
+    if(!any) slotBox.appendChild(el('slot-empty','Nessun orario disponibile in questo giorno.'));
+  }
+  function updLuceRow(){
+    if(!luceRow) return;
+    const d=days[st.off];
+    const meta=st.ora?slotMetaFor(d.off,d.dow,st.ora,st.durata):null;
+    if(meta && !meta.luceOpt){ luceCb.checked=false; luceCb.disabled=true; st.luce=false; luceRow.style.opacity='.5'; luceHint.textContent='In questo orario la luce è inclusa'; }
+    else{ luceCb.disabled=false; luceRow.style.opacity='1'; luceHint.textContent='Solo per gli orari di fascia diurna'; }
   }
   function updSum(){
     const d=days[st.off];
+    updLuceRow();
     if(!st.ora){ sum.className='flow-sum'; sum.textContent='Nessun orario selezionato'; return; }
-    const conf=slotStatus(d.off,d.dow,st.ora)==='conf';
+    const meta=slotMetaFor(d.off,d.dow,st.ora,st.durata);
+    const conf=meta && meta.status==='conf';
+    const pr=slotPrezzo(meta,st.luce);
+    const luceTxt=meta ? (meta.luceOpt ? (pr.luceApplica?' · con luce':' · luce esclusa') : ' · luce inclusa') : '';
     sum.className='flow-sum on';
-    sum.innerHTML='<b>'+esc(d.giorno)+' · '+st.ora+'–'+addMin(st.ora,st.durata)+'</b>'+(conf?' · <span class="warn">passa dalla segreteria</span>':'');
+    sum.innerHTML='<b>'+esc(d.giorno)+' · '+st.ora+'–'+addMin(st.ora,st.durata)+'</b>'
+      +'<br>💶 <b>'+pr.testa+' € a testa</b> · '+pr.campo+' € a campo'+luceTxt
+      +(conf?'<br><span class="warn">passa dalla segreteria</span>':'');
   }
   openSheet('Prenota un campo', body, 'Tocca un giorno, poi un orario libero');
   renderDays(); renderSlots();
   preselectChip(durRow, st.durata||90);
-  if(prefill.ora && ALLTIMES.indexOf(prefill.ora)>=0){
-    const d=days[st.off];
-    if(slotStatus(d.off,d.dow,prefill.ora)!=='busy'){ st.ora=prefill.ora; renderSlots(); }
+  if(prefill.ora){
+    const d=days[st.off]; const meta=slotMetaFor(d.off,d.dow,prefill.ora,st.durata);
+    if(meta && meta.status!=='busy'){ st.ora=prefill.ora; renderSlots(); }
   }
   updSum();
 }
@@ -597,7 +669,8 @@ function decideAndPresent(draft){
   // Coerenza con la vista disponibilità: se l'orario chiesto a parole è
   // occupato nella griglia demo, proponi il modulo con gli orari liberi.
   const off=offsetForGiorno(draft.giorno);
-  if(off!=null && ALLTIMES.indexOf(draft.ora)>=0 && slotStatus(off,draft.dow,draft.ora)==='busy'){
+  const draftMeta = off!=null ? slotMetaFor(off,draft.dow,draft.ora,draft.durata) : null;
+  if(draftMeta && draftMeta.status==='busy'){
     addInHtml('A quell\'ora è già tutto occupato. Ti apriamo il modulo con gli orari liberi. 👇');
     openBookingFlow({giorno:draft.giorno,durata:draft.durata,amici:draft.amici});
     return;
@@ -621,8 +694,11 @@ function decideAndPresent(draft){
   }
   draft.campo=campo; draft.fine=fine;
   const names=(draft.amici||[]).map(friendName).filter(Boolean);
+  const pMeta=slotMetaFor(off,draft.dow,draft.ora,draft.durata);
+  const pr=slotPrezzo(pMeta,draft.luce);
+  const luceNote=pMeta&&pMeta.luceOpt ? (pr.luceApplica?' · con luce':' · senza luce') : ' · luce inclusa';
   addInHtml('Abbiamo un campo libero. Confermiamo a tuo nome?');
-  addCard('<b>Riepilogo</b><br>'+esc(draft.giorno)+' · '+draft.ora+'–'+fine+'<br>Campo '+campo+' · '+draft.tipo+' ('+draft.durata+"')"+(names.length?('<br>Con: '+names.join(', ')):'')+(draft.aperta&&(3-names.length)>0?'<br>🤝 Aperta ad altri giocatori':'')+'<br>A nome di '+esc(S.player.nome));
+  addCard('<b>Riepilogo</b><br>'+esc(draft.giorno)+' · '+draft.ora+'–'+fine+'<br>Campo '+campo+' · '+draft.tipo+' ('+draft.durata+"')"+(names.length?('<br>Con: '+names.join(', ')):'')+(draft.aperta&&(3-names.length)>0?'<br>🤝 Aperta ad altri giocatori':'')+'<br>💶 <b>'+pr.testa+' € a testa</b> · '+pr.campo+' € a campo'+luceNote+'<br>A nome di '+esc(S.player.nome));
   addQuick([
     {label:'Conferma',action:()=>{ addOut('Conferma'); botSay(()=>commitBooking(draft)); }},
     {label:'Cambia',action:()=>botSay(()=>{ addInHtml('Riapriamo il modulo.'); openBookingFlow(draft); })}
