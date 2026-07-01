@@ -79,6 +79,7 @@
   .chips{display:flex;flex-wrap:wrap;gap:8px;padding:3px 14px 4px}
   .chip{border:1px solid #cdd6d9;background:#fff;color:var(--ink);border-radius:16px;padding:8px 13px;font-size:13.5px;cursor:pointer;font-family:inherit}
   .chip.sel{background:var(--wa-green);border-color:var(--wa-green);color:#fff}
+  .chip.conf:not(.sel){background:#fff4d6;border-color:#f0e3b0;color:#8a6d00}
   .flow-inp{width:calc(100% - 28px);margin:3px 14px 4px;background:#f3f6f7;border:1px solid #e2e8ea;border-radius:10px;padding:11px 12px;font-size:15px;font-family:inherit;outline:0}
   .friend-list{padding:2px 14px}
   .friend-row{display:flex;align-items:center;gap:11px;padding:9px 2px;font-size:14px;border-bottom:1px solid #f2f5f6;cursor:pointer}
@@ -307,6 +308,11 @@ function slotPrezzo(meta,luce,players){ if(!meta) return {testa:0,campo:0,luceAp
   const testa=meta.prezzo+(luceApplica?2:0);
   const giocatori=(meta.kind==='fascia' && players===2)?2:4;
   return {testa,campo:testa*giocatori,luceApplica,giocatori}; }
+/* Momenti (passo 2 del selettore): raggruppano gli orari per parte del giorno,
+   così si mostrano pochi slot per volta (fedele a un Flow multi-schermata). */
+const MOMENTI=[{key:'mattina',label:'Mattina'},{key:'pomeriggio',label:'Pomeriggio'},{key:'sera',label:'Sera'}];
+function momentoKey(ora){ const h=toMin(ora)/60; if(h<13) return 'mattina'; if(h<17.5) return 'pomeriggio'; return 'sera'; }
+function daySlotsFlat(off,dow,durata,players){ const out=[]; daySlotGroups(off,dow,durata,players).forEach(g=>g.slots.forEach(s=>out.push(s))); return out; }
 function dayInfo(off){ const d=new Date(); d.setDate(d.getDate()+off);
   return { off, giorno:lbl(d), dow:d.getDay(),
     w: off===0?'oggi':(off===1?'domani':['dom','lun','mar','mer','gio','ven','sab'][d.getDay()]),
@@ -545,16 +551,19 @@ function startBooking(text){
 function openBookingFlow(prefill){
   prefill=prefill||{};
   const days=[]; for(let o=0;o<7;o++) days.push(dayInfo(o));
-  const st={ off:0, ora:null, tipo:'Partita', players:prefill.players||4, durata:90, amici:(prefill.amici||[]).slice(), aperta:false, range:prefill.range||'3.5-4.5', luce:false };
+  const st={ off:0, ora:null, momento:null, tipo:'Partita', players:prefill.players||4, durata:90, amici:(prefill.amici||[]).slice(), aperta:false, range:prefill.range||'3.5-4.5', luce:false };
   st.durata = st.players===2 ? 60 : (prefill.durata||90);
   let luceRow=null,luceCb=null,luceHint=null;
   if(prefill.giorno){ const m=days.filter(d=>d.giorno===prefill.giorno)[0]; if(m) st.off=m.off; }
   else{ for(let i=0;i<days.length;i++){ if(availSlots(days[i].off,days[i].dow)>0){ st.off=days[i].off; break; } } }
   const body=el('flow');
-  // Quando: prossimi 7 giorni con conteggio slot liberi
+  // Passo 1: quando (prossimi 7 giorni con conteggio slot disponibili)
   body.appendChild(fieldLabel('Quando'));
   const dayRow=el('days'); body.appendChild(dayRow);
-  // Orari del giorno, per fascia, a 3 stati
+  // Passo 2: momento (Mattina/Pomeriggio/Sera) → mostra pochi orari per volta
+  const momLabel=fieldLabel('Momento'); body.appendChild(momLabel);
+  const momBox=el('chips'); body.appendChild(momBox);
+  // Passo 3: gli orari del momento scelto (chips = ChipsSelector nativo)
   const slotBox=el('slotbox'); body.appendChild(slotBox);
   body.appendChild(el('flow-legend','<span><i class="dot free"></i>Libero</span><span><i class="dot conf"></i>Su conferma</span>'));
   // Illuminazione: a scelta SOLO sulle fasce diurne (nei fissi è inclusa)
@@ -573,7 +582,7 @@ function openBookingFlow(prefill){
   playWrap.appendChild(fieldLabel('In quanti giocate?'));
   const playRow=chipRow([{label:"In 4 · 90'",val:4},{label:"In 2 · 60'",val:2}],(val,btn,r)=>{ selectOne(r,btn); st.players=val; st.durata=val===2?60:90;
     if(st.ora && !slotMetaFor(days[st.off].off,days[st.off].dow,st.ora,st.durata,st.players)) st.ora=null;
-    renderSlots(); updSum(); });
+    renderMomenti(); renderSlots(); updSum(); });
   playWrap.appendChild(playRow);
   playWrap.appendChild(el('luce-hint',"In 2 vale solo nella fascia diurna: 60' a tariffa ridotta (10 € a testa). Di sera e nel weekend gli orari sono da 90' in 4."));
   body.appendChild(playWrap);
@@ -626,7 +635,7 @@ function openBookingFlow(prefill){
       const c=availSlots(d.off,d.dow);
       const b=document.createElement('button'); b.type='button'; b.className='day'+(d.off===st.off?' sel':'');
       b.innerHTML='<b>'+d.w+'</b><span>'+d.n+'</span><small class="'+(c?'ok':'no')+'">'+(c?c+' liberi':'pieno')+'</small>';
-      b.onclick=()=>{ st.off=d.off; st.ora=null; renderDays(); renderSlots(); updSum(); };
+      b.onclick=()=>{ st.off=d.off; st.ora=null; st.momento=null; renderDays(); renderMomenti(); renderSlots(); updSum(); };
       dayRow.appendChild(b);
     });
   }
@@ -635,27 +644,42 @@ function openBookingFlow(prefill){
     playWrap.style.display=hasFascia?'':'none';   // "in 2" ha senso solo dove c'è la fascia diurna
     if(!hasFascia && st.players!==4){ st.players=4; st.durata=90; const b4=playRow.querySelector('[data-val="4"]'); if(b4) selectOne(playRow,b4); }
   }
-  function renderSlots(){
+  function renderMomenti(){
     updPlayersRow();
+    momBox.innerHTML='';
+    const flat=daySlotsFlat(days[st.off].off,days[st.off].dow,st.durata,st.players).filter(s=>s.status!=='busy');
+    const avail=MOMENTI.filter(mm=>flat.some(s=>momentoKey(s.ora)===mm.key));
+    if(!avail.some(m=>m.key===st.momento)) st.momento=avail.length?avail[0].key:null;
+    momLabel.style.display=avail.length?'':'none';
+    avail.forEach(mm=>{
+      const n=flat.filter(s=>momentoKey(s.ora)===mm.key).length;
+      const b=document.createElement('button'); b.type='button';
+      b.className='chip'+(st.momento===mm.key?' sel':'');
+      b.textContent=mm.label+' ('+n+')';
+      b.onclick=()=>{ st.momento=mm.key; st.ora=null; renderMomenti(); renderSlots(); updSum(); };
+      momBox.appendChild(b);
+    });
+  }
+  function renderSlots(){
     slotBox.innerHTML='';
     const d=days[st.off];
-    let any=false;
-    daySlotGroups(d.off,d.dow,st.durata,st.players).forEach(grp=>{
-      const avail=grp.slots.filter(s=>s.status!=='busy');   // solo orari disponibili (no occupati sbarrati)
-      if(!avail.length) return;
-      any=true;
-      const h=el('slot-fascia'); h.textContent=grp.name; slotBox.appendChild(h);
-      const g=el('slotgrid');
-      avail.forEach(s=>{
-        const b=document.createElement('button'); b.type='button';
-        b.className='slot '+s.status+(st.ora===s.ora?' sel':'');
-        b.innerHTML='<b>'+s.ora+'</b><small>'+s.prezzo+'€</small>';
-        b.onclick=()=>{ st.ora=s.ora; renderSlots(); updSum(); };
-        g.appendChild(b);
-      });
-      slotBox.appendChild(g);
+    if(!st.momento){ slotBox.appendChild(el('slot-empty','Nessun orario disponibile in questo giorno.')); return; }
+    const flat=daySlotsFlat(d.off,d.dow,st.durata,st.players).filter(s=>s.status!=='busy'&&momentoKey(s.ora)===st.momento);
+    if(!flat.length){ slotBox.appendChild(el('slot-empty','Nessun orario in questa fascia.')); return; }
+    const uniform=flat.every(s=>s.prezzo===flat[0].prezzo), first=flat[0];
+    const parts=[];
+    if(first.kind==='fascia'){ if(st.players===2) parts.push("in 2 · 60'"); if(uniform) parts.push(first.prezzo+'€ a testa'); parts.push('luce a scelta (+2)'); }
+    else{ if(uniform) parts.push(first.prezzo+'€ a testa'); parts.push('luce inclusa'); }
+    const hdr=el('slot-fascia'); hdr.textContent=parts.join(' · '); slotBox.appendChild(hdr);
+    const row=el('chips');
+    flat.forEach(s=>{
+      const b=document.createElement('button'); b.type='button';
+      b.className='chip'+(st.ora===s.ora?' sel':'')+(s.status==='conf'?' conf':'');
+      b.textContent=uniform?s.ora:(s.ora+' · '+s.prezzo+'€');
+      b.onclick=()=>{ st.ora=s.ora; renderSlots(); updSum(); };
+      row.appendChild(b);
     });
-    if(!any) slotBox.appendChild(el('slot-empty','Nessun orario disponibile in questo giorno.'));
+    slotBox.appendChild(row);
   }
   function updLuceRow(){
     if(!luceRow) return;
@@ -678,12 +702,12 @@ function openBookingFlow(prefill){
       +'<br>💶 <b>'+pr.testa+' € a testa</b> · '+pr.campo+' € a campo · '+pr.giocatori+' giocatori'+luceTxt
       +(conf?'<br><span class="warn">passa dalla segreteria</span>':'');
   }
-  openSheet('Prenota un campo', body, 'Tocca un giorno, poi un orario libero');
-  renderDays(); renderSlots();
+  openSheet('Prenota un campo', body, 'Scegli giorno, momento e orario');
+  renderDays(); renderMomenti(); renderSlots();
   preselectChip(playRow, st.players||4);
   if(prefill.ora){
     const d=days[st.off]; const meta=slotMetaFor(d.off,d.dow,prefill.ora,st.durata,st.players);
-    if(meta && meta.status!=='busy'){ st.ora=prefill.ora; renderSlots(); }
+    if(meta && meta.status!=='busy'){ st.momento=momentoKey(prefill.ora); st.ora=prefill.ora; renderMomenti(); renderSlots(); }
   }
   updSum();
 }
