@@ -83,6 +83,28 @@
   .friend-list{padding:2px 14px}
   .friend-row{display:flex;align-items:center;gap:11px;padding:9px 2px;font-size:14px;border-bottom:1px solid #f2f5f6;cursor:pointer}
   .friend-row input{width:19px;height:19px;flex:0 0 auto}
+  /* Disponibilità nel Flow: striscia giorni + orari a 3 stati */
+  .days{display:flex;gap:8px;overflow-x:auto;padding:3px 14px 4px}
+  .day{flex:0 0 auto;min-width:62px;border:1px solid #cdd6d9;background:#fff;border-radius:10px;padding:7px 8px;text-align:center;cursor:pointer;font-family:inherit;line-height:1.25}
+  .day b{display:block;font-size:12.5px;font-weight:600;color:var(--ink)}
+  .day span{display:block;font-size:11px;color:var(--muted)}
+  .day small{display:block;font-size:10px;margin-top:2px;font-weight:600}
+  .day small.ok{color:#0f8a6d}
+  .day small.no{color:#b5c0c4}
+  .day.sel{border-color:var(--wa-green);background:#d9f2ee}
+  .slot-fascia{font-size:11px;font-weight:600;color:var(--muted);padding:7px 14px 3px;text-transform:uppercase;letter-spacing:.4px}
+  .slotgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:0 14px}
+  .slot{padding:9px 4px;border-radius:9px;font-size:13.5px;font-weight:600;font-family:inherit;cursor:pointer;border:1px solid transparent}
+  .slot.free{background:#eaf7e6;color:#0c5f57;border-color:#bfe6c8}
+  .slot.conf{background:#fff4d6;color:#8a6d00;border-color:#f0e3b0}
+  .slot.busy{background:#f4f6f7;color:#b9c2c6;border-color:#eef1f2;text-decoration:line-through;cursor:default}
+  .slot.sel{background:var(--wa-green);color:#fff;border-color:var(--wa-green);text-decoration:none}
+  .flow-legend{display:flex;gap:13px;padding:8px 14px 0;font-size:11px;color:var(--muted)}
+  .flow-legend .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:4px;vertical-align:-1px}
+  .dot.free{background:#2ea36b}.dot.conf{background:#e0a52e}.dot.busy{background:#c3cbcf}
+  .flow-sum{margin:12px 14px 0;padding:10px 12px;background:#f3f6f7;border-radius:10px;font-size:13px;color:var(--muted)}
+  .flow-sum.on{background:#eaf7e6;color:#0c5f57}
+  .flow-sum .warn{color:#8a6d00;font-weight:600}
   .flow-submit{margin:16px 14px 4px;width:calc(100% - 28px);background:var(--wa-green);color:#fff;border:0;border-radius:22px;padding:13px;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit}
   .toast{position:absolute;bottom:82px;left:50%;transform:translateX(-50%);background:#111b21;color:#fff;font-size:13px;padding:9px 15px;border-radius:20px;z-index:30;max-width:80%;text-align:center}
 </style>
@@ -114,6 +136,9 @@
    Simula i tipi di messaggio WhatsApp (bolle, pulsanti di risposta, menu a
    lista) e i "WhatsApp Flows" (moduli a scomparsa dal basso). Backend FINTO
    in localStorage. Vedi 01-analisi-operativita-chat-giocatori.md
+   🔒 REGOLA FERMA (doc §9): qui si realizza SOLO ciò che è riproducibile
+   fedelmente su WhatsApp reale (componenti/limiti Flows + policy Meta).
+   Verificare sui doc Meta PRIMA di aggiungere grafica/layout/interazioni.
    ========================================================================== */
 const LS_KEY='pmo_emu_state_v2';
 
@@ -187,7 +212,7 @@ function openSheet(title,bodyNode,subtitle){
   const head=el('sheet-head','<div class="sheet-handle"></div><div class="sheet-title">'+esc(title)+(subtitle?'<div class="sheet-sub">'+esc(subtitle)+'</div>':'')+'</div><button class="sheet-x" id="sheetX">✕</button>');
   sh.appendChild(head); sh.appendChild(bodyNode); ov.appendChild(sh); appEl.appendChild(ov);
   ov.onclick=e=>{ if(e.target===ov) closeSheet(); };
-  requestAnimationFrame(()=>{ ov.classList.add('show'); sh.classList.add('show'); });
+  setTimeout(()=>{ ov.classList.add('show'); sh.classList.add('show'); },10); /* no rAF: inaffidabile in anteprima headless */
   document.getElementById('sheetX').onclick=closeSheet;
 }
 function closeSheet(){ const ov=document.getElementById('sheetOv'); if(ov) ov.remove(); }
@@ -207,7 +232,25 @@ function durataDefault(tipo){ return tipo==='Lezione'?60:90; }
 function lbl(d){ return ['Dom','Lun','Mar','Mer','Gio','Ven','Sab'][d.getDay()]+' '+String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0'); }
 function dateFromOffset(off){ const d=new Date(); d.setDate(d.getDate()+off); return {giorno:lbl(d),dow:d.getDay()}; }
 function addMin(hhmm,min){ const [h,m]=hhmm.split(':').map(Number); const tot=h*60+m+min; return String(Math.floor(tot/60)%24).padStart(2,'0')+':'+String(tot%60).padStart(2,'0'); }
-const TIMES=['18:00','18:30','19:00','19:30','20:00','20:30','21:00'];
+/* Disponibilità demo: fasce orarie + stato slot deterministico.
+   3 stati (tutti riproducibili nei WhatsApp Flows reali, doc §9):
+   free = libero (voce selezionabile) · conf = su conferma segreteria
+   (description sulla voce) · busy = occupato (enabled:false). */
+const FASCE=[{n:'Mattina',t:['09:00','10:30','12:00']},{n:'Pomeriggio',t:['14:00','15:30','17:00']},{n:'Sera',t:['18:00','19:30','21:00']}];
+const ALLTIMES=FASCE.reduce((a,f)=>a.concat(f.t),[]);
+function dayInfo(off){ const d=new Date(); d.setDate(d.getDate()+off);
+  return { off, giorno:lbl(d), dow:d.getDay(),
+    w: off===0?'oggi':(off===1?'domani':['dom','lun','mar','mer','gio','ven','sab'][d.getDay()]),
+    n: String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0') }; }
+function offsetForGiorno(g){ for(let o=0;o<7;o++){ if(dayInfo(o).giorno===g) return o; } return null; }
+function slotStatus(off,dow,ora){
+  const h=parseInt(ora.split(':')[0],10), m=parseInt(ora.split(':')[1],10);
+  if(off===0){ const n=new Date(); if(h*60+m<=n.getHours()*60+n.getMinutes()) return 'busy'; }
+  if(isCritica(dow,ora)) return 'conf';
+  const k=(off*7+h*2+(m?1:0))%10;
+  return (k===2||k===5||k===8)?'busy':'free';
+}
+function freeSlots(off,dow){ let c=0; FASCE.forEach(f=>f.t.forEach(t=>{ if(slotStatus(off,dow,t)==='free') c++; })); return c; }
 const GIORNI=['domenica','lunedì','martedì','mercoledì','giovedì','venerdì','sabato'];
 function parseWhen(txt){
   const t=txt.toLowerCase(); const base=new Date(); let target=null;
@@ -264,7 +307,6 @@ function route(intent,t){
 function showMenu(){
   addMenu([
     {section:'Prenotazioni', ic:'🎾', label:'Prenota un campo', text:'Vorrei prenotare un campo'},
-    {section:'Prenotazioni', ic:'🔍', label:'Disponibilità campi', text:'Che campi liberi ci sono domani sera?'},
     {section:'Prenotazioni', ic:'📅', label:'Le mie prenotazioni', text:'Cosa ho prenotato?'},
     {section:'Account', ic:'👤', label:'Il mio profilo', text:'Il mio profilo'},
     {section:'Account', ic:'👥', label:'I miei amici', text:'I miei amici'},
@@ -306,11 +348,11 @@ function openAddFriendFlow(){
 /* ---------- Borsellino ----------------------------------------------------- */
 function doBorsellino(){ addInHtml('Il tuo borsellino: <b>'+euro(S.player.borselloCent)+'</b>.<br>Ultimo movimento: '+esc(S.player.ultimoMov)+'.'); }
 
-/* ---------- Disponibilità -------------------------------------------------- */
+/* ---------- Disponibilità (= vista giorni/orari nel modulo) ---------------- */
 function doDisponibilita(t){
-  const w=parseWhen(t); const giorno=w.giorno||'Domani';
-  addInHtml(esc(giorno)+', fascia 18–21:<br>· Campo 1 — 18:00, 20:30<br>· Campo 2 — 19:00<br>· Campo 4 — 18:30, 20:00');
-  addQuick([{label:'Prenota Campo 2 · 19:00',action:()=>botSay(()=>{ addInHtml('Apriamo il modulo con Campo 2 alle 19:00.'); openBookingFlow({giorno:w.giorno,dow:w.dow,ora:'19:00'}); })},{label:'Apri il modulo',action:()=>botSay(()=>openBookingFlow({giorno:w.giorno,dow:w.dow}))}]);
+  const w=parseWhen(t);
+  addInHtml('Ecco la disponibilità'+(w.giorno?' di '+esc(w.giorno):' dei prossimi giorni')+' — tocca un orario libero per prenotare. 👇');
+  openBookingFlow({giorno:w.giorno});
 }
 
 /* ---------- Le mie prenotazioni -------------------------------------------- */
@@ -325,58 +367,104 @@ function doMie(){
 function startBooking(text){
   const w=parseWhen(text), dur=parseDurata(text);
   if(w.date && w.ora){ return decideAndPresent({giorno:w.giorno,dow:w.dow,ora:w.ora,tipo:'Partita',durata:dur||90,amici:[]}); }
-  addInHtml('Ti apriamo il modulo di prenotazione — compila e invia. 👇');
-  openBookingFlow({giorno:w.giorno,dow:w.dow,ora:w.ora,durata:dur});
+  addInHtml('Ti apriamo il modulo — scegli un giorno e tocca un orario libero. 👇');
+  openBookingFlow({giorno:w.giorno,ora:w.ora,durata:dur});
 }
 function openBookingFlow(prefill){
   prefill=prefill||{};
-  const st={ giorno:prefill.giorno||null, dow:(prefill.dow!=null?prefill.dow:null), ora:prefill.ora||null, tipo:'Partita', durata:prefill.durata||90, amici:[] };
+  const days=[]; for(let o=0;o<7;o++) days.push(dayInfo(o));
+  const st={ off:0, ora:null, tipo:'Partita', durata:prefill.durata||90, amici:(prefill.amici||[]).slice() };
+  if(prefill.giorno){ const m=days.filter(d=>d.giorno===prefill.giorno)[0]; if(m) st.off=m.off; }
+  else{ for(let i=0;i<days.length;i++){ if(freeSlots(days[i].off,days[i].dow)>0){ st.off=days[i].off; break; } } }
   const body=el('flow');
-  // Quando
+  // Quando: prossimi 7 giorni con conteggio slot liberi
   body.appendChild(fieldLabel('Quando'));
-  const dayRow=chipRow([['Oggi',0],['Domani',1],['Dopodomani',2]].map(d=>({label:d[0],val:d[1]})),(val,btn,r)=>{ selectOne(r,btn); const info=dateFromOffset(val); st.giorno=info.giorno; st.dow=info.dow; });
-  body.appendChild(dayRow);
-  // Ora
-  body.appendChild(fieldLabel('Ora'));
-  const timeRow=chipRow(TIMES.map(t=>({label:t,val:t})),(val,btn,r)=>{ selectOne(r,btn); st.ora=val; });
-  body.appendChild(timeRow);
+  const dayRow=el('days'); body.appendChild(dayRow);
+  // Orari del giorno, per fascia, a 3 stati
+  const slotBox=el('slotbox'); body.appendChild(slotBox);
+  body.appendChild(el('flow-legend','<span><i class="dot free"></i>Libero</span><span><i class="dot conf"></i>Su conferma</span><span><i class="dot busy"></i>Occupato</span>'));
   // Durata (solo partite: le lezioni non si prenotano da qui)
   body.appendChild(fieldLabel('Durata'));
-  const durRow=chipRow([{label:"60'",val:60},{label:"90'",val:90},{label:"120'",val:120}],(val,btn,r)=>{ selectOne(r,btn); st.durata=val; });
+  const durRow=chipRow([{label:"60'",val:60},{label:"90'",val:90},{label:"120'",val:120}],(val,btn,r)=>{ selectOne(r,btn); st.durata=val; updSum(); });
   body.appendChild(durRow);
   // Amici
   if(S.friends.length){
     body.appendChild(fieldLabel('Con chi giochi? (facoltativo)'));
     const fl=el('friend-list');
     S.friends.forEach(f=>{ const row=document.createElement('label'); row.className='friend-row';
-      const cb=document.createElement('input'); cb.type='checkbox';
+      const cb=document.createElement('input'); cb.type='checkbox'; cb.checked=st.amici.indexOf(f.id)>=0;
       cb.onchange=()=>{ if(cb.checked) st.amici.push(f.id); else st.amici=st.amici.filter(x=>x!==f.id); };
       const sp=document.createElement('span'); sp.textContent=f.nome+' · liv. '+f.livello;
       row.appendChild(cb); row.appendChild(sp); fl.appendChild(row); });
     body.appendChild(fl);
   }
-  // Submit
+  // Riepilogo selezione + submit
+  const sum=el('flow-sum'); body.appendChild(sum);
   const foot=document.createElement('button'); foot.className='flow-submit'; foot.textContent='Continua';
   foot.onclick=()=>{
-    if(!st.giorno||!st.ora){ toast('Scegli giorno e ora.'); return; }
-    if(!st.durata) st.durata=90;
+    if(!st.ora){ toast('Tocca prima un orario libero.'); return; }
+    const d=days[st.off];
     closeSheet();
     const names=st.amici.map(friendName).filter(Boolean);
-    addOut('📋 '+st.giorno+' · '+st.ora+' · '+st.tipo+(names.length?(' · con '+names.join(', ')):''));
-    botSay(()=>decideAndPresent({giorno:st.giorno,dow:st.dow,ora:st.ora,tipo:st.tipo,durata:st.durata,amici:st.amici.slice()}));
+    addOut('📋 '+d.giorno+' · '+st.ora+' · '+st.tipo+" ("+st.durata+"')"+(names.length?(' · con '+names.join(', ')):''));
+    botSay(()=>decideAndPresent({giorno:d.giorno,dow:d.dow,ora:st.ora,tipo:st.tipo,durata:st.durata,amici:st.amici.slice()}));
   };
   body.appendChild(foot);
-  openSheet('Prenota un campo', body, 'Compila e invia — come un modulo WhatsApp (Flow)');
-  // preselect (sincrono: gli elementi sono già nel DOM)
-  if(st.ora) preselectChip(timeRow,st.ora);
-  preselectChip(durRow, st.durata||90);
-  if(st.dow!=null){ // evidenzia Oggi/Domani/Dopodomani se combacia
-    [0,1,2].forEach(o=>{ const info=dateFromOffset(o); if(info.giorno===st.giorno) preselectChip(dayRow,o); });
+
+  function renderDays(){
+    dayRow.innerHTML='';
+    days.forEach(d=>{
+      const c=freeSlots(d.off,d.dow);
+      const b=document.createElement('button'); b.type='button'; b.className='day'+(d.off===st.off?' sel':'');
+      b.innerHTML='<b>'+d.w+'</b><span>'+d.n+'</span><small class="'+(c?'ok':'no')+'">'+(c?c+' liberi':'pieno')+'</small>';
+      b.onclick=()=>{ st.off=d.off; st.ora=null; renderDays(); renderSlots(); updSum(); };
+      dayRow.appendChild(b);
+    });
   }
+  function renderSlots(){
+    slotBox.innerHTML='';
+    const d=days[st.off];
+    FASCE.forEach(f=>{
+      const h=el('slot-fascia'); h.textContent=f.n; slotBox.appendChild(h);
+      const g=el('slotgrid');
+      f.t.forEach(t=>{
+        const s=slotStatus(d.off,d.dow,t);
+        const b=document.createElement('button'); b.type='button';
+        b.className='slot '+s+(st.ora===t&&s!=='busy'?' sel':'');
+        b.textContent=t;
+        if(s==='busy') b.disabled=true;
+        else b.onclick=()=>{ st.ora=t; renderSlots(); updSum(); };
+        g.appendChild(b);
+      });
+      slotBox.appendChild(g);
+    });
+  }
+  function updSum(){
+    const d=days[st.off];
+    if(!st.ora){ sum.className='flow-sum'; sum.textContent='Nessun orario selezionato'; return; }
+    const conf=slotStatus(d.off,d.dow,st.ora)==='conf';
+    sum.className='flow-sum on';
+    sum.innerHTML='<b>'+esc(d.giorno)+' · '+st.ora+'–'+addMin(st.ora,st.durata)+'</b>'+(conf?' · <span class="warn">passa dalla segreteria</span>':'');
+  }
+  openSheet('Prenota un campo', body, 'Tocca un giorno, poi un orario libero');
+  renderDays(); renderSlots();
+  preselectChip(durRow, st.durata||90);
+  if(prefill.ora && ALLTIMES.indexOf(prefill.ora)>=0){
+    const d=days[st.off];
+    if(slotStatus(d.off,d.dow,prefill.ora)!=='busy'){ st.ora=prefill.ora; renderSlots(); }
+  }
+  updSum();
 }
-function preselectAndSelect(row,val){ Array.from(row.children).forEach(c=>c.classList.remove('sel')); preselectChip(row,val); }
 
 function decideAndPresent(draft){
+  // Coerenza con la vista disponibilità: se l'orario chiesto a parole è
+  // occupato nella griglia demo, proponi il modulo con gli orari liberi.
+  const off=offsetForGiorno(draft.giorno);
+  if(off!=null && ALLTIMES.indexOf(draft.ora)>=0 && slotStatus(off,draft.dow,draft.ora)==='busy'){
+    addInHtml('A quell\'ora è già tutto occupato. Ti apriamo il modulo con gli orari liberi. 👇');
+    openBookingFlow({giorno:draft.giorno,durata:draft.durata,amici:draft.amici});
+    return;
+  }
   const campo=campoLibero(draft.dow,draft.ora); const fine=addMin(draft.ora,draft.durata);
   if(campo===null || !inRegola()){
     const motivo = campo===null ? 'Questa fascia è molto richiesta' : 'La tua posizione va verificata';
