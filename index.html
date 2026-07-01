@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Emulatore chat giocatori — Padel Village</title>
+<style>
+  :root{--ink:#111b21;--muted:#667781;--wa-green:#128C7E;--wa-bg:#ECE5DD}
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:#0b141a;color:var(--ink);display:flex;justify-content:center}
+  /* Su telefono riempie lo schermo; su desktop un frame centrato */
+  .app{width:100%;max-width:460px;height:100vh;height:100dvh;background:var(--wa-bg);display:flex;flex-direction:column;overflow:hidden}
+  @media(min-width:520px){
+    body{align-items:center;background:#111b21}
+    .app{height:92vh;max-height:900px;border-radius:18px;box-shadow:0 12px 40px rgba(0,0,0,.5)}
+  }
+  /* Header */
+  .head{background:var(--wa-green);display:flex;align-items:center;gap:10px;padding:10px 12px;color:#fff;flex:0 0 auto}
+  .head .back{font-size:20px;line-height:1;opacity:.9}
+  .av{width:36px;height:36px;border-radius:50%;background:#0c5f57;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700}
+  .hname{font-size:15px;font-weight:600;line-height:1.15}
+  .hstatus{font-size:11px;opacity:.85}
+  .head .spacer{flex:1}
+  .head .reset{font-size:12px;background:rgba(255,255,255,.15);border:0;color:#fff;padding:6px 9px;border-radius:14px;cursor:pointer}
+  /* Identity band */
+  .band{background:#d6e7d2;color:#3a5a40;font-size:12px;text-align:center;padding:6px 12px;flex:0 0 auto}
+  /* Chat scroll area */
+  .chat{flex:1 1 auto;overflow-y:auto;padding:12px 10px 14px;display:flex;flex-direction:column;gap:8px;
+    background-image:linear-gradient(rgba(236,229,221,.4),rgba(236,229,221,.4))}
+  .sys{align-self:center;background:#d6e7d2;color:#3a5a40;font-size:11px;padding:4px 12px;border-radius:10px;text-align:center;max-width:92%}
+  .in,.out{max-width:82%;padding:7px 10px 5px;border-radius:9px;font-size:14px;line-height:1.44;position:relative;white-space:pre-wrap;word-wrap:break-word}
+  .in{align-self:flex-start;background:#fff;border-top-left-radius:2px}
+  .out{align-self:flex-end;background:#d9fdd3;border-top-right-radius:2px}
+  .meta{display:block;text-align:right;font-size:10.5px;color:var(--muted);margin-top:3px}
+  .tick{color:#34b7f1}
+  .card{background:#fff;align-self:flex-start;max-width:86%;border-radius:9px;border-top-left-radius:2px;padding:8px 10px;
+    font-size:13.5px;line-height:1.55;border-left:3px solid var(--wa-green)}
+  .qr{align-self:flex-start;width:min(86%,320px);background:#fff;border-radius:9px;overflow:hidden;margin-top:-2px;
+    box-shadow:0 1px 1px rgba(0,0,0,.06);display:flex;flex-direction:column;flex:0 0 auto}
+  .qbtn{display:flex;align-items:center;justify-content:center;gap:6px;padding:11px;font-size:14px;color:#027eb5;
+    border-top:1px solid #eff2f3;cursor:pointer;background:none;border-left:0;border-right:0;border-bottom:0;width:100%;font-family:inherit}
+  .qr .qbtn:first-child{border-top:0}
+  .qbtn.danger{color:#c0392b}
+  .qbtn:active{background:#f2f5f6}
+  /* Typing indicator */
+  .typing{align-self:flex-start;background:#fff;border-radius:9px;border-top-left-radius:2px;padding:10px 12px;display:inline-flex;gap:4px}
+  .typing i{width:7px;height:7px;border-radius:50%;background:#b5c0c4;display:inline-block;animation:blink 1.2s infinite}
+  .typing i:nth-child(2){animation-delay:.2s}.typing i:nth-child(3){animation-delay:.4s}
+  @keyframes blink{0%,60%,100%{opacity:.3}30%{opacity:1}}
+  /* Input */
+  .bar{display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--wa-bg);flex:0 0 auto}
+  .field{flex:1;background:#fff;border-radius:20px;padding:10px 14px;font-size:15px;border:0;outline:0;font-family:inherit;color:var(--ink)}
+  .send{width:42px;height:42px;border-radius:50%;background:var(--wa-green);border:0;color:#fff;font-size:19px;cursor:pointer;flex:0 0 auto}
+  .send:active{background:#0c5f57}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="head">
+    <span class="back">‹</span>
+    <div class="av">PV</div>
+    <div><div class="hname">Padel Village</div><div class="hstatus" id="hstatus">online</div></div>
+    <div class="spacer"></div>
+    <button class="reset" id="resetBtn" title="Ripristina demo">⟳ demo</button>
+  </div>
+  <div class="band" id="band">✓ Numero riconosciuto: …</div>
+  <div class="chat" id="chat"></div>
+  <form class="bar" id="bar" autocomplete="off">
+    <input class="field" id="field" placeholder="Scrivi un messaggio…" autocomplete="off">
+    <button class="send" id="send" type="submit">↑</button>
+  </form>
+</div>
+
+<script>
+/* ============================================================================
+   EMULATORE CHAT GIOCATORI — Padel Village · Fase B (mockup-first)
+   100% self-contained: nessuna chiamata reale, nessuna scrittura in Matchpoint.
+   Backend FINTO in localStorage. Serve a rifinire copy e flussi prima di
+   toccare WhatsApp/Supabase reale. Vedi 01-analisi-operativita-chat-giocatori.md
+   ========================================================================== */
+
+const LS_KEY = 'pmo_emu_state_v1';
+
+/* --- Dati demo (giocatore identificato via "numero WhatsApp") --------------- */
+function demoState(){
+  return {
+    player:{ nome:'Marco Aprea', numero:'+39 333 123 4567', socio:true, inRegola:true,
+             borselloCent:2400, ultimoMov:'ricarica € 20 il 28/06' },
+    prenotazioni:[
+      { id:1, giorno:'Mar 01/07', ora:'19:00', campo:3, tipo:'Partita', durata:90 },
+      { id:2, giorno:'Sab 05/07', ora:'10:00', campo:1, tipo:'Lezione', durata:60 }
+    ],
+    seq:100
+  };
+}
+let S = load();
+function load(){ try{const r=localStorage.getItem(LS_KEY);return r?JSON.parse(r):demoState();}catch(e){return demoState();} }
+function save(){ try{localStorage.setItem(LS_KEY,JSON.stringify(S));}catch(e){} }
+function resetDemo(){ S=demoState(); save(); }
+
+/* --- Stato della conversazione (macchina a stati multi-turn) ---------------- */
+let convo = { mode:'idle', step:null, draft:{} };
+function resetConvo(){ convo={mode:'idle',step:null,draft:{}}; }
+
+/* --- Utility DOM ------------------------------------------------------------ */
+const chat = document.getElementById('chat');
+function now(){ const d=new Date(); return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }
+function scrollDown(){ chat.scrollTop = chat.scrollHeight; }
+function el(cls,html){ const e=document.createElement('div'); e.className=cls; if(html!=null) e.innerHTML=html; return e; }
+
+function addSys(t){ chat.appendChild(el('sys',t)); scrollDown(); }
+function addOut(t){ const e=el('out', esc(t)+'<span class="meta">'+now()+'</span>'); chat.appendChild(e); scrollDown(); }
+function addInHtml(html,ticks){ const e=el('in', html+'<span class="meta">'+now()+(ticks?' <span class="tick">✓✓</span>':'')+'</span>'); chat.appendChild(e); scrollDown(); return e; }
+function addCard(html){ chat.appendChild(el('card',html)); scrollDown(); }
+function addQuick(btns){
+  const wrap=el('qr');
+  btns.forEach(b=>{
+    const btn=document.createElement('button');
+    btn.className='qbtn'+(b.danger?' danger':'');
+    btn.textContent=b.label;
+    btn.onclick=()=>{ wrap.remove(); sendUser(b.text!=null?b.text:b.label, b.silent); };
+    wrap.appendChild(btn);
+  });
+  chat.appendChild(wrap); scrollDown();
+}
+function esc(s){ return String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+
+/* typing indicator + risposta ritardata per realismo */
+function botSay(fn,delay){
+  const t=el('typing','<i></i><i></i><i></i>'); chat.appendChild(t); scrollDown();
+  const st=document.getElementById('hstatus'); st.textContent='sta scrivendo…';
+  setTimeout(()=>{ t.remove(); st.textContent='online'; fn(); }, delay||650);
+}
+
+/* --- Helper dominio --------------------------------------------------------- */
+function euro(cent){ return '€ '+(cent/100).toFixed(2).replace('.',','); }
+function durataDefault(tipo){ return tipo==='Lezione'?60:90; }
+
+/* parsing "leggero" (mockup): giorno + ora dal testo naturale */
+const GIORNI=['domenica','lunedì','martedì','mercoledì','giovedì','venerdì','sabato'];
+function parseWhen(txt){
+  const t=txt.toLowerCase();
+  let giornoLabel=null, dow=null;
+  const base=new Date();
+  const fmt=d=>({dom:'Dom',lun:'Lun',mar:'Mar',mer:'Mer',gio:'Gio',ven:'Ven',sab:'Sab'});
+  const lbl=d=>['Dom','Lun','Mar','Mer','Gio','Ven','Sab'][d.getDay()]+' '+String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0');
+  let target=null;
+  if(/\boggi\b/.test(t)){ target=new Date(base); }
+  else if(/\bdomani\b/.test(t)){ target=new Date(base); target.setDate(base.getDate()+1); }
+  else if(/\bdopodomani\b/.test(t)){ target=new Date(base); target.setDate(base.getDate()+2); }
+  else{
+    for(let i=0;i<7;i++){ if(t.includes(GIORNI[i])){ // prossimo giorno-della-settimana i
+      target=new Date(base); let diff=(i-base.getDay()+7)%7; if(diff===0) diff=7; target.setDate(base.getDate()+diff); break; } }
+  }
+  // ora: "alle 19", "19:30", "ore 20", "9"
+  let ora=null; const m=t.match(/(?:alle|ore)?\s*\b([01]?\d|2[0-3])(?:[:.](\d{2}))?\b/);
+  if(m){ const h=m[1].padStart(2,'0'); const mi=m[2]||'00'; ora=h+':'+mi; }
+  return { date:target, giorno: target?lbl(target):null, dow: target?target.getDay():null, ora };
+}
+function parseTipo(txt){ const t=txt.toLowerCase(); if(t.includes('lezione'))return 'Lezione'; if(t.includes('partita'))return 'Partita'; return null; }
+function parseDurata(txt){ const m=txt.toLowerCase().match(/(\d{2,3})\s*(?:min|minuti|')/); return m?parseInt(m[1],10):null; }
+
+/* "in regola" (mock): socio attivo + borsellino non negativo */
+function inRegola(){ return S.player.socio && S.player.inRegola && S.player.borselloCent>=0; }
+/* fascia critica → forza coda staff (Ibrido). Domenica mattina = critica */
+function isCritica(dow,ora){ if(dow===0){ const h=parseInt((ora||'12').split(':')[0],10); if(h<13) return true; } return false; }
+/* campo libero fittizio: quasi sempre uno libero, tranne fasce critiche */
+function campoLibero(dow,ora){ if(isCritica(dow,ora)) return null; const pool=[3,2,4,1]; return pool[(parseInt((ora||'0').replace(':',''),10))%pool.length]; }
+
+/* ============================ INTENT ROUTING =============================== */
+function detectIntent(t){
+  t=t.toLowerCase();
+  if(/borsell|saldo|credito|monedero|portafogl/.test(t)) return 'borsellino';
+  if(/disponibil|liber|che campi|quali campi|posti/.test(t)) return 'disponibilita';
+  if(/cosa ho|mie prenotaz|le mie|cosa ho prenotato|prenotazioni/.test(t)) return 'mie';
+  if(/annull|disdet|cancell/.test(t)) return 'annulla';
+  if(/modific|spost|cambia/.test(t)) return 'modifica';
+  if(/prenot|campo|partita|lezione|gioc/.test(t)) return 'prenota';
+  if(/ciao|salve|buongiorno|buonasera|ehi|hey/.test(t)) return 'saluto';
+  if(/aiuto|help|cosa puoi|cosa sai/.test(t)) return 'aiuto';
+  return 'fallback';
+}
+
+/* ============================ HANDLER PRINCIPALE =========================== */
+function sendUser(text, silent){
+  if(!silent) addOut(text);
+  const t=text.trim(); if(!t) return;
+
+  // se siamo dentro un flusso multi-turn, instrada lì
+  if(convo.mode==='booking') return botSay(()=>bookingStep(t));
+  if(convo.mode==='cancel')  return botSay(()=>cancelStep(t));
+  if(convo.mode==='modify')  return botSay(()=>modifyStep(t));
+
+  const intent=detectIntent(t);
+  botSay(()=>route(intent,t));
+}
+
+function route(intent,t){
+  switch(intent){
+    case 'saluto': addInHtml('Ciao '+esc(S.player.nome.split(' ')[0])+'! Posso aiutarti a prenotare un campo, vedere le disponibilità, le tue prenotazioni o il saldo del borsellino. Da dove partiamo?');
+      addQuick([{label:'Prenota un campo',text:'Vorrei prenotare un campo'},{label:'Disponibilità',text:'Che campi liberi ci sono?'},{label:'Le mie prenotazioni',text:'Cosa ho prenotato?'},{label:'Borsellino',text:'Saldo borsellino'}]); break;
+    case 'aiuto': addInHtml('In questa prima versione posso: <b>prenotare</b> un campo, mostrarti le <b>disponibilità</b>, le tue <b>prenotazioni</b> (vedi/annulla/modifica) e il <b>saldo</b> del borsellino.');
+      addQuick([{label:'Prenota un campo',text:'Vorrei prenotare un campo'},{label:'Le mie prenotazioni',text:'Cosa ho prenotato?'}]); break;
+    case 'borsellino': doBorsellino(); break;
+    case 'disponibilita': doDisponibilita(t); break;
+    case 'mie': doMie(); break;
+    case 'annulla': startCancel(); break;
+    case 'modifica': startModify(); break;
+    case 'prenota': startBooking(t); break;
+    default:
+      addInHtml('Non sono sicuro di aver capito. Posso aiutarti con una di queste:');
+      addQuick([{label:'Prenota un campo',text:'Vorrei prenotare un campo'},{label:'Disponibilità',text:'Che campi liberi ci sono?'},{label:'Le mie prenotazioni',text:'Cosa ho prenotato?'},{label:'Borsellino',text:'Saldo borsellino'}]);
+  }
+}
+
+/* ---------- Borsellino ----------------------------------------------------- */
+function doBorsellino(){
+  addInHtml('Il tuo borsellino: <b>'+euro(S.player.borselloCent)+'</b>.<br>Ultimo movimento: '+esc(S.player.ultimoMov)+'.');
+}
+
+/* ---------- Disponibilità -------------------------------------------------- */
+function doDisponibilita(t){
+  const w=parseWhen(t);
+  const giorno=w.giorno||'Domani';
+  addInHtml(esc(giorno)+', fascia 18–21:<br>· Campo 1 — 18:00, 20:30<br>· Campo 2 — 19:00<br>· Campo 4 — 18:30, 20:00');
+  addQuick([{label:'Prenota Campo 2 · 19:00',text:'Prenota '+(w.giorno?giorno:'domani')+' alle 19 campo 2'},{label:'Altra fascia',text:'Che campi liberi ci sono?'}]);
+}
+
+/* ---------- Le mie prenotazioni -------------------------------------------- */
+function doMie(){
+  if(!S.prenotazioni.length){ addInHtml('Al momento non hai prenotazioni future. Vuoi prenotare un campo?'); addQuick([{label:'Prenota un campo',text:'Vorrei prenotare un campo'}]); return; }
+  addInHtml('Le tue prossime prenotazioni:');
+  addCard(S.prenotazioni.map(p=>'· '+p.giorno+' · '+p.ora+' — Campo '+p.campo+' · '+p.tipo).join('<br>'));
+  addQuick([{label:'Annulla',text:'Annulla una prenotazione'},{label:'Modifica',text:'Modifica una prenotazione'}]);
+}
+
+/* ---------- Prenotazione (multi-turn) -------------------------------------- */
+function startBooking(t){
+  convo={mode:'booking',step:'when',draft:{}};
+  // prova a raccogliere tutto dal primo messaggio
+  const w=parseWhen(t), tipo=parseTipo(t), dur=parseDurata(t);
+  if(w.date){ convo.draft.when=w; }
+  if(tipo){ convo.draft.tipo=tipo; }
+  if(dur){ convo.draft.durata=dur; }
+  advanceBooking();
+}
+function bookingStep(t){
+  const d=convo.draft;
+  if(convo.step==='when'){ const w=parseWhen(t); if(w.date) d.when=w; else { addInHtml('Non ho capito il giorno/l’ora. Prova con “domani alle 19”.'); return; } }
+  else if(convo.step==='tipo'){ const tp=parseTipo(t); if(tp) d.tipo=tp; else { addInHtml('Partita o lezione?'); addQuick([{label:'Partita',text:'Partita'},{label:'Lezione',text:'Lezione'}]); return; } if(!d.durata){ d.durata=durataDefault(d.tipo); const dd=parseDurata(t); if(dd) d.durata=dd; } }
+  else if(convo.step==='confirm'){ return; }
+  advanceBooking();
+}
+function advanceBooking(){
+  const d=convo.draft;
+  if(!d.when||!d.when.date){ convo.step='when'; addInHtml('Per quando? Scrivimi giorno e ora, oppure scegli qui sotto.');
+    addQuick([{label:'Oggi',text:'oggi'},{label:'Domani',text:'domani'},{label:'Scegli data',text:'la prossima settimana'}]); return; }
+  if(!d.when.ora){ convo.step='when'; addInHtml('A che ora?'); return; }
+  if(!d.tipo){ convo.step='tipo'; addInHtml('Perfetto. Partita o lezione?');
+    addQuick([{label:'Partita',text:'Partita'},{label:'Lezione',text:'Lezione'}]); return; }
+  if(!d.durata){ d.durata=durataDefault(d.tipo); }
+  // determina campo / ramo Ibrido
+  const campo=campoLibero(d.when.dow,d.when.ora);
+  const fine=addMin(d.when.ora,d.durata);
+  if(campo===null || !inRegola()){
+    // → coda staff (modello Ibrido)
+    convo.step='confirm';
+    const motivo = campo===null ? 'La fascia richiesta è molto richiesta' : 'La tua posizione va verificata';
+    addInHtml(motivo+': inoltro la richiesta alla segreteria. Ti avviso appena è confermata.');
+    addSys('Richiesta in coda staff — in attesa di approvazione');
+    const req={ giorno:d.when.giorno, ora:d.when.ora, campo:(campo||2), tipo:d.tipo, durata:d.durata };
+    resetConvo();
+    // simulazione approvazione staff dopo qualche secondo
+    setTimeout(()=>{ botSay(()=>{
+      const id=++S.seq; S.prenotazioni.push({id,giorno:req.giorno,ora:req.ora,campo:req.campo,tipo:req.tipo,durata:req.durata}); save();
+      addInHtml('La segreteria ha <b>confermato</b>! '+esc(req.giorno)+' · '+req.ora+' — Campo '+req.campo+' · '+req.tipo+'. A presto.', true);
+    },400); }, 4200);
+    return;
+  }
+  // auto-conferma → riepilogo + conferma
+  convo.step='confirm'; d.campo=campo; d.fine=fine;
+  addInHtml('Ho un campo libero. Confermo a tuo nome?');
+  addCard('<b>Riepilogo</b><br>'+esc(d.when.giorno)+' · '+d.when.ora+'–'+fine+'<br>Campo '+campo+' · '+d.tipo+' ('+d.durata+"')<br>A nome di "+esc(S.player.nome));
+  addQuick([{label:'Conferma',text:'__CONFIRM__',silent:true},{label:'Cambia orario',text:'__CHANGE__',silent:true}]);
+}
+function addMin(hhmm,min){ const [h,m]=hhmm.split(':').map(Number); const tot=h*60+m+min; return String(Math.floor(tot/60)%24).padStart(2,'0')+':'+String(tot%60).padStart(2,'0'); }
+
+/* intercetta le conferme "silenziose" dei pulsanti */
+const _origSend=sendUser;
+sendUser=function(text,silent){
+  if(text==='__CONFIRM__' && convo.mode==='booking'){ addOut('Conferma'); return botSay(()=>{
+    const d=convo.draft; const id=++S.seq;
+    S.prenotazioni.push({id,giorno:d.when.giorno,ora:d.when.ora,campo:d.campo,tipo:d.tipo,durata:d.durata}); save();
+    addInHtml('Prenotazione <b>confermata</b>. Campo '+d.campo+' · '+esc(d.when.giorno)+' · '+d.when.ora+'–'+d.fine+' · '+d.tipo+'. Ti aspettiamo.', true);
+    resetConvo();
+  }); }
+  if(text==='__CHANGE__' && convo.mode==='booking'){ addOut('Cambia orario'); convo.step='when'; convo.draft.when=null; return botSay(()=>{ addInHtml('Va bene, a che giorno e ora preferisci?'); }); }
+  return _origSend(text,silent);
+};
+
+/* ---------- Annulla (multi-turn) ------------------------------------------- */
+function startCancel(){
+  if(!S.prenotazioni.length){ addInHtml('Non hai prenotazioni da annullare.'); return; }
+  convo={mode:'cancel',step:'pick',draft:{}};
+  addInHtml('Quale vuoi annullare?');
+  addQuick(S.prenotazioni.map(p=>({label:p.giorno+' · '+p.ora+' — Campo '+p.campo, text:'annulla '+p.id, silent:false})));
+}
+function cancelStep(t){
+  const d=convo.draft;
+  if(convo.step==='pick'){
+    let p=matchPren(t); if(!p){ addInHtml('Non ho individuato la prenotazione. Riprova indicando il giorno.'); return; }
+    d.target=p; convo.step='confirm';
+    addInHtml('Vuoi annullare: '+esc(p.giorno)+' · '+p.ora+' — Campo '+p.campo+' · '+p.tipo+'? L’azione è definitiva.');
+    addQuick([{label:'Sì, annulla',text:'sì',danger:true},{label:'No',text:'no'}]); return;
+  }
+  if(convo.step==='confirm'){
+    if(/^s[iì]|conferm|annulla/.test(t.toLowerCase())){
+      S.prenotazioni=S.prenotazioni.filter(x=>x.id!==d.target.id); save();
+      addInHtml('Fatto. Campo '+d.target.campo+' di '+esc(d.target.giorno)+' alle '+d.target.ora+' liberato.', true);
+    } else { addInHtml('Ok, non annullo nulla.'); }
+    resetConvo();
+  }
+}
+
+/* ---------- Modifica (multi-turn, semplificata) ---------------------------- */
+function startModify(){
+  if(!S.prenotazioni.length){ addInHtml('Non hai prenotazioni da modificare.'); return; }
+  convo={mode:'modify',step:'pick',draft:{}};
+  addInHtml('Quale prenotazione vuoi modificare?');
+  addQuick(S.prenotazioni.map(p=>({label:p.giorno+' · '+p.ora+' — Campo '+p.campo, text:'modifica '+p.id})));
+}
+function modifyStep(t){
+  const d=convo.draft;
+  if(convo.step==='pick'){ let p=matchPren(t); if(!p){ addInHtml('Non ho individuato la prenotazione.'); return; }
+    d.target=p; convo.step='newtime'; addInHtml('A che nuovo orario la sposto? (es. “alle 20:30”)'); return; }
+  if(convo.step==='newtime'){ const w=parseWhen(t); if(!w.ora){ addInHtml('Dimmi il nuovo orario, es. “alle 20:30”.'); return; }
+    const old=d.target.ora; const idx=S.prenotazioni.findIndex(x=>x.id===d.target.id);
+    if(w.giorno) S.prenotazioni[idx].giorno=w.giorno; S.prenotazioni[idx].ora=w.ora; save();
+    addInHtml('Aggiornata. '+esc(S.prenotazioni[idx].giorno)+' — Campo '+d.target.campo+' ora alle '+w.ora+' (prima '+old+').', true);
+    resetConvo();
+  }
+}
+function matchPren(t){
+  t=t.toLowerCase();
+  const byId=t.match(/\b(\d{1,4})\b/); if(byId){ const p=S.prenotazioni.find(x=>x.id===parseInt(byId[1],10)); if(p) return p; }
+  if(/sabato|sab/.test(t)) return S.prenotazioni.find(p=>/sab/i.test(p.giorno));
+  if(/marted|mar/.test(t)) return S.prenotazioni.find(p=>/mar/i.test(p.giorno));
+  return S.prenotazioni[0];
+}
+
+/* ============================ BOOTSTRAP =================================== */
+function boot(){
+  chat.innerHTML='';
+  document.getElementById('band').textContent='✓ Numero riconosciuto: '+S.player.nome+' · '+(S.player.socio?'socio':'non socio');
+  addSys('Emulatore · dati finti · nessuna chiamata reale');
+  botSay(()=>{ addInHtml('Ciao '+esc(S.player.nome.split(' ')[0])+'! Sono l’assistente di Padel Village. Come posso aiutarti?');
+    addQuick([{label:'Prenota un campo',text:'Vorrei prenotare un campo'},{label:'Disponibilità',text:'Che campi liberi ci sono domani sera?'},{label:'Le mie prenotazioni',text:'Cosa ho prenotato?'},{label:'Borsellino',text:'Saldo borsellino'}]); }, 500);
+}
+
+document.getElementById('bar').addEventListener('submit',e=>{
+  e.preventDefault(); const f=document.getElementById('field'); const v=f.value.trim(); if(!v) return; f.value=''; sendUser(v);
+});
+document.getElementById('resetBtn').addEventListener('click',()=>{ resetDemo(); resetConvo(); boot(); });
+
+boot();
+</script>
+</body>
+</html>
