@@ -310,6 +310,9 @@ function showCmdPop(v){
   cmdPop.classList.add('show');
 }
 function hideCmdPop(){ cmdPop.classList.remove('show'); }
+/* Promemoria "/" ripetuto ogni tanto, a fine azione (non a ogni azione) */
+let _hintN=0;
+function maybeHint(){ _hintN++; if(_hintN%2===0) addSys('Suggerimento: digita "/" per i comandi in ogni momento'); }
 function showIceBreakers(){
   const wrap=el('ice');
   [['Prenota un campo','Vorrei prenotare un campo'],
@@ -460,6 +463,7 @@ function joinRequest(m){
     const rec={id:++S.seq,giorno:m.giorno,ora:m.ora,campo:m.campo,tipo:'Partita',durata:90,amici:m.con.filter(n=>n!==S.player.nome)};
     S.prenotazioni.push(rec); save();
     addInHtml('<b>'+esc(m.organizzatore)+' ha accettato!</b> Sei in partita: '+esc(m.giorno)+' · '+m.ora+' — Campo '+m.campo+'. Buon divertimento.',true);
+    maybeHint();
   },400),4200);
 }
 /* lato organizzatore: la MIA partita aperta riceve una richiesta (simulata) */
@@ -610,6 +614,7 @@ function decideAndPresent(draft){
       applyOpen(rec,req,names.length);
       S.prenotazioni.push(rec); save();
       addInHtml('<b>Confermato</b>! '+esc(req.giorno)+' · '+req.ora+' — Campo '+req.campo+' · '+req.tipo+(names.length?(' · con '+names.join(', ')):'')+'. A presto.',true);
+      maybeHint();
       if(rec.aperta) afterBookingOpen(rec);
     },400),4200);
     return;
@@ -629,6 +634,7 @@ function commitBooking(draft){
   applyOpen(rec,draft,names.length);
   S.prenotazioni.push(rec); save();
   addInHtml('Prenotazione <b>confermata</b>. Campo '+draft.campo+' · '+esc(draft.giorno)+' · '+draft.ora+'–'+draft.fine+' · '+draft.tipo+(names.length?(' · con '+names.join(', ')):'')+(rec.aperta?('<br>🤝 Partita aperta · '+rec.posti+(rec.posti>1?' posti':' posto')+' · '+rangeLbl(rec)):'')+'. Ti aspettiamo.',true);
+  maybeHint();
   if(rec.aperta) afterBookingOpen(rec);
 }
 
@@ -647,7 +653,7 @@ function cancelStep(t){
     addQuick([{label:'Sì, annulla',text:'sì',danger:true},{label:'No',text:'no'}]); return; }
   if(convo.step==='confirm'){
     if(/^s[iì]|conferm|annulla/.test(t.toLowerCase())){ S.prenotazioni=S.prenotazioni.filter(x=>x.id!==d.target.id); save();
-      addInHtml('Fatto. Campo '+d.target.campo+' di '+esc(d.target.giorno)+' alle '+d.target.ora+' liberato.',true); }
+      addInHtml('Fatto. Campo '+d.target.campo+' di '+esc(d.target.giorno)+' alle '+d.target.ora+' liberato.',true); maybeHint(); }
     else addInHtml('Ok, non annullo nulla.');
     resetConvo();
   }
@@ -666,6 +672,7 @@ function modifyStep(t){
     const idx=S.prenotazioni.findIndex(x=>x.id===d.target.id); const old=S.prenotazioni[idx].ora;
     if(w.giorno) S.prenotazioni[idx].giorno=w.giorno; S.prenotazioni[idx].ora=w.ora; save();
     addInHtml('Aggiornata. '+esc(S.prenotazioni[idx].giorno)+' — Campo '+d.target.campo+' ora alle '+w.ora+' (prima '+old+').',true);
+    maybeHint();
     resetConvo();
   }
 }
@@ -680,8 +687,7 @@ function matchPren(t){
 function boot(){
   chat.innerHTML=''; closeSheet(); resetConvo();
   document.getElementById('band').textContent='✓ Numero riconosciuto: '+S.player.nome+' · '+(S.player.socio?'socio':'non socio');
-  hideCmdPop();
-  addSys('Emulatore · dati finti · nessuna chiamata reale');
+  hideCmdPop(); _hintN=0;
   addSys('Suggerimento: digita "/" per i comandi rapidi in ogni momento');
   botSay(()=>{ addInHtml('Ciao '+esc(S.player.nome.split(' ')[0])+', hai contattato la segreteria di Padel Village. Come possiamo aiutarti? Tocca un\'opzione qui sotto o scrivici pure.'); showIceBreakers(); },500);
 }
