@@ -140,7 +140,7 @@
    fedelmente su WhatsApp reale (componenti/limiti Flows + policy Meta).
    Verificare sui doc Meta PRIMA di aggiungere grafica/layout/interazioni.
    ========================================================================== */
-const LS_KEY='pmo_emu_state_v2';
+const LS_KEY='pmo_emu_state_v3';
 
 /* --- Dati demo ------------------------------------------------------------- */
 function demoState(){
@@ -156,6 +156,13 @@ function demoState(){
     prenotazioni:[
       { id:1, giorno:'Mar 01/07', ora:'19:00', campo:3, tipo:'Partita', durata:90 },
       { id:2, giorno:'Sab 05/07', ora:'10:00', campo:1, tipo:'Partita', durata:90 }
+    ],
+    /* partite APERTE di altri soci (demo). Range livello deciso dall'organizzatore;
+       la terza è fuori range per Marco (4.0) → il filtro NON la mostra. */
+    partiteAperte:[
+      { id:51, giorno:dayInfo(1).giorno, ora:'19:30', campo:2, organizzatore:'Marco B.', livMin:3.5, livMax:4.5, posti:1, con:['Marco B.','Paolo V.','Andrea T.'] },
+      { id:52, giorno:dayInfo(3).giorno, ora:'20:00', campo:1, organizzatore:'Sara L.', livMin:4.0, livMax:5.0, posti:2, con:['Sara L.','Luca P.'] },
+      { id:53, giorno:dayInfo(2).giorno, ora:'18:00', campo:4, organizzatore:'Piero Z.', livMin:2.5, livMax:3.0, posti:1, con:['Piero Z.','Gino B.','Aldo T.'] }
     ],
     seq:100
   };
@@ -279,6 +286,7 @@ function detectIntent(t){
   if(/cosa ho|mie prenotaz|le mie|prenotazioni/.test(t)) return 'mie';
   if(/annull|disdet|cancell/.test(t)) return 'annulla';
   if(/modific|spost|cambia orario/.test(t)) return 'modifica';
+  if(/unisc|unirmi|partite? apert|cerco (una )?partita|trova partita|partecip/.test(t)) return 'unisciti';
   if(/prenot|campo|partita|lezione|gioc/.test(t)) return 'prenota';
   if(/ciao|salve|buongiorno|buonasera|ehi|hey|menu/.test(t)) return 'saluto';
   return 'fallback';
@@ -298,6 +306,7 @@ function route(intent,t){
     case 'borsellino': doBorsellino(); break;
     case 'disponibilita': doDisponibilita(t); break;
     case 'mie': doMie(); break;
+    case 'unisciti': doUnisciti(); break;
     case 'annulla': startCancel(); break;
     case 'modifica': startModify(); break;
     case 'prenota': startBooking(t); break;
@@ -307,6 +316,7 @@ function route(intent,t){
 function showMenu(){
   addMenu([
     {section:'Prenotazioni', ic:'🎾', label:'Prenota un campo', text:'Vorrei prenotare un campo'},
+    {section:'Prenotazioni', ic:'🤝', label:'Unisciti a una partita', text:'Vorrei unirmi a una partita'},
     {section:'Prenotazioni', ic:'📅', label:'Le mie prenotazioni', text:'Cosa ho prenotato?'},
     {section:'Account', ic:'👤', label:'Il mio profilo', text:'Il mio profilo'},
     {section:'Account', ic:'👥', label:'I miei amici', text:'I miei amici'},
@@ -359,8 +369,60 @@ function doDisponibilita(t){
 function doMie(){
   if(!S.prenotazioni.length){ addInHtml('Al momento non hai prenotazioni future. Vuoi prenotare un campo?'); addQuick([{label:'🎾 Prenota un campo',text:'Vorrei prenotare un campo'}]); return; }
   addInHtml('Le tue prossime prenotazioni:');
-  addCard(S.prenotazioni.map(p=>'· '+esc(p.giorno)+' · '+p.ora+' — Campo '+p.campo+' · '+p.tipo+(p.amici&&p.amici.length?(' · con '+p.amici.join(', ')):'')).join('<br>'));
+  addCard(S.prenotazioni.map(p=>'· '+esc(p.giorno)+' · '+p.ora+' — Campo '+p.campo+' · '+p.tipo+(p.amici&&p.amici.length?(' · con '+p.amici.join(', ')):'')+(p.aperta&&p.posti>0?(' · 🤝 aperta ('+p.posti+')'):'')).join('<br>'));
   addQuick([{label:'Annulla',action:startCancel},{label:'Modifica',action:startModify}]);
+}
+
+/* ---------- Unisciti a una partita (partite aperte) ------------------------
+   Decisioni: range livello DECISO dall'organizzatore (vedi solo dove rientri);
+   ingresso CON APPROVAZIONE dell'organizzatore (qui simulata).
+   Fase D: avviso all'organizzatore = template utility approvato. */
+function livOk(m){ const l=parseFloat(S.player.livello); return l>=m.livMin && l<=m.livMax; }
+function rangeLbl(m){ return m.livMin<=1?'aperta a tutti i livelli':('liv. '+m.livMin.toFixed(1)+'–'+m.livMax.toFixed(1)); }
+function doUnisciti(){
+  const mm=(S.partiteAperte||[]).filter(m=>m.posti>0 && livOk(m));
+  if(!mm.length){
+    addInHtml('Al momento non ci sono partite aperte adatte al tuo livello ('+esc(S.player.livello)+'). Puoi aprirne una tu: prenota un campo e spunta "Apri la partita ad altri giocatori".');
+    addQuick([{label:'🎾 Prenota un campo',text:'Vorrei prenotare un campo'}]); return;
+  }
+  addInHtml('Partite aperte adatte al tuo livello ('+esc(S.player.livello)+') — tocca per i dettagli:');
+  addMenu(mm.map(m=>({section:'Partite aperte', ic:'🤝', label:m.giorno+' · '+m.ora+' · '+m.posti+(m.posti>1?' posti':' posto')+' · '+m.organizzatore, action:()=>botSay(()=>showJoinCard(m))})));
+}
+function showJoinCard(m){
+  addInHtml('Ecco i dettagli:');
+  addCard('<b>'+esc(m.giorno)+' · '+m.ora+'</b> — Campo '+m.campo+'<br>Partita aperta · '+rangeLbl(m)+'<br>In campo: '+m.con.map(esc).join(', ')+'<br>Posti liberi: '+m.posti+'<br>Organizza: '+esc(m.organizzatore));
+  addQuick([
+    {label:'🤝 Chiedi di unirti',action:()=>{ addOut('Chiedo di unirmi'); botSay(()=>joinRequest(m)); }},
+    {label:'Vedi le altre',action:()=>botSay(doUnisciti)}
+  ]);
+}
+function joinRequest(m){
+  addInHtml('Richiesta inviata a '+esc(m.organizzatore)+' — ti avvisiamo qui appena risponde.');
+  addSys('In attesa dell\'organizzatore');
+  setTimeout(()=>botSay(()=>{
+    m.posti--; if(m.con.indexOf(S.player.nome)<0) m.con.push(S.player.nome);
+    const rec={id:++S.seq,giorno:m.giorno,ora:m.ora,campo:m.campo,tipo:'Partita',durata:90,amici:m.con.filter(n=>n!==S.player.nome)};
+    S.prenotazioni.push(rec); save();
+    addInHtml('<b>'+esc(m.organizzatore)+' ha accettato!</b> Sei in partita: '+esc(m.giorno)+' · '+m.ora+' — Campo '+m.campo+'. Buon divertimento.',true);
+  },400),4200);
+}
+/* lato organizzatore: la MIA partita aperta riceve una richiesta (simulata) */
+function applyOpen(rec,draft,nAmici){
+  if(!draft.aperta) return;
+  const posti=4-1-nAmici; if(posti<=0) return;
+  const pr=String(draft.range||'3.5-4.5').split('-');
+  rec.aperta=true; rec.posti=posti; rec.livMin=parseFloat(pr[0]); rec.livMax=parseFloat(pr[1]);
+}
+function afterBookingOpen(rec){
+  addSys('Partita aperta ('+rec.posti+(rec.posti>1?' posti':' posto')+') — ti avvisiamo se qualcuno chiede di unirsi');
+  const liv=(rec.livMin&&rec.livMin>1)?rec.livMin.toFixed(1):'3.5';
+  setTimeout(()=>botSay(()=>{
+    addInHtml('📩 <b>Elena R.</b> (liv. '+liv+') chiede di unirsi alla tua partita di '+esc(rec.giorno)+' alle '+rec.ora+'.');
+    addQuick([
+      {label:'Accetta',action:()=>{ addOut('Accetta'); botSay(()=>{ rec.posti--; rec.amici=(rec.amici||[]).concat(['Elena R.']); save(); addInHtml('Elena R. è in partita. '+(rec.posti>0?('Resta'+(rec.posti>1?'no':'')+' '+rec.posti+(rec.posti>1?' posti aperti':' posto aperto')+'.'):'La partita è al completo.'),true); }); }},
+      {label:'Rifiuta',action:()=>{ addOut('Rifiuta'); botSay(()=>addInHtml('Va bene, abbiamo avvisato Elena. Il posto resta aperto.')); }}
+    ]);
+  },400),7000);
 }
 
 /* ---------- Prenotazione: WhatsApp Flow (modulo) --------------------------- */
@@ -373,7 +435,7 @@ function startBooking(text){
 function openBookingFlow(prefill){
   prefill=prefill||{};
   const days=[]; for(let o=0;o<7;o++) days.push(dayInfo(o));
-  const st={ off:0, ora:null, tipo:'Partita', durata:prefill.durata||90, amici:(prefill.amici||[]).slice() };
+  const st={ off:0, ora:null, tipo:'Partita', durata:prefill.durata||90, amici:(prefill.amici||[]).slice(), aperta:false, range:prefill.range||'3.5-4.5' };
   if(prefill.giorno){ const m=days.filter(d=>d.giorno===prefill.giorno)[0]; if(m) st.off=m.off; }
   else{ for(let i=0;i<days.length;i++){ if(freeSlots(days[i].off,days[i].dow)>0){ st.off=days[i].off; break; } } }
   const body=el('flow');
@@ -398,6 +460,21 @@ function openBookingFlow(prefill){
       row.appendChild(cb); row.appendChild(sp); fl.appendChild(row); });
     body.appendChild(fl);
   }
+  // Partita aperta ad altri (OptIn nei Flow reali) + livello ammesso
+  const optWrap=el('friend-list');
+  const optRow=document.createElement('label'); optRow.className='friend-row';
+  const optCb=document.createElement('input'); optCb.type='checkbox';
+  const optSp=document.createElement('span'); optSp.textContent='🤝 Apri la partita ad altri giocatori del circolo';
+  optRow.appendChild(optCb); optRow.appendChild(optSp); optWrap.appendChild(optRow);
+  body.appendChild(optWrap);
+  const rangeLbEl=fieldLabel('Livello ammesso (lo decidi tu)'); rangeLbEl.style.display='none';
+  body.appendChild(rangeLbEl);
+  const rangeRow=chipRow([{label:'3.0–4.0',val:'3.0-4.0'},{label:'3.5–4.5',val:'3.5-4.5'},{label:'4.0–5.0',val:'4.0-5.0'},{label:'Tutti',val:'0-7'}],(val,btn,r)=>{ selectOne(r,btn); st.range=val; });
+  rangeRow.style.display='none';
+  body.appendChild(rangeRow);
+  optCb.onchange=()=>{ st.aperta=optCb.checked; rangeLbEl.style.display=st.aperta?'':'none'; rangeRow.style.display=st.aperta?'':'none'; };
+  preselectChip(rangeRow, st.range);
+  if(prefill.aperta){ optCb.checked=true; optCb.onchange(); }
   // Riepilogo selezione + submit
   const sum=el('flow-sum'); body.appendChild(sum);
   const foot=document.createElement('button'); foot.className='flow-submit'; foot.textContent='Continua';
@@ -406,8 +483,8 @@ function openBookingFlow(prefill){
     const d=days[st.off];
     closeSheet();
     const names=st.amici.map(friendName).filter(Boolean);
-    addOut('📋 '+d.giorno+' · '+st.ora+' · '+st.tipo+" ("+st.durata+"')"+(names.length?(' · con '+names.join(', ')):''));
-    botSay(()=>decideAndPresent({giorno:d.giorno,dow:d.dow,ora:st.ora,tipo:st.tipo,durata:st.durata,amici:st.amici.slice()}));
+    addOut('📋 '+d.giorno+' · '+st.ora+' · '+st.tipo+" ("+st.durata+"')"+(names.length?(' · con '+names.join(', ')):'')+(st.aperta?' · aperta ad altri':''));
+    botSay(()=>decideAndPresent({giorno:d.giorno,dow:d.dow,ora:st.ora,tipo:st.tipo,durata:st.durata,amici:st.amici.slice(),aperta:st.aperta,range:st.range}));
   };
   body.appendChild(foot);
 
@@ -470,19 +547,21 @@ function decideAndPresent(draft){
     const motivo = campo===null ? 'Questa fascia è molto richiesta' : 'La tua posizione va verificata';
     addInHtml(motivo+': la controlliamo e ti confermiamo appena possibile.');
     addSys('Richiesta in verifica — ti confermiamo a breve');
-    const req={giorno:draft.giorno,ora:draft.ora,campo:(campo||2),tipo:draft.tipo,durata:draft.durata,amici:draft.amici||[]};
+    const req={giorno:draft.giorno,ora:draft.ora,campo:(campo||2),tipo:draft.tipo,durata:draft.durata,amici:draft.amici||[],aperta:draft.aperta,range:draft.range};
     setTimeout(()=>botSay(()=>{
       const rec={id:++S.seq,giorno:req.giorno,ora:req.ora,campo:req.campo,tipo:req.tipo,durata:req.durata};
       const names=req.amici.map(friendName).filter(Boolean); if(names.length) rec.amici=names;
+      applyOpen(rec,req,names.length);
       S.prenotazioni.push(rec); save();
       addInHtml('<b>Confermato</b>! '+esc(req.giorno)+' · '+req.ora+' — Campo '+req.campo+' · '+req.tipo+(names.length?(' · con '+names.join(', ')):'')+'. A presto.',true);
+      if(rec.aperta) afterBookingOpen(rec);
     },400),4200);
     return;
   }
   draft.campo=campo; draft.fine=fine;
   const names=(draft.amici||[]).map(friendName).filter(Boolean);
   addInHtml('Abbiamo un campo libero. Confermiamo a tuo nome?');
-  addCard('<b>Riepilogo</b><br>'+esc(draft.giorno)+' · '+draft.ora+'–'+fine+'<br>Campo '+campo+' · '+draft.tipo+' ('+draft.durata+"')"+(names.length?('<br>Con: '+names.join(', ')):'')+'<br>A nome di '+esc(S.player.nome));
+  addCard('<b>Riepilogo</b><br>'+esc(draft.giorno)+' · '+draft.ora+'–'+fine+'<br>Campo '+campo+' · '+draft.tipo+' ('+draft.durata+"')"+(names.length?('<br>Con: '+names.join(', ')):'')+(draft.aperta&&(3-names.length)>0?'<br>🤝 Aperta ad altri giocatori':'')+'<br>A nome di '+esc(S.player.nome));
   addQuick([
     {label:'Conferma',action:()=>{ addOut('Conferma'); botSay(()=>commitBooking(draft)); }},
     {label:'Cambia',action:()=>botSay(()=>{ addInHtml('Riapriamo il modulo.'); openBookingFlow(draft); })}
@@ -491,8 +570,10 @@ function decideAndPresent(draft){
 function commitBooking(draft){
   const rec={id:++S.seq,giorno:draft.giorno,ora:draft.ora,campo:draft.campo,tipo:draft.tipo,durata:draft.durata};
   const names=(draft.amici||[]).map(friendName).filter(Boolean); if(names.length) rec.amici=names;
+  applyOpen(rec,draft,names.length);
   S.prenotazioni.push(rec); save();
-  addInHtml('Prenotazione <b>confermata</b>. Campo '+draft.campo+' · '+esc(draft.giorno)+' · '+draft.ora+'–'+draft.fine+' · '+draft.tipo+(names.length?(' · con '+names.join(', ')):'')+'. Ti aspettiamo.',true);
+  addInHtml('Prenotazione <b>confermata</b>. Campo '+draft.campo+' · '+esc(draft.giorno)+' · '+draft.ora+'–'+draft.fine+' · '+draft.tipo+(names.length?(' · con '+names.join(', ')):'')+(rec.aperta?('<br>🤝 Partita aperta · '+rec.posti+(rec.posti>1?' posti':' posto')+' · '+rangeLbl(rec)):'')+'. Ti aspettiamo.',true);
+  if(rec.aperta) afterBookingOpen(rec);
 }
 
 /* ---------- Annulla / Modifica --------------------------------------------- */
