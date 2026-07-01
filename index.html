@@ -79,7 +79,7 @@
   .chips{display:flex;flex-wrap:wrap;gap:8px;padding:3px 14px 4px}
   .chip{border:1px solid #cdd6d9;background:#fff;color:var(--ink);border-radius:16px;padding:8px 13px;font-size:13.5px;cursor:pointer;font-family:inherit}
   .chip.sel{background:var(--wa-green);border-color:var(--wa-green);color:#fff}
-  .chip.conf:not(.sel){background:#fff4d6;border-color:#f0e3b0;color:#8a6d00}
+  .chip.opt:not(.sel){background:#fff4d6;border-color:#f0e3b0;color:#8a6d00}
   .flow-inp{width:calc(100% - 28px);margin:3px 14px 4px;background:#f3f6f7;border:1px solid #e2e8ea;border-radius:10px;padding:11px 12px;font-size:15px;font-family:inherit;outline:0}
   .friend-list{padding:2px 14px}
   .friend-row{display:flex;align-items:center;gap:11px;padding:9px 2px;font-size:14px;border-bottom:1px solid #f2f5f6;cursor:pointer}
@@ -106,7 +106,7 @@
   .luce-hint{font-size:11.5px;color:var(--muted);padding:3px 2px 0}
   .flow-legend{display:flex;gap:13px;padding:8px 14px 0;font-size:11px;color:var(--muted)}
   .flow-legend .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:4px;vertical-align:-1px}
-  .dot.free{background:#2ea36b}.dot.conf{background:#e0a52e}.dot.busy{background:#c3cbcf}
+  .dot.free{background:#2ea36b}.dot.conf,.dot.opt{background:#e0a52e}.dot.busy{background:#c3cbcf}
   .flow-sum{margin:12px 14px 0;padding:10px 12px;background:#f3f6f7;border-radius:10px;font-size:13px;color:var(--muted)}
   .flow-sum.on{background:#eaf7e6;color:#0c5f57}
   .flow-sum .warn{color:#8a6d00;font-weight:600}
@@ -172,8 +172,8 @@ function demoState(){
       {id:14,nome:'Paolo Neri',livello:'4.5'}
     ],
     prenotazioni:[
-      { id:1, giorno:'Mar 01/07', ora:'19:00', campo:3, tipo:'Partita', durata:90 },
-      { id:2, giorno:'Sab 05/07', ora:'10:00', campo:1, tipo:'Partita', durata:90 }
+      { id:1, giorno:dayInfo(2).giorno, ora:'19:00', campo:3, tipo:'Partita', durata:90, pagato:true, giocatori:4, caparra:20 },
+      { id:2, giorno:dayInfo(4).giorno, ora:'10:00', campo:1, tipo:'Partita', durata:90, pagato:false, giocatori:4, caparra:20, optDeadline:Date.now()+12*3600*1000 }
     ],
     /* partite APERTE di altri soci (demo). Range livello deciso dall'organizzatore;
        la terza è fuori range per Marco (4.0) → il filtro NON la mostra. */
@@ -317,16 +317,44 @@ function dayInfo(off){ const d=new Date(); d.setDate(d.getDate()+off);
   return { off, giorno:lbl(d), dow:d.getDay(),
     w: off===0?'oggi':(off===1?'domani':['dom','lun','mar','mer','gio','ven','sab'][d.getDay()]),
     n: String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0') }; }
-function offsetForGiorno(g){ for(let o=0;o<7;o++){ if(dayInfo(o).giorno===g) return o; } return null; }
-function slotStatus(off,dow,ora){
+function offsetForGiorno(g){ for(let o=0;o<=MAX_GIORNI;o++){ if(dayInfo(o).giorno===g) return o; } return null; }
+/* --- OPZIONE + CAPARRA (modello prenotazione) -----------------------------
+   Prenotare = OPZIONARE (blocco NON pagato) con caparra OBBLIGATORIA da versare
+   entro un timer legato alla distanza dalla partita:
+     5–10 gg → 24h · 1–4 gg → 12h · oggi → 1h (mai oltre l'inizio partita).
+   4 CAMPI dietro le quinte: ogni orario ha 4 campi (libero/opzionato/pagato).
+   Vista giocatore (un solo stato per orario, campi nascosti):
+     ≥1 libero → 'free' (verde) · 0 liberi ma ≥1 opzionato → 'opt' (arancione:
+     "pieno ma non pagato", te lo aggiudichi con la caparra) · tutti pagati →
+     'busy' (occupato, nascosto).
+   Caparra NON rimborsabile in caso di disdetta. Tutto SIMULATO (Fase D). */
+const CAPARRA_TESTA=5;           // € a testa — SEGNAPOSTO (importi da tarare)
+const MAX_GIORNI=10;             // non si prenota oltre 10 giorni in avanti
+function nowMin(){ const n=new Date(); return n.getHours()*60+n.getMinutes(); }
+function courtsFor(off,dow,ora){
   const mins=toMin(ora);
-  if(off===0){ const n=new Date(); if(mins<=n.getHours()*60+n.getMinutes()) return 'busy'; }
-  if(isCritica(dow,ora)) return 'conf';            // su conferma segreteria (Ibrido)
-  const k=(off*13+mins)%17;
-  if(k===3||k===11) return 'busy';                 // tutti e 4 i campi occupati → nascosto
-  return 'free';
+  if(off===0 && mins<=nowMin()) return {free:0,opt:0,paid:4};   // passato → occupato
+  const k=(off*31+mins)%13;
+  if(k===2||k===7) return {free:0,opt:2,paid:2};   // pieno, 2 opzionati → ARANCIONE
+  if(k===5)        return {free:0,opt:4,paid:0};   // pieno, tutti opzionati → ARANCIONE (ghiotto)
+  if(k===9)        return {free:0,opt:0,paid:4};   // tutto pagato → occupato (nascosto)
+  return {free:4,opt:0,paid:0};                    // libero → verde
 }
-/* Conteggio orari DISPONIBILI del giorno (free + su conferma), per l'indicatore. */
+function slotStatus(off,dow,ora){ const c=courtsFor(off,dow,ora);
+  return c.free>0 ? 'free' : (c.opt>0 ? 'opt' : 'busy'); }
+/* Tempistica caparra per distanza (giorni) dalla partita. */
+function caparraWindow(off){
+  if(off===0) return {tier:'last minute', h:1,  lbl:'1 ora'};
+  if(off<=4)  return {tier:'via di mezzo', h:12, lbl:'12 ore'};
+  return {tier:'programmata', h:24, lbl:'24 ore'};
+}
+function matchStartMs(off,ora){ const d=new Date(); d.setDate(d.getDate()+off); const [h,m]=ora.split(':').map(Number); d.setHours(h,m,0,0); return d.getTime(); }
+/* Scadenza assoluta dell'opzione (ms): adesso + finestra, mai oltre l'inizio partita. */
+function optDeadlineMs(off,ora){ const win=caparraWindow(off); let dl=Date.now()+win.h*3600*1000;
+  if(off===0) dl=Math.min(dl,matchStartMs(off,ora)); return dl; }
+function fmtRemaining(ms){ if(ms<=0) return 'scaduta'; const m=Math.floor(ms/60000); if(m<60) return m+' min'; return Math.floor(m/60)+'h '+(m%60)+'m'; }
+function caparraTot(giocatori){ return CAPARRA_TESTA*(giocatori||4); }
+/* Conteggio orari DISPONIBILI del giorno (free + opzionato), per l'indicatore. */
 function availSlots(off,dow){ let c=0; daySlotGroups(off,dow,90).forEach(g=>g.slots.forEach(s=>{ if(s.status!=='busy') c++; })); return c; }
 const GIORNI=['domenica','lunedì','martedì','mercoledì','giovedì','venerdì','sabato'];
 function parseWhen(txt){
@@ -343,7 +371,7 @@ function parseTipo(txt){ const t=txt.toLowerCase(); if(t.includes('lezione'))ret
 function parseDurata(txt){ const m=txt.toLowerCase().match(/(\d{2,3})\s*(?:min|minuti|')/); return m?parseInt(m[1],10):null; }
 function inRegola(){ return S.player.socio && S.player.inRegola && S.player.borselloCent>=0; }
 function isCritica(dow,ora){ if(dow===0){ const h=parseInt((ora||'12').split(':')[0],10); if(h<13) return true; } return false; }
-function campoLibero(dow,ora){ if(isCritica(dow,ora)) return null; const pool=[3,2,4,1]; return pool[(parseInt((ora||'0').replace(':',''),10))%pool.length]; }
+function campoLibero(dow,ora){ const pool=[3,2,4,1]; return pool[(parseInt((ora||'0').replace(':',''),10))%pool.length]; }
 function friendName(id){ const f=S.friends.find(x=>x.id===id); return f?f.nome.split(' ')[0]:''; }
 
 /* --- Comandi "/" (Commands nativi WhatsApp) e Ice Breakers ----------------- */
@@ -481,11 +509,19 @@ function doDisponibilita(t){
 }
 
 /* ---------- Le mie prenotazioni -------------------------------------------- */
+function statoPren(p){
+  if(p.pagato) return '✅ Confermato · caparra versata';
+  const rem=(p.optDeadline||0)-Date.now();
+  return rem>0 ? ('🟠 Opzionato · caparra '+(p.caparra||caparraTot(p.giocatori))+' € entro '+fmtRemaining(rem)) : '⚪️ Opzione scaduta · campo liberato';
+}
 function doMie(){
   if(!S.prenotazioni.length){ addInHtml('Al momento non hai prenotazioni future. Vuoi prenotare un campo?'); addQuick([{label:'🎾 Prenota un campo',text:'Vorrei prenotare un campo'}]); return; }
   addInHtml('Le tue prossime prenotazioni:');
-  addCard(S.prenotazioni.map(p=>'· '+esc(p.giorno)+' · '+p.ora+' — Campo '+p.campo+' · '+p.tipo+(p.amici&&p.amici.length?(' · con '+p.amici.join(', ')):'')+(p.aperta&&p.posti>0?(' · 🤝 aperta ('+p.posti+')'):'')).join('<br>'));
-  addQuick([{label:'Annulla',action:startCancel},{label:'Modifica',action:startModify}]);
+  addCard(S.prenotazioni.map(p=>'· '+esc(p.giorno)+' · '+p.ora+' — Campo '+p.campo+' · '+p.tipo+(p.amici&&p.amici.length?(' · con '+p.amici.join(', ')):'')+(p.aperta&&p.posti>0?(' · 🤝 aperta ('+p.posti+')'):'')+'<br><span style="font-size:12px;color:'+(p.pagato?'#0c5f57':'#8a6d00')+'">'+statoPren(p)+'</span>').join('<br>'));
+  const btns=[];
+  S.prenotazioni.filter(p=>!p.pagato && (p.optDeadline||0)-Date.now()>0).forEach(p=>btns.push({label:'💰 Paga caparra '+p.ora,action:()=>{ addOut('Paga la caparra di '+p.ora); botSay(()=>paymentButtons(p)); }}));
+  btns.push({label:'Annulla',action:startCancel}); btns.push({label:'Modifica',action:startModify});
+  addQuick(btns);
 }
 
 /* ---------- Unisciti a una partita (partite aperte) ------------------------
@@ -550,7 +586,7 @@ function startBooking(text){
 }
 function openBookingFlow(prefill){
   prefill=prefill||{};
-  const days=[]; for(let o=0;o<7;o++) days.push(dayInfo(o));
+  const days=[]; for(let o=0;o<=MAX_GIORNI;o++) days.push(dayInfo(o));
   const st={ off:0, ora:null, momento:null, tipo:'Partita', players:prefill.players||4, durata:90, amici:(prefill.amici||[]).slice(), aperta:false, range:prefill.range||'3.5-4.5', luce:false };
   st.durata = st.players===2 ? 60 : (prefill.durata||90);
   let luceRow=null,luceCb=null,luceHint=null;
@@ -565,7 +601,7 @@ function openBookingFlow(prefill){
   const momBox=el('chips'); body.appendChild(momBox);
   // Passo 3: gli orari del momento scelto (chips = ChipsSelector nativo)
   const slotBox=el('slotbox'); body.appendChild(slotBox);
-  body.appendChild(el('flow-legend','<span><i class="dot free"></i>Libero</span><span><i class="dot conf"></i>Su conferma</span>'));
+  body.appendChild(el('flow-legend','<span><i class="dot free"></i>Libero</span><span><i class="dot opt"></i>Opzionato · da pagare</span>'));
   // Illuminazione: a scelta SOLO sulle fasce diurne (nei fissi è inclusa)
   body.appendChild(fieldLabel('Illuminazione'));
   const luceWrap=el('friend-list');
@@ -674,7 +710,7 @@ function openBookingFlow(prefill){
     const row=el('chips');
     flat.forEach(s=>{
       const b=document.createElement('button'); b.type='button';
-      b.className='chip'+(st.ora===s.ora?' sel':'')+(s.status==='conf'?' conf':'');
+      b.className='chip'+(st.ora===s.ora?' sel':'')+(s.status==='opt'?' opt':'');
       b.textContent=uniform?s.ora:(s.ora+' · '+s.prezzo+'€');
       b.onclick=()=>{ st.ora=s.ora; renderSlots(); updSum(); };
       row.appendChild(b);
@@ -693,14 +729,16 @@ function openBookingFlow(prefill){
     updLuceRow();
     if(!st.ora){ sum.className='flow-sum'; sum.textContent='Nessun orario selezionato'; return; }
     const meta=slotMetaFor(d.off,d.dow,st.ora,st.durata,st.players);
-    const conf=meta && meta.status==='conf';
+    const opt=meta && meta.status==='opt';
     const dur=meta ? (meta.kind==='fisso'?90:st.durata) : st.durata;
     const pr=slotPrezzo(meta,st.luce,st.players);
+    const win=caparraWindow(d.off);
     const luceTxt=meta ? (meta.luceOpt ? (pr.luceApplica?' · con luce':' · luce esclusa') : ' · luce inclusa') : '';
     sum.className='flow-sum on';
     sum.innerHTML='<b>'+esc(d.giorno)+' · '+st.ora+'–'+addMin(st.ora,dur)+'</b>'
       +'<br>💶 <b>'+pr.testa+' € a testa</b> · '+pr.campo+' € a campo · '+pr.giocatori+' giocatori'+luceTxt
-      +(conf?'<br><span class="warn">passa dalla segreteria</span>':'');
+      +'<br>💰 Caparra <b>'+caparraTot(pr.giocatori)+' €</b> · da versare entro <b>'+win.lbl+'</b>'
+      +(opt?'<br><span class="warn">🟠 Pieno ma non pagato — te lo aggiudichi con la caparra</span>':'');
   }
   openSheet('Prenota un campo', body, 'Scegli giorno, momento e orario');
   renderDays(); renderMomenti(); renderSlots();
@@ -714,51 +752,78 @@ function openBookingFlow(prefill){
 
 function decideAndPresent(draft){
   // Coerenza con la vista disponibilità: se l'orario chiesto a parole è
-  // occupato nella griglia demo, proponi il modulo con gli orari liberi.
+  // OCCUPATO (4 campi pagati), proponi il modulo con gli orari disponibili.
   const off=offsetForGiorno(draft.giorno);
   const draftMeta = off!=null ? slotMetaFor(off,draft.dow,draft.ora,draft.durata,draft.players) : null;
   if(draftMeta && draftMeta.status==='busy'){
-    addInHtml('A quell\'ora è già tutto occupato. Ti apriamo il modulo con gli orari liberi. 👇');
+    addInHtml('A quell\'ora è tutto occupato (campi già pagati). Ti apriamo il modulo con gli orari disponibili. 👇');
     openBookingFlow({giorno:draft.giorno,durata:draft.durata,amici:draft.amici});
     return;
   }
+  const opt = draftMeta && draftMeta.status==='opt';
   const campo=campoLibero(draft.dow,draft.ora); const fine=addMin(draft.ora,draft.durata);
-  if(campo===null || !inRegola()){
-    const motivo = campo===null ? 'Questa fascia è molto richiesta' : 'La tua posizione va verificata';
-    addInHtml(motivo+': la controlliamo e ti confermiamo appena possibile.');
-    addSys('Richiesta in verifica — ti confermiamo a breve');
-    const req={giorno:draft.giorno,ora:draft.ora,campo:(campo||2),tipo:draft.tipo,durata:draft.durata,amici:draft.amici||[],aperta:draft.aperta,range:draft.range};
-    setTimeout(()=>botSay(()=>{
-      const rec={id:++S.seq,giorno:req.giorno,ora:req.ora,campo:req.campo,tipo:req.tipo,durata:req.durata};
-      const names=req.amici.map(friendName).filter(Boolean); if(names.length) rec.amici=names;
-      applyOpen(rec,req,names.length);
-      S.prenotazioni.push(rec); save();
-      addInHtml('<b>Confermato</b>! '+esc(req.giorno)+' · '+req.ora+' — Campo '+req.campo+' · '+req.tipo+(names.length?(' · con '+names.join(', ')):'')+'. A presto.',true);
-      maybeHint();
-      if(rec.aperta) afterBookingOpen(rec);
-    },400),4200);
-    return;
-  }
-  draft.campo=campo; draft.fine=fine;
+  const pr=slotPrezzo(draftMeta,draft.luce,draft.players);
+  draft.campo=campo; draft.fine=fine; draft.giocatori=pr.giocatori; draft.caparra=caparraTot(pr.giocatori);
+  const win=caparraWindow(off||0);
   const names=(draft.amici||[]).map(friendName).filter(Boolean);
-  const pMeta=slotMetaFor(off,draft.dow,draft.ora,draft.durata,draft.players);
-  const pr=slotPrezzo(pMeta,draft.luce,draft.players);
-  const luceNote=pMeta&&pMeta.luceOpt ? (pr.luceApplica?' · con luce':' · senza luce') : ' · luce inclusa';
-  addInHtml('Abbiamo un campo libero. Confermiamo a tuo nome?');
-  addCard('<b>Riepilogo</b><br>'+esc(draft.giorno)+' · '+draft.ora+'–'+fine+'<br>Campo '+campo+' · '+draft.tipo+' ('+draft.durata+"')"+(names.length?('<br>Con: '+names.join(', ')):'')+(draft.aperta&&(3-names.length)>0?'<br>🤝 Aperta ad altri giocatori':'')+'<br>💶 <b>'+pr.testa+' € a testa</b> · '+pr.campo+' € a campo · '+pr.giocatori+' giocatori'+luceNote+'<br>A nome di '+esc(S.player.nome));
+  const luceNote=draftMeta&&draftMeta.luceOpt ? (pr.luceApplica?' · con luce':' · senza luce') : ' · luce inclusa';
+  if(opt) addInHtml('Questo orario è <b>pieno</b>, ma un campo è solo <b>opzionato</b> (non pagato): puoi <b>aggiudicartelo</b> versando la caparra. 🟠');
+  else addInHtml('Campo disponibile. Te lo <b>opzioniamo</b> a tuo nome?');
+  addCard('<b>Riepilogo</b><br>'+esc(draft.giorno)+' · '+draft.ora+'–'+fine+'<br>Campo '+campo+' · '+draft.tipo+' ('+draft.durata+"')"+(names.length?('<br>Con: '+names.join(', ')):'')+(draft.aperta&&(3-names.length)>0?'<br>🤝 Aperta ad altri giocatori':'')
+    +'<br>💶 <b>'+pr.testa+' € a testa</b> · '+pr.campo+' € a campo · '+pr.giocatori+' giocatori'+luceNote
+    +'<br>💰 Caparra <b>'+draft.caparra+' €</b> (obbligatoria, <b>non rimborsabile</b> se disdici)'
+    +'<br>⏳ Da versare entro <b>'+win.lbl+'</b>, poi il campo si libera'
+    +'<br>A nome di '+esc(S.player.nome));
   addQuick([
-    {label:'Conferma',action:()=>{ addOut('Conferma'); botSay(()=>commitBooking(draft)); }},
+    {label:(opt?'🟠 Opziona e aggiudicati':'Opziona il campo'),action:()=>{ addOut('Opziona'); botSay(()=>commitOpzione(draft)); }},
     {label:'Cambia',action:()=>botSay(()=>{ addInHtml('Riapriamo il modulo.'); openBookingFlow(draft); })}
   ]);
 }
-function commitBooking(draft){
-  const rec={id:++S.seq,giorno:draft.giorno,ora:draft.ora,campo:draft.campo,tipo:draft.tipo,durata:draft.durata};
+/* Crea l'OPZIONE (non pagata) e propone il pagamento della caparra. */
+function commitOpzione(draft){
+  const off=offsetForGiorno(draft.giorno);
+  const rec={id:++S.seq,giorno:draft.giorno,ora:draft.ora,campo:draft.campo,tipo:draft.tipo,durata:draft.durata,
+    pagato:false, giocatori:draft.giocatori||4, caparra:draft.caparra||caparraTot(draft.giocatori||4), optDeadline:optDeadlineMs(off||0,draft.ora)};
   const names=(draft.amici||[]).map(friendName).filter(Boolean); if(names.length) rec.amici=names;
   applyOpen(rec,draft,names.length);
   S.prenotazioni.push(rec); save();
-  addInHtml('Prenotazione <b>confermata</b>. Campo '+draft.campo+' · '+esc(draft.giorno)+' · '+draft.ora+'–'+draft.fine+' · '+draft.tipo+(names.length?(' · con '+names.join(', ')):'')+(rec.aperta?('<br>🤝 Partita aperta · '+rec.posti+(rec.posti>1?' posti':' posto')+' · '+rangeLbl(rec)):'')+'. Ti aspettiamo.',true);
-  maybeHint();
+  addInHtml('🟠 <b>Campo opzionato</b> a tuo nome — '+esc(rec.giorno)+' · '+rec.ora+'–'+draft.fine+' · Campo '+rec.campo+'.<br>Versa la <b>caparra di '+rec.caparra+' €</b> entro <b>'+fmtRemaining(rec.optDeadline-Date.now())+'</b>, poi il campo si libera e un altro può prenderselo pagando.',true);
+  paymentButtons(rec);
+  scheduleReminder(rec);
   if(rec.aperta) afterBookingOpen(rec);
+}
+/* Pulsanti pagamento caparra: borsellino (istantaneo) o circolo. */
+function paymentButtons(rec){
+  addQuick([
+    {label:'💳 Paga dal borsellino ('+euro(S.player.borselloCent)+')',action:()=>{ addOut('Paga dal borsellino'); botSay(()=>payWallet(rec)); }},
+    {label:'🏛️ Passa al circolo',action:()=>{ addOut('Pago al circolo'); botSay(()=>payAtClub(rec)); }}
+  ]);
+}
+/* Promemoria one-shot (NON si ri-arma): su WhatsApp vero è GRATIS, siamo nelle 24h. */
+function scheduleReminder(rec){
+  setTimeout(()=>{ const r=S.prenotazioni.find(x=>x.id===rec.id); if(r && !r.pagato){ botSay(()=>{
+    addInHtml('⏳ <b>Promemoria</b>: ti restano <b>'+fmtRemaining(r.optDeadline-Date.now())+'</b> per versare la caparra di '+r.caparra+' €, poi il campo di '+esc(r.giorno)+' alle '+r.ora+' si libera.');
+    paymentButtons(r);
+  }); } }, 9000);
+}
+function payWallet(rec){
+  const need=rec.caparra*100;
+  if(S.player.borselloCent<need){
+    addInHtml('Saldo insufficiente ('+euro(S.player.borselloCent)+') per la caparra di '+rec.caparra+' €. Vuoi ricaricare il borsellino?');
+    addQuick([
+      {label:'💳 Ricarica 20 € (demo)',action:()=>{ addOut('Ricarica 20 €'); botSay(()=>{ S.player.borselloCent+=2000; S.player.ultimoMov='ricarica € 20 (demo)'; save(); addInHtml('Ricaricato. Nuovo saldo <b>'+euro(S.player.borselloCent)+'</b>.',true); paymentButtons(rec); }); }},
+      {label:'🏛️ Pago al circolo',action:()=>{ addOut('Pago al circolo'); botSay(()=>payAtClub(rec)); }}
+    ]);
+    return;
+  }
+  S.player.borselloCent-=need; S.player.ultimoMov='caparra € '+rec.caparra+' ('+rec.giorno+')';
+  rec.pagato=true; delete rec.optDeadline; save();
+  addInHtml('✅ <b>Caparra versata</b> ('+rec.caparra+' € dal borsellino). Campo <b>blindato</b>: '+esc(rec.giorno)+' · '+rec.ora+' — Campo '+rec.campo+'. Ora nessuno può togliertelo.<br>Saldo residuo: <b>'+euro(S.player.borselloCent)+'</b>.',true);
+  maybeHint();
+}
+function payAtClub(rec){
+  addInHtml('Ok! Il campo resta <b>opzionato</b> a tuo nome. Passa in segreteria a versare la caparra di <b>'+rec.caparra+' €</b> entro <b>'+fmtRemaining(rec.optDeadline-Date.now())+'</b>, altrimenti si libera.<br><span style="color:#8a6d00">Ricorda: la caparra non è rimborsabile in caso di disdetta.</span>');
+  maybeHint();
 }
 
 /* ---------- Annulla / Modifica --------------------------------------------- */
@@ -772,11 +837,13 @@ function cancelStep(t){
   const d=convo.draft;
   if(convo.step==='pick'){ const p=matchPren(t); if(!p){ addInHtml('Non ho individuato la prenotazione. Riprova indicando il giorno.'); return; }
     d.target=p; convo.step='confirm';
-    addInHtml('Vuoi annullare: '+esc(p.giorno)+' · '+p.ora+' — Campo '+p.campo+' · '+p.tipo+'? L’azione è definitiva.');
+    const warn = p.pagato ? '<br><span style="color:#c0392b">⚠️ La caparra di '+(p.caparra||0)+' € è persa (non rimborsabile).</span>' : '';
+    addInHtml('Vuoi annullare: '+esc(p.giorno)+' · '+p.ora+' — Campo '+p.campo+' · '+p.tipo+'? L’azione è definitiva.'+warn);
     addQuick([{label:'Sì, annulla',text:'sì',danger:true},{label:'No',text:'no'}]); return; }
   if(convo.step==='confirm'){
-    if(/^s[iì]|conferm|annulla/.test(t.toLowerCase())){ S.prenotazioni=S.prenotazioni.filter(x=>x.id!==d.target.id); save();
-      addInHtml('Fatto. Campo '+d.target.campo+' di '+esc(d.target.giorno)+' alle '+d.target.ora+' liberato.',true); maybeHint(); }
+    if(/^s[iì]|conferm|annulla/.test(t.toLowerCase())){ const p=d.target; S.prenotazioni=S.prenotazioni.filter(x=>x.id!==p.id); save();
+      const nota = p.pagato ? (' La caparra di '+(p.caparra||0)+' € non è rimborsabile ed è persa.') : ' Nessuna caparra versata: non perdi nulla.';
+      addInHtml('Fatto. Campo '+p.campo+' di '+esc(p.giorno)+' alle '+p.ora+' liberato.'+nota,true); maybeHint(); }
     else addInHtml('Ok, non annullo nulla.');
     resetConvo();
   }
