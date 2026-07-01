@@ -130,7 +130,7 @@ function demoState(){
     ],
     prenotazioni:[
       { id:1, giorno:'Mar 01/07', ora:'19:00', campo:3, tipo:'Partita', durata:90 },
-      { id:2, giorno:'Sab 05/07', ora:'10:00', campo:1, tipo:'Lezione', durata:60 }
+      { id:2, giorno:'Sab 05/07', ora:'10:00', campo:1, tipo:'Partita', durata:90 }
     ],
     seq:100
   };
@@ -249,7 +249,7 @@ function sendUser(text,silent){
 }
 function route(intent,t){
   switch(intent){
-    case 'saluto': addInHtml('Ciao '+esc(S.player.nome.split(' ')[0])+'! Ecco cosa posso fare:'); showMenu(); break;
+    case 'saluto': addInHtml('Ciao '+esc(S.player.nome.split(' ')[0])+', come possiamo aiutarti? Ecco cosa possiamo fare:'); showMenu(); break;
     case 'profilo': doProfilo(); break;
     case 'amici': doAmici(); break;
     case 'borsellino': doBorsellino(); break;
@@ -258,7 +258,7 @@ function route(intent,t){
     case 'annulla': startCancel(); break;
     case 'modifica': startModify(); break;
     case 'prenota': startBooking(t); break;
-    default: addInHtml('Non sono sicuro di aver capito. Ecco cosa posso fare:'); showMenu();
+    default: addInHtml('Scusa, non abbiamo capito bene. Ecco cosa possiamo fare:'); showMenu();
   }
 }
 function showMenu(){
@@ -284,7 +284,7 @@ function doProfilo(){
 function doAmici(){
   addInHtml('I tuoi amici con cui giochi:');
   addCard(S.friends.length ? S.friends.map(f=>'👤 '+esc(f.nome)+' · liv. '+esc(f.livello)).join('<br>') : 'Ancora nessun amico in lista.');
-  addQuick([{label:'➕ Aggiungi amico',action:openAddFriendFlow},{label:'🎾 Prenota con un amico',action:()=>botSay(()=>{ addInHtml('Apro il modulo — trovi gli amici in fondo, spunta chi gioca con te.'); openBookingFlow({}); })}]);
+  addQuick([{label:'➕ Aggiungi amico',action:openAddFriendFlow},{label:'🎾 Prenota con un amico',action:()=>botSay(()=>{ addInHtml('Apriamo il modulo — trovi gli amici in fondo, spunta chi gioca con te.'); openBookingFlow({}); })}]);
 }
 function openAddFriendFlow(){
   const body=el('flow');
@@ -300,7 +300,7 @@ function openAddFriendFlow(){
     botSay(()=>addInHtml('Aggiunto! <b>'+esc(nome)+'</b> è ora tra i tuoi amici.',true)); };
   body.appendChild(b);
   openSheet('Aggiungi amico', body, 'Solo demo — nessun invito reale');
-  requestAnimationFrame(()=>preselectChip(row,'3.5'));
+  preselectChip(row,'3.5');
 }
 
 /* ---------- Borsellino ----------------------------------------------------- */
@@ -310,7 +310,7 @@ function doBorsellino(){ addInHtml('Il tuo borsellino: <b>'+euro(S.player.borsel
 function doDisponibilita(t){
   const w=parseWhen(t); const giorno=w.giorno||'Domani';
   addInHtml(esc(giorno)+', fascia 18–21:<br>· Campo 1 — 18:00, 20:30<br>· Campo 2 — 19:00<br>· Campo 4 — 18:30, 20:00');
-  addQuick([{label:'Prenota Campo 2 · 19:00',action:()=>botSay(()=>{ addInHtml('Apro il modulo con Campo 2 alle 19:00.'); openBookingFlow({giorno:w.giorno,dow:w.dow,ora:'19:00'}); })},{label:'Apri il modulo',action:()=>botSay(()=>openBookingFlow({giorno:w.giorno,dow:w.dow}))}]);
+  addQuick([{label:'Prenota Campo 2 · 19:00',action:()=>botSay(()=>{ addInHtml('Apriamo il modulo con Campo 2 alle 19:00.'); openBookingFlow({giorno:w.giorno,dow:w.dow,ora:'19:00'}); })},{label:'Apri il modulo',action:()=>botSay(()=>openBookingFlow({giorno:w.giorno,dow:w.dow}))}]);
 }
 
 /* ---------- Le mie prenotazioni -------------------------------------------- */
@@ -323,14 +323,14 @@ function doMie(){
 
 /* ---------- Prenotazione: WhatsApp Flow (modulo) --------------------------- */
 function startBooking(text){
-  const w=parseWhen(text), tipo=parseTipo(text), dur=parseDurata(text);
-  if(w.date && w.ora && tipo){ return decideAndPresent({giorno:w.giorno,dow:w.dow,ora:w.ora,tipo,durata:dur||durataDefault(tipo),amici:[]}); }
-  addInHtml('Apro il modulo di prenotazione — compila e invia. 👇');
-  openBookingFlow({giorno:w.giorno,dow:w.dow,ora:w.ora,tipo,durata:dur});
+  const w=parseWhen(text), dur=parseDurata(text);
+  if(w.date && w.ora){ return decideAndPresent({giorno:w.giorno,dow:w.dow,ora:w.ora,tipo:'Partita',durata:dur||90,amici:[]}); }
+  addInHtml('Ti apriamo il modulo di prenotazione — compila e invia. 👇');
+  openBookingFlow({giorno:w.giorno,dow:w.dow,ora:w.ora,durata:dur});
 }
 function openBookingFlow(prefill){
   prefill=prefill||{};
-  const st={ giorno:prefill.giorno||null, dow:(prefill.dow!=null?prefill.dow:null), ora:prefill.ora||null, tipo:prefill.tipo||null, durata:prefill.durata||null, amici:[] };
+  const st={ giorno:prefill.giorno||null, dow:(prefill.dow!=null?prefill.dow:null), ora:prefill.ora||null, tipo:'Partita', durata:prefill.durata||90, amici:[] };
   const body=el('flow');
   // Quando
   body.appendChild(fieldLabel('Quando'));
@@ -340,15 +340,10 @@ function openBookingFlow(prefill){
   body.appendChild(fieldLabel('Ora'));
   const timeRow=chipRow(TIMES.map(t=>({label:t,val:t})),(val,btn,r)=>{ selectOne(r,btn); st.ora=val; });
   body.appendChild(timeRow);
-  // Tipo
-  body.appendChild(fieldLabel('Tipo'));
-  const durRowRef={row:null};
-  const tipoRow=chipRow([{label:'Partita',val:'Partita'},{label:'Lezione',val:'Lezione'}],(val,btn,r)=>{ selectOne(r,btn); st.tipo=val; const dd=durataDefault(val); st.durata=dd; if(durRowRef.row) preselectAndSelect(durRowRef.row,dd); });
-  body.appendChild(tipoRow);
-  // Durata
+  // Durata (solo partite: le lezioni non si prenotano da qui)
   body.appendChild(fieldLabel('Durata'));
   const durRow=chipRow([{label:"60'",val:60},{label:"90'",val:90},{label:"120'",val:120}],(val,btn,r)=>{ selectOne(r,btn); st.durata=val; });
-  durRowRef.row=durRow; body.appendChild(durRow);
+  body.appendChild(durRow);
   // Amici
   if(S.friends.length){
     body.appendChild(fieldLabel('Con chi giochi? (facoltativo)'));
@@ -363,8 +358,8 @@ function openBookingFlow(prefill){
   // Submit
   const foot=document.createElement('button'); foot.className='flow-submit'; foot.textContent='Continua';
   foot.onclick=()=>{
-    if(!st.giorno||!st.ora||!st.tipo){ toast('Scegli giorno, ora e tipo.'); return; }
-    if(!st.durata) st.durata=durataDefault(st.tipo);
+    if(!st.giorno||!st.ora){ toast('Scegli giorno e ora.'); return; }
+    if(!st.durata) st.durata=90;
     closeSheet();
     const names=st.amici.map(friendName).filter(Boolean);
     addOut('📋 '+st.giorno+' · '+st.ora+' · '+st.tipo+(names.length?(' · con '+names.join(', ')):''));
@@ -372,40 +367,37 @@ function openBookingFlow(prefill){
   };
   body.appendChild(foot);
   openSheet('Prenota un campo', body, 'Compila e invia — come un modulo WhatsApp (Flow)');
-  // preselect
-  requestAnimationFrame(()=>{
-    if(st.ora) preselectChip(timeRow,st.ora);
-    if(st.tipo){ preselectChip(tipoRow,st.tipo); const dd=st.durata||durataDefault(st.tipo); st.durata=dd; preselectChip(durRow,dd); }
-    else if(st.durata) preselectChip(durRow,st.durata);
-    if(st.dow!=null){ // evidenzia Oggi/Domani/Dopodomani se combacia
-      [0,1,2].forEach(o=>{ const info=dateFromOffset(o); if(info.giorno===st.giorno) preselectChip(dayRow,o); });
-    }
-  });
+  // preselect (sincrono: gli elementi sono già nel DOM)
+  if(st.ora) preselectChip(timeRow,st.ora);
+  preselectChip(durRow, st.durata||90);
+  if(st.dow!=null){ // evidenzia Oggi/Domani/Dopodomani se combacia
+    [0,1,2].forEach(o=>{ const info=dateFromOffset(o); if(info.giorno===st.giorno) preselectChip(dayRow,o); });
+  }
 }
 function preselectAndSelect(row,val){ Array.from(row.children).forEach(c=>c.classList.remove('sel')); preselectChip(row,val); }
 
 function decideAndPresent(draft){
   const campo=campoLibero(draft.dow,draft.ora); const fine=addMin(draft.ora,draft.durata);
   if(campo===null || !inRegola()){
-    const motivo = campo===null ? 'La fascia richiesta è molto richiesta' : 'La tua posizione va verificata';
-    addInHtml(motivo+': inoltro la richiesta alla segreteria. Ti avviso appena è confermata.');
-    addSys('Richiesta in coda staff — in attesa di approvazione');
+    const motivo = campo===null ? 'Questa fascia è molto richiesta' : 'La tua posizione va verificata';
+    addInHtml(motivo+': la controlliamo e ti confermiamo appena possibile.');
+    addSys('Richiesta in verifica — ti confermiamo a breve');
     const req={giorno:draft.giorno,ora:draft.ora,campo:(campo||2),tipo:draft.tipo,durata:draft.durata,amici:draft.amici||[]};
     setTimeout(()=>botSay(()=>{
       const rec={id:++S.seq,giorno:req.giorno,ora:req.ora,campo:req.campo,tipo:req.tipo,durata:req.durata};
       const names=req.amici.map(friendName).filter(Boolean); if(names.length) rec.amici=names;
       S.prenotazioni.push(rec); save();
-      addInHtml('La segreteria ha <b>confermato</b>! '+esc(req.giorno)+' · '+req.ora+' — Campo '+req.campo+' · '+req.tipo+(names.length?(' · con '+names.join(', ')):'')+'. A presto.',true);
+      addInHtml('<b>Confermato</b>! '+esc(req.giorno)+' · '+req.ora+' — Campo '+req.campo+' · '+req.tipo+(names.length?(' · con '+names.join(', ')):'')+'. A presto.',true);
     },400),4200);
     return;
   }
   draft.campo=campo; draft.fine=fine;
   const names=(draft.amici||[]).map(friendName).filter(Boolean);
-  addInHtml('Ho un campo libero. Confermo a tuo nome?');
+  addInHtml('Abbiamo un campo libero. Confermiamo a tuo nome?');
   addCard('<b>Riepilogo</b><br>'+esc(draft.giorno)+' · '+draft.ora+'–'+fine+'<br>Campo '+campo+' · '+draft.tipo+' ('+draft.durata+"')"+(names.length?('<br>Con: '+names.join(', ')):'')+'<br>A nome di '+esc(S.player.nome));
   addQuick([
     {label:'Conferma',action:()=>{ addOut('Conferma'); botSay(()=>commitBooking(draft)); }},
-    {label:'Cambia',action:()=>botSay(()=>{ addInHtml('Riapro il modulo.'); openBookingFlow(draft); })}
+    {label:'Cambia',action:()=>botSay(()=>{ addInHtml('Riapriamo il modulo.'); openBookingFlow(draft); })}
   ]);
 }
 function commitBooking(draft){
@@ -464,7 +456,7 @@ function boot(){
   chat.innerHTML=''; closeSheet(); resetConvo();
   document.getElementById('band').textContent='✓ Numero riconosciuto: '+S.player.nome+' · '+(S.player.socio?'socio':'non socio');
   addSys('Emulatore · dati finti · nessuna chiamata reale');
-  botSay(()=>{ addInHtml('Ciao '+esc(S.player.nome.split(' ')[0])+'! Sono l’assistente di Padel Village. Tocca una voce qui sotto o scrivimi pure.'); showMenu(); },500);
+  botSay(()=>{ addInHtml('Ciao '+esc(S.player.nome.split(' ')[0])+', hai contattato la segreteria di Padel Village. Come possiamo aiutarti? Tocca una voce qui sotto o scrivici pure.'); showMenu(); },500);
 }
 document.getElementById('bar').addEventListener('submit',e=>{ e.preventDefault(); const f=document.getElementById('field'); const v=f.value.trim(); if(!v) return; f.value=''; sendUser(v); });
 document.getElementById('resetBtn').addEventListener('click',()=>{ resetDemo(); boot(); });
