@@ -107,6 +107,18 @@
   .flow-sum .warn{color:#8a6d00;font-weight:600}
   .flow-submit{margin:16px 14px 4px;width:calc(100% - 28px);background:var(--wa-green);color:#fff;border:0;border-radius:22px;padding:13px;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit}
   .toast{position:absolute;bottom:82px;left:50%;transform:translateX(-50%);background:#111b21;color:#fff;font-size:13px;padding:9px 15px;border-radius:20px;z-index:30;max-width:80%;text-align:center}
+  /* Ice Breakers (bottoni primo contatto — Meta: niente emoji, max 4) */
+  .ice{align-self:center;display:flex;flex-wrap:wrap;gap:8px;justify-content:center;padding:2px 8px 4px;max-width:96%}
+  .ice-b{background:#fff;border:1px solid #cfe0dc;color:#0c5f57;border-radius:17px;padding:8px 14px;font-size:13.5px;cursor:pointer;font-family:inherit}
+  .ice-b:active{background:#eef6f4}
+  /* Menu comandi "/" (Commands — sempre richiamabile digitando /) */
+  .cmd-pop{display:none;flex-direction:column;background:#fff;border-top:1px solid #e2e8ea;max-height:230px;overflow-y:auto;flex:0 0 auto}
+  .cmd-pop.show{display:flex}
+  .cmd-head{font-size:11px;color:var(--muted);padding:9px 14px 3px;text-transform:uppercase;letter-spacing:.4px;font-weight:600}
+  .cmd-row{display:flex;align-items:baseline;gap:10px;padding:10px 14px;cursor:pointer;border-top:1px solid #f2f5f6}
+  .cmd-row:active{background:#f4f7f8}
+  .cmd-c{font-size:14px;color:#027eb5;font-weight:600}
+  .cmd-d{font-size:13px;color:var(--muted)}
 </style>
 </head>
 <body>
@@ -121,6 +133,7 @@
   <div class="band" id="band">✓ Numero riconosciuto: …</div>
   <div class="chat" id="chat"></div>
   <div class="demo-note">🔒 Modalità demo — nessuna prenotazione reale</div>
+  <div class="cmd-pop" id="cmdPop"></div>
   <form class="bar" id="bar" autocomplete="off">
     <button type="button" class="ic-btn" id="emojiBtn">😊</button>
     <input class="field" id="field" placeholder="Messaggio" autocomplete="off">
@@ -177,6 +190,7 @@ function resetConvo(){ convo={mode:'idle',step:null,draft:{}}; }
 
 /* --- DOM utility ----------------------------------------------------------- */
 const chat=document.getElementById('chat');
+const field=document.getElementById('field');
 const appEl=document.querySelector('.app');
 function now(){ const d=new Date(); return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }
 function scrollDown(){ chat.scrollTop=chat.scrollHeight; }
@@ -276,9 +290,51 @@ function isCritica(dow,ora){ if(dow===0){ const h=parseInt((ora||'12').split(':'
 function campoLibero(dow,ora){ if(isCritica(dow,ora)) return null; const pool=[3,2,4,1]; return pool[(parseInt((ora||'0').replace(':',''),10))%pool.length]; }
 function friendName(id){ const f=S.friends.find(x=>x.id===id); return f?f.nome.split(' ')[0]:''; }
 
+/* --- Comandi "/" (Commands nativi WhatsApp) e Ice Breakers ----------------- */
+const COMMANDS=[
+  {cmd:'/prenota',       desc:'Prenota un campo'},
+  {cmd:'/partite',       desc:'Unisciti a una partita'},
+  {cmd:'/prenotazioni',  desc:'Le mie prenotazioni'},
+  {cmd:'/profilo',       desc:'Il mio profilo'},
+  {cmd:'/amici',         desc:'I miei amici'},
+  {cmd:'/borsellino',    desc:'Il mio borsellino'}
+];
+const cmdPop=document.getElementById('cmdPop');
+function showCmdPop(v){
+  const q=v.toLowerCase();
+  const list=COMMANDS.filter(c=>c.cmd.indexOf(q)===0);
+  if(!list.length){ hideCmdPop(); return; }
+  cmdPop.innerHTML=''; const h=el('cmd-head'); h.textContent='Comandi'; cmdPop.appendChild(h);
+  list.forEach(c=>{ const r=el('cmd-row','<span class="cmd-c">'+c.cmd+'</span><span class="cmd-d">'+esc(c.desc)+'</span>');
+    r.onclick=()=>{ field.value=''; hideCmdPop(); sendUser(c.cmd); }; cmdPop.appendChild(r); });
+  cmdPop.classList.add('show');
+}
+function hideCmdPop(){ cmdPop.classList.remove('show'); }
+function showIceBreakers(){
+  const wrap=el('ice');
+  [['Prenota un campo','Vorrei prenotare un campo'],
+   ['Unisciti a una partita','Vorrei unirmi a una partita'],
+   ['Le mie prenotazioni','Cosa ho prenotato?'],
+   ['Il mio borsellino','Saldo borsellino']].forEach(x=>{
+    const b=document.createElement('button'); b.className='ice-b'; b.textContent=x[0];
+    b.onclick=()=>{ wrap.remove(); sendUser(x[1]); };
+    wrap.appendChild(b);
+  });
+  chat.appendChild(wrap); scrollDown();
+}
+
 /* ============================ INTENT ROUTING =============================== */
 function detectIntent(t){
   t=t.toLowerCase();
+  if(t[0]==='/'){
+    if(/^\/(partite|unisci)/.test(t)) return 'unisciti';
+    if(/^\/prenotazioni/.test(t)) return 'mie';
+    if(/^\/prenota/.test(t)) return 'prenota';
+    if(/^\/profilo/.test(t)) return 'profilo';
+    if(/^\/amici/.test(t)) return 'amici';
+    if(/^\/borsellino/.test(t)) return 'borsellino';
+    if(/^\/menu/.test(t)) return 'saluto';
+  }
   if(/profil|i miei dati|chi sono/.test(t)) return 'profilo';
   if(/amic|con cui gioc|lista giocator/.test(t)) return 'amici';
   if(/borsell|saldo|credito|monedero|portafogl/.test(t)) return 'borsellino';
@@ -624,10 +680,13 @@ function matchPren(t){
 function boot(){
   chat.innerHTML=''; closeSheet(); resetConvo();
   document.getElementById('band').textContent='✓ Numero riconosciuto: '+S.player.nome+' · '+(S.player.socio?'socio':'non socio');
+  hideCmdPop();
   addSys('Emulatore · dati finti · nessuna chiamata reale');
-  botSay(()=>{ addInHtml('Ciao '+esc(S.player.nome.split(' ')[0])+', hai contattato la segreteria di Padel Village. Come possiamo aiutarti? Tocca una voce qui sotto o scrivici pure.'); showMenu(); },500);
+  addSys('Suggerimento: digita "/" per i comandi rapidi in ogni momento');
+  botSay(()=>{ addInHtml('Ciao '+esc(S.player.nome.split(' ')[0])+', hai contattato la segreteria di Padel Village. Come possiamo aiutarti? Tocca un\'opzione qui sotto o scrivici pure.'); showIceBreakers(); },500);
 }
-document.getElementById('bar').addEventListener('submit',e=>{ e.preventDefault(); const f=document.getElementById('field'); const v=f.value.trim(); if(!v) return; f.value=''; sendUser(v); });
+document.getElementById('bar').addEventListener('submit',e=>{ e.preventDefault(); const f=document.getElementById('field'); const v=f.value.trim(); hideCmdPop(); if(!v) return; f.value=''; sendUser(v); });
+field.addEventListener('input',()=>{ const v=field.value; if(v.charAt(0)==='/') showCmdPop(v.trim()); else hideCmdPop(); });
 document.getElementById('resetBtn').addEventListener('click',()=>{ resetDemo(); boot(); });
 document.getElementById('emojiBtn').addEventListener('click',()=>toast('Solo demo 🙂'));
 document.getElementById('clipBtn').addEventListener('click',()=>toast('Allegati: solo demo'));
