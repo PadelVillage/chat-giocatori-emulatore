@@ -814,7 +814,7 @@ function openBookingFlow(prefill){
         : ('<br>💶 <b>'+pr.testa+' € a testa</b> · '+pr.campo+' € a campo · '+pr.giocatori+' giocatori'
           +'<br>👥 1/'+target+' confermati (tu)'+(inviti?(' · ✉️ '+inviti+' invit'+(inviti>1?'i':'o')):'')
           +'<br>⚠️ <b>ATTENZIONE:</b> completa la partita (servono 4 giocatori) entro <b>'+win.lbl.toUpperCase()+'</b>, se no il campo <b>torna automaticamente disponibile per altri giocatori</b>'
-          +'<br>'+(st.aperta?'🟠 <b>Partita aperta</b> · altri soci possono chiedere di unirsi (li approvi tu)':'🔒 <b>Partita privata</b> · la riempi tu coi tuoi amici')));
+          +'<br>'+(st.aperta?'🟠 <b>Partita aperta</b> · altri soci possono chiedere di unirsi (li approvi tu)':'🔒 <b>Partita privata</b>')));
   }
   openSheet('Prenota un campo', body, 'Scegli giorno, momento e orario');
   renderDays(); renderMomenti(); renderSlots();
@@ -851,14 +851,14 @@ function decideAndPresent(draft){
   const win=rosterWindow(off||0);
   draft.campo=campo; draft.fine=fine; draft.target=target; draft.names=names;
   addInHtml('Campo disponibile. Te lo <b>opzioniamo</b> a tuo nome'+(names.length?(' e mandiamo l\'invito a '+names.join(', ')):'')+' — poi hai tempo per completare la partita.');
-  addCard('<b>Riepilogo</b><br>'+esc(draft.giorno)+' · '+draft.ora+'–'+fine+'<br>Campo '+campo+' · '+draft.tipo+' ('+draft.durata+"')"
+  addCard('<b>RIEPILOGO</b><br>'+esc(draft.giorno)+' · '+draft.ora+'–'+fine+'<br>Campo '+campo+' · '+draft.tipo+' ('+draft.durata+"')"
     +'<br>💶 <b>'+pr.testa+' € a testa</b> · '+pr.campo+' € a campo · '+target+' giocatori'
     +'<br>👥 1/'+target+' confermati (tu)'+(names.length?('<br>✉️ Inviti: '+names.join(', ')+' (in attesa)'):'')
     +'<br>⚠️ <b>ATTENZIONE:</b> completa la partita (servono 4 giocatori) entro <b>'+win.lbl.toUpperCase()+'</b>, se no il campo <b>torna automaticamente disponibile per altri giocatori</b>'
-    +'<br>'+(draft.aperta?'🟠 <b>Partita aperta</b> · altri soci possono chiedere di unirsi (li approvi tu)':'🔒 <b>Partita privata</b> · la riempi tu coi tuoi amici')
+    +'<br>'+(draft.aperta?'🟠 <b>Partita aperta</b> · altri soci possono chiedere di unirsi (li approvi tu)':'🔒 <b>Partita privata</b>')
     +'<br>A nome di '+esc(S.player.nome));
   addQuick([
-    {label:'Prenota in opzione',action:()=>{ addOut('Prenota in opzione'); botSay(()=>commitOpzione(draft)); }},   // ≤20 char (limite titolo reply-button WhatsApp)
+    {label:'Procedi',action:()=>{ addOut('Procedi'); botSay(()=>commitOpzione(draft)); }},   // ≤20 char (limite titolo reply-button WhatsApp); poi le 3 scelte per completare
     {label:'Cambia',action:()=>botSay(()=>{ addInHtml('Riapriamo il modulo.'); openBookingFlow(draft); })}
   ]);
 }
