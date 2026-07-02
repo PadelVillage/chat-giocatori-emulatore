@@ -139,7 +139,7 @@
   </div>
   <div class="band" id="band">✓ Numero riconosciuto: …</div>
   <div class="chat" id="chat"></div>
-  <div class="demo-note">🔒 Modalità demo — nessuna prenotazione reale</div>
+  <div class="demo-note">🔒 Modalità demo — nessuna prenotazione reale · <span id="buildTag"></span></div>
   <div class="cmd-pop" id="cmdPop"></div>
   <form class="bar" id="bar" autocomplete="off">
     <button type="button" class="ic-btn" id="emojiBtn">😊</button>
@@ -161,6 +161,9 @@
    Verificare sui doc Meta PRIMA di aggiungere grafica/layout/interazioni.
    ========================================================================== */
 const LS_KEY='pmo_emu_state_v5';
+/* Versione visibile nel footer: serve a capire SUBITO se il browser sta
+   mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
+const APP_BUILD='v0.9 · 03/07';
 
 /* --- Dati demo ------------------------------------------------------------- */
 function demoState(){
@@ -860,12 +863,9 @@ function confirmBooking(rec,extra){
   addInHtml('✅ <b>Partita al completo — prenotazione confermata!</b><br>'+esc(rec.giorno)+' · '+rec.ora+' — Campo '+rec.campo+' · in '+rosterTarget(rec)+(rec.amici&&rec.amici.length?('<br>Con: '+rec.amici.join(', ')):'')+(extra?('<br>'+extra):''),true);
   maybeHint(); addQuick([homeBtn()]);
 }
-/* Finestra scaduta con partita incompleta → campo liberato. */
-function expireOption(rec){
-  const r=S.prenotazioni.find(x=>x.id===rec.id); if(!r||r.stato!=='opzionato'||rosterPosti(r)===0||r.concierge) return;
-  S.prenotazioni=S.prenotazioni.filter(x=>x.id!==r.id); save();
-  botSay(()=>{ addInHtml('⌛️ <b>Tempo scaduto</b>: la partita per '+esc(r.giorno)+' alle '+r.ora+' non era completa, quindi il campo è stato <b>liberato</b>. Puoi riprovare quando vuoi.'); addQuick([homeBtn()]); });
-}
+/* DISATTIVATO nella demo (vedi scheduleRosterReminders): niente auto-rilascio
+   né messaggio "Tempo scaduto" durante il walkthrough. No-op a prova di tutto. */
+function expireOption(rec){ /* disattivato in demo */ }
 /* Modulo "completa la partita": INVITA amici (posto riempito all'accettazione)
    oppure aggiungi un Ospite (entra subito, lo garantisci tu). CheckboxGroup del
    Flow reale; amici non sul canale = voce disabilitata (enabled:false). */
@@ -923,11 +923,9 @@ function scheduleRosterReminders(rec, off){
      di ore reali), qui NON simulata a tempo. expireOption/rosterReminderMsg
      restano definite ma non più chiamate automaticamente. */
 }
-function rosterReminderMsg(r,kind){
-  if(kind==='last') addInHtml('⏳ <b>Ultima chiamata</b>: mancano ancora '+rosterPosti(r)+' giocator'+(rosterPosti(r)>1?'i':'e')+' per '+esc(r.giorno)+' alle '+r.ora+'. Completa a breve, altrimenti il campo torna disponibile per altri.');
-  else addInHtml('⏳ <b>Promemoria</b>: per '+esc(r.giorno)+' alle '+r.ora+' siete '+rosterFilled(r)+'/'+rosterTarget(r)+'. Aggiungi giocatori, altrimenti il campo torna disponibile per altri.');
-  rosterActionButtons(r);
-}
+/* DISATTIVATO nella demo (vedi scheduleRosterReminders): niente "Ultima chiamata"
+   / "Promemoria" che interrompono il giro. No-op a prova di tutto. */
+function rosterReminderMsg(r,kind){ /* disattivato in demo */ }
 /* Invito amici (WhatsApp reale: a ciascun amico un TEMPLATE utility con Sì/No;
    qui simulato). Il posto si riempie SOLO quando l'amico accetta. */
 function sendInvites(rec, names){
@@ -1037,6 +1035,8 @@ function matchPren(t){
 function boot(){
   chat.innerHTML=''; closeSheet(); resetConvo();
   document.getElementById('band').textContent='✓ Numero riconosciuto: '+S.player.nome+' · '+(S.player.socio?'socio':'non socio');
+  { const bt=document.getElementById('buildTag'); if(bt) bt.textContent=APP_BUILD; }
+  try{ console.log('Emulatore Padel Village — build', APP_BUILD); }catch(e){}
   hideCmdPop(); _hintN=0;
   addSys('Suggerimento: digita "/" per i comandi rapidi in ogni momento');
   botSay(()=>{ addInHtml('Ciao '+esc(S.player.nome.split(' ')[0])+', hai contattato la segreteria di Padel Village. Come possiamo aiutarti? Tocca un\'opzione qui sotto o scrivici pure.'); showIceBreakers(); },500);
