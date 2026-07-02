@@ -874,7 +874,7 @@ function decideAndPresent(draft){
     +'<br>'+(draft.aperta?'🤝 Aperta ad altri giocatori':'🔒 Privata')
     +'<br>A nome di '+esc(S.player.nome));
   addQuick([
-    {label:'Opziona il campo',action:()=>{ addOut('Opziona'); botSay(()=>commitOpzione(draft)); }},
+    {label:'Prenota in opzione',action:()=>{ addOut('Prenota in opzione'); botSay(()=>commitOpzione(draft)); }},   // ≤20 char (limite titolo reply-button WhatsApp)
     {label:'Cambia',action:()=>botSay(()=>{ addInHtml('Riapriamo il modulo.'); openBookingFlow(draft); })}
   ]);
 }
