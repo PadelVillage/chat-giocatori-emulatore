@@ -807,7 +807,7 @@ function openBookingFlow(prefill){
     flat.forEach(s=>{
       const b=document.createElement('button'); b.type='button';
       b.className='chip'+(st.ora===s.ora?' sel':'')+(s.status==='opt'?' opt':'');
-      b.textContent=(s.status==='opt') ? (s.ora+' · 🤝') : (uniform?s.ora:(s.ora+' · '+s.prezzo+'€'));
+      b.textContent=(s.status==='opt') ? (s.ora+' · 🟠') : (uniform?s.ora:(s.ora+' · '+s.prezzo+'€'));
       b.onclick=()=>{
         if(s.status==='opt'){ closeSheet(); botSay(()=>{ addInHtml('Quell\'orario è pieno, ma c\'è una <b>partita aperta</b> a cui puoi unirti. Ecco le partite aperte adatte a te:'); doUnisciti(); }); return; }
         st.ora=s.ora; renderSlots(); updSum();
