@@ -613,8 +613,8 @@ function showBookingDetail(id){
     +'<br>'+statoPren(p));
   const btns=[];
   if(p.stato==='opzionato' && (p.deadline||0)-Date.now()>0){
-    btns.push({label:'➕ Invita/aggiungi',action:()=>openAddPlayersFlow(p)});
-    if(!p.aperta && !p.concierge) btns.push({label:'🟠 Apri ad altri',action:()=>{ addOut('Apri ad altri'); botSay(()=>openMatchToOthers(p)); }});
+    btns.push({label:'👥 Invito gli amici',action:()=>openAddPlayersFlow(p)});
+    if(!p.aperta && !p.concierge) btns.push({label:'🟠 Rendi pubblica',action:()=>{ addOut('Rendi pubblica'); botSay(()=>openMatchToOthers(p)); }});
     btns.push({label:'🗑️ Annulla',action:()=>startCancelOne(p),danger:true});
   } else {
     btns.push({label:'✏️ Modifica orario',action:()=>startModifyOne(p)});
@@ -720,39 +720,10 @@ function openBookingFlow(prefill){
   const slotBox=el('slotbox'); body.appendChild(slotBox);
   body.appendChild(el('flow-legend','<span><i class="dot free"></i>Libero</span><span><i class="dot opt"></i>Partita aperta · unisciti</span>'));
   // Partita sempre 90' in 4 (niente selettore "in quanti giocate").
-  // Amici
-  const friendWrap=el('flow-friends');
-  if(S.friends.length){
-    friendWrap.appendChild(fieldLabel('Invita amici (facoltativo)'));
-    const fl=el('friend-list');
-    S.friends.forEach(f=>{ const row=document.createElement('label'); row.className='friend-row';
-      const cb=document.createElement('input'); cb.type='checkbox'; cb.checked=st.amici.indexOf(f.id)>=0;
-      if(!f.suWhatsApp){ cb.disabled=true; row.style.opacity='.5'; }
-      cb.onchange=()=>{ if(cb.checked) st.amici.push(f.id); else st.amici=st.amici.filter(x=>x!==f.id); updSum(); };
-      const sp=document.createElement('span'); sp.innerHTML=esc(f.nome)+' · liv. '+esc(f.livello)+(f.suWhatsApp?'':' · <i>non ancora sul canale</i>');
-      row.appendChild(cb); row.appendChild(sp); fl.appendChild(row); });
-    friendWrap.appendChild(fl);
-    friendWrap.appendChild(el('luce-hint','Ricevono un invito da confermare: il posto si riempie solo quando accettano.'));
-  }
-  if(!concierge) body.appendChild(friendWrap);
-  const sum=el('flow-sum');   // dichiarato qui: updSum() può girare anche dal toggle "Apri" prima dell'append
-  // Partita aperta ad altri — DEFAULT privata (flag spento). OptIn nei Flow reali.
-  const optWrap=el('flow-open');
-  const optRow=document.createElement('label'); optRow.className='friend-row';
-  const optCb=document.createElement('input'); optCb.type='checkbox';
-  const optSp=document.createElement('span'); optSp.textContent='🟠 Apri la partita ad altri giocatori del circolo';
-  optRow.appendChild(optCb); optRow.appendChild(optSp); optWrap.appendChild(optRow);
-  optWrap.appendChild(el('luce-hint','🔒 Di default la partita è privata: la riempi tu coi tuoi amici. Aprila per far entrare altri soci (li approvi tu).'));
-  const rangeLbEl=fieldLabel('Livello ammesso (lo decidi tu)'); rangeLbEl.style.display='none';
-  optWrap.appendChild(rangeLbEl);
-  const rangeRow=chipRow([{label:'3.0–4.0',val:'3.0-4.0'},{label:'3.5–4.5',val:'3.5-4.5'},{label:'4.0–5.0',val:'4.0-5.0'},{label:'Tutti',val:'0-7'}],(val,btn,r)=>{ selectOne(r,btn); st.range=val; });
-  rangeRow.style.display='none';
-  optWrap.appendChild(rangeRow);
-  optCb.onchange=()=>{ st.aperta=optCb.checked; rangeLbEl.style.display=st.aperta?'':'none'; rangeRow.style.display=st.aperta?'':'none'; updSum(); };
-  preselectChip(rangeRow, st.range);
-  if(prefill.aperta){ optCb.checked=true; optCb.onchange(); }
-  if(!concierge) body.appendChild(optWrap);
-  // Riepilogo selezione + submit
+  // FASE 1 = SOLO giorno/momento/orario (una scelta per volta). Invita amici,
+  // "ci pensate voi" e "rendi pubblica" sono la FASE 2, DOPO l'opzione: prima ti
+  // assicuri il campo, poi decidi come completare la partita (vedi rosterActionButtons).
+  const sum=el('flow-sum');   // riepilogo selezione
   body.appendChild(sum);
   const foot=document.createElement('button'); foot.className='flow-submit'; foot.textContent=concierge?'Richiedi organizzazione':'Continua';
   foot.onclick=()=>{
@@ -893,18 +864,43 @@ function commitOpzione(draft){
     deadline:optDeadlineMs(off||0,draft.ora), win:rosterWindow(off||0).lbl};
   if(draft.aperta){ const pr=String(draft.range||'3.5-4.5').split('-'); rec.livMin=parseFloat(pr[0]); rec.livMax=parseFloat(pr[1]); }
   S.prenotazioni.push(rec); save();
-  addInHtml('🟠 <b>Campo opzionato</b> a tuo nome — '+esc(rec.giorno)+' · '+rec.ora+'–'+draft.fine+' · Campo '+rec.campo+'.<br>Sei <b>1/'+target+'</b>'+(invited.length?(', invito inviato a '+invited.join(', ')+' (in attesa)'):'')+'. Completa la partita entro <b>'+rec.win+'</b>'+(rec.aperta?', o aspetta chi chiede di unirsi':', invita altri amici o aprila ad altri')+'. Se non completi in tempo, il campo torna automaticamente disponibile per altri giocatori.',true);
+  addInHtml('🟠 <b>Campo opzionato</b> a tuo nome — '+esc(rec.giorno)+' · '+rec.ora+'–'+draft.fine+' · Campo '+rec.campo+'.<br>Per ora sei <b>1/'+target+'</b>. Adesso <b>completa la partita</b> entro <b>'+rec.win+'</b> — come preferisci? 👇<br>Se non completi in tempo, il campo torna automaticamente disponibile per altri.',true);
   rosterActionButtons(rec);
   if(invited.length) sendInvites(rec, invited);
   scheduleRosterReminders(rec, off||0);
   if(rec.aperta) afterBookingOpen(rec);
 }
-/* Azioni su un'opzione ancora incompleta (≤3 = limite reply-buttons WhatsApp). */
+/* FASE 2 — come completare la partita (dopo l'opzione). Tre rami = tre reply-
+   button WhatsApp (limite 3): invito amici · ci pensa la segreteria (+10€) ·
+   rendi pubblica. Se è già pubblica resta solo "invito amici"; se è delegata
+   alla segreteria non servono azioni sui posti. Annulla/aspetta = da "Le mie
+   prenotazioni". Etichette ≤20 char (limite titolo reply-button). */
 function rosterActionButtons(rec){
-  const btns=[{label:'➕ Invita/aggiungi',action:()=>openAddPlayersFlow(rec)}];
-  if(!rec.aperta && !rec.concierge) btns.push({label:'🟠 Apri ad altri',action:()=>{ addOut('Apri ad altri'); botSay(()=>openMatchToOthers(rec)); }});
-  btns.push({label:'🗑️ Annulla',action:()=>startCancelOne(rec),danger:true});
-  addQuick(btns);
+  if(rec.concierge){ addQuick([{label:'📅 Le mie prenotazioni',action:()=>botSay(doMie)}]); return; }
+  const btns=[{label:'👥 Invito gli amici',action:()=>openAddPlayersFlow(rec)}];
+  if(!rec.aperta){
+    btns.push({label:'🧑‍💼 Ci pensate voi',action:()=>{ addOut('Ci pensate voi'); botSay(()=>delegateConcierge(rec)); }});
+    btns.push({label:'🟠 Rendi pubblica',action:()=>{ addOut('Rendi pubblica'); botSay(()=>openMatchToOthers(rec)); }});
+  }
+  addQuick(btns.slice(0,3));
+}
+/* Ramo "Ci pensate voi": delega alla segreteria un'opzione già presa (+10 €). */
+function delegateConcierge(rec){
+  const r=S.prenotazioni.find(x=>x.id===rec.id)||rec;
+  if(r.stato!=='opzionato'){ addInHtml('Questa prenotazione non è più in attesa.'); return; }
+  addInHtml('Con piacere! Completiamo noi la partita di <b>'+esc(r.giorno)+' · '+r.ora+'</b> cercando altri soci del tuo livello. Supplemento <b>'+CONCIERGE_FEE+' € a partita</b>, da saldare in segreteria. Confermi?');
+  addQuick([
+    {label:'✅ Sì, ci pensate voi',action:()=>{ addOut('Sì, ci pensate voi'); botSay(()=>commitDelegate(r)); }},
+    {label:'Torna indietro',action:()=>botSay(()=>rosterActionButtons(r))}
+  ]);
+}
+function commitDelegate(r){
+  const rr=S.prenotazioni.find(x=>x.id===r.id); if(!rr||rr.stato!=='opzionato'){ addInHtml('Questa prenotazione non è più in attesa.'); return; }
+  rr.concierge=true; rr.aperta=false; save();
+  addInHtml('🧑‍💼 <b>Ci pensiamo noi!</b> Cerchiamo gli altri giocatori per '+esc(rr.giorno)+' alle '+rr.ora+' e ti aggiorniamo qui. Il supplemento di <b>'+CONCIERGE_FEE+' €</b> lo salderai in segreteria.',true);
+  setTimeout(()=>{ const x=S.prenotazioni.find(p=>p.id===rr.id); if(!x||x.stato!=='opzionato') return;
+    botSay(()=>{ const nomi=['Andrea T.','Marta P.','Giulio S.'].slice(0, rosterPosti(x)); x.amici=(x.amici||[]).concat(nomi); save();
+      confirmBooking(x,'🧑‍💼 Partita completata dalla segreteria · +'+CONCIERGE_FEE+' € in segreteria'); }); }, 6000);
 }
 /* Partita al completo → prenotazione confermata. */
 function confirmBooking(rec,extra){
