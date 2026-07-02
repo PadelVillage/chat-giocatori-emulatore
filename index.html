@@ -158,7 +158,7 @@
    fedelmente su WhatsApp reale (componenti/limiti Flows + policy Meta).
    Verificare sui doc Meta PRIMA di aggiungere grafica/layout/interazioni.
    ========================================================================== */
-const LS_KEY='pmo_emu_state_v3';
+const LS_KEY='pmo_emu_state_v4';
 
 /* --- Dati demo ------------------------------------------------------------- */
 function demoState(){
@@ -172,8 +172,8 @@ function demoState(){
       {id:14,nome:'Paolo Neri',livello:'4.5'}
     ],
     prenotazioni:[
-      { id:1, giorno:dayInfo(2).giorno, ora:'19:00', campo:3, tipo:'Partita', durata:90, pagato:true, giocatori:4, caparra:20 },
-      { id:2, giorno:dayInfo(4).giorno, ora:'10:00', campo:1, tipo:'Partita', durata:90, pagato:false, giocatori:4, caparra:20, optDeadline:Date.now()+12*3600*1000 }
+      { id:1, giorno:dayInfo(2).giorno, ora:'19:00', campo:3, tipo:'Partita', durata:90, stato:'prenotato', target:4, amici:['Luca','Sara','Paolo'] },
+      { id:2, giorno:dayInfo(4).giorno, ora:'10:00', campo:1, tipo:'Partita', durata:90, stato:'opzionato', target:4, amici:['Luca'], aperta:false, deadline:Date.now()+12*3600*1000, win:'12 ore' }
     ],
     /* partite APERTE di altri soci (demo). Range livello deciso dall'organizzatore;
        la terza è fuori range per Marco (4.0) → il filtro NON la mostra. */
@@ -259,26 +259,38 @@ function lbl(d){ return ['Dom','Lun','Mar','Mer','Gio','Ven','Sab'][d.getDay()]+
 function dateFromOffset(off){ const d=new Date(); d.setDate(d.getDate()+off); return {giorno:lbl(d),dow:d.getDay()}; }
 function addMin(hhmm,min){ const [h,m]=hhmm.split(':').map(Number); const tot=h*60+m+min; return String(Math.floor(tot/60)%24).padStart(2,'0')+':'+String(tot%60).padStart(2,'0'); }
 /* --- LISTINO ESTIVO (prezzi a testa; campo = ×4) --------------------------
-   Modello IBRIDO per tipo di giorno (vedi listino.html):
-   · Lun–Gio: fascia diurna 09:00–18:00 = 8€ (+2 luce → 10, a scelta),
-     avvii ogni 30' · fissi serali 18:00=12, 19:30=13, 21:00=12 (luce inclusa).
-   · Ven: fascia 09:00–17:30 = 8€ (+2 luce) · fissi 17:30/19:00/20:30 = 12.
-   · Sab–Dom: solo fissi ogni 90' (09:00→18:00) = 8€ (luce inclusa).
+   Modello IBRIDO per tipo di giorno (vedi listino.html). LUCE SEMPRE INCLUSA
+   (nessun supplemento). Prezzi:
+   · Lun–Gio: fascia diurna 09:00–18:00 = 8€, MA 12:00–15:00 = 10€ (fascia
+     centrale), avvii ogni 30' · fissi serali 18:00=12, 19:30=13, 21:00=12.
+   · Ven: fascia 09:00–17:30 = 8€, 12:00–15:00 = 10€ · fissi 17:30/19:00/20:30=12.
+   · Sab–Dom: solo fissi ogni 90' (09:00→18:00) = 8€.
    La fascia diurna chiude dove iniziano i fissi; la partita (durata) deve
    rientrare nella fascia → l'ultimo avvio dipende dalla durata. */
 /* prezzo2 = tariffa "in due" della fascia diurna: 10€ a testa MA su slot da 60'
    (partita corta). Serve a riempire i campi vuoti infrasettimanali senza
    svendere il campo a 8€×2. Vale solo sulla fascia diurna (fissi/weekend no). */
 const LISTINO={
-  weekday:{ fascia:{start:'09:00',end:'18:00',prezzo:8,prezzo2:10,luceOpt:true},
+  weekday:{ fascia:{start:'09:00',end:'18:00',prezzo:8,prezzo2:10},
             fissi:[{ora:'18:00',prezzo:12},{ora:'19:30',prezzo:13},{ora:'21:00',prezzo:12}] },
-  friday :{ fascia:{start:'09:00',end:'17:30',prezzo:8,prezzo2:10,luceOpt:true},
+  friday :{ fascia:{start:'09:00',end:'17:30',prezzo:8,prezzo2:10},
             fissi:[{ora:'17:30',prezzo:12},{ora:'19:00',prezzo:12},{ora:'20:30',prezzo:12}] },
   weekend:{ fascia:null,
             fissi:[{ora:'09:00',prezzo:8},{ora:'10:30',prezzo:8},{ora:'12:00',prezzo:8},{ora:'13:30',prezzo:8},{ora:'15:00',prezzo:8},{ora:'16:30',prezzo:8},{ora:'18:00',prezzo:8}] }
 };
+/* Fascia centrale (solo lun–ven, dove esiste la fascia diurna): l'avvio tra le
+   12:00 e le 15:00 costa 10€/testa invece di 8. Determinato dall'ORARIO DI AVVIO. */
+const MIDDAY={start:12*60,end:15*60,prezzo:10};
 function dayConfig(dow){ if(dow===0||dow===6) return LISTINO.weekend; if(dow===5) return LISTINO.friday; return LISTINO.weekday; }
 function toMin(hhmm){ const [h,m]=hhmm.split(':').map(Number); return h*60+m; }
+/* Prezzo a testa di uno slot di FASCIA diurna: in 2 → tariffa ridotta (60');
+   in 4 → 8€, oppure 10€ se l'avvio è nella fascia centrale 12–15. */
+function fasciaPrezzo(fascia,ora,players){
+  if(players===2) return fascia.prezzo2;
+  const t=toMin(ora);
+  if(t>=MIDDAY.start && t<MIDDAY.end) return MIDDAY.prezzo;
+  return fascia.prezzo;
+}
 function fromMin(x){ return String(Math.floor(x/60)).padStart(2,'0')+':'+String(x%60).padStart(2,'0'); }
 /* Avvii della fascia diurna: ogni 30' finché la partita (durata) rientra nella fascia. */
 function fasciaTimes(fascia,durata){ const res=[]; const end=toMin(fascia.end); let t=toMin(fascia.start);
@@ -291,23 +303,21 @@ function fasciaTimes(fascia,durata){ const res=[]; const end=toMin(fascia.end); 
 function daySlotGroups(off,dow,durata,players){
   const cfg=dayConfig(dow); durata=durata||90; players=players||4; const groups=[];
   if(cfg.fascia){
-    const in2=players===2, prezzo=in2?cfg.fascia.prezzo2:cfg.fascia.prezzo;
-    groups.push({ name: in2 ? "Fascia diurna · in 2 · 60' · 10€ (+2 luce)" : 'Fascia diurna · 8€ · luce a scelta (+2 → 10€)', kind:'fascia',
-      slots:fasciaTimes(cfg.fascia,durata).map(t=>({ora:t,prezzo,luceOpt:true,kind:'fascia',status:slotStatus(off,dow,t)})) });
+    groups.push({ name:'Fascia diurna', kind:'fascia',
+      slots:fasciaTimes(cfg.fascia,durata).map(t=>({ora:t,prezzo:fasciaPrezzo(cfg.fascia,t,players),kind:'fascia',status:slotStatus(off,dow,t)})) });
   }
-  groups.push({ name:(cfg.fascia?'Slot serali':'Slot fissi')+' · luce inclusa', kind:'fisso',
-    slots:cfg.fissi.map(f=>({ora:f.ora,prezzo:f.prezzo,luceOpt:false,kind:'fisso',status:slotStatus(off,dow,f.ora)})) });
+  groups.push({ name:(cfg.fascia?'Slot serali':'Slot fissi'), kind:'fisso',
+    slots:cfg.fissi.map(f=>({ora:f.ora,prezzo:f.prezzo,kind:'fisso',status:slotStatus(off,dow,f.ora)})) });
   return groups;
 }
 function slotMetaFor(off,dow,ora,durata,players){ const gs=daySlotGroups(off,dow,durata,players);
   for(const g of gs){ const s=g.slots.find(x=>x.ora===ora); if(s) return s; } return null; }
-/* Prezzo a testa/campo. Luce = +2 solo sulle fasce diurne. In 2 (solo fascia
-   diurna) la tariffa è già ridotta (prezzo2, 60') e il campo si divide per 2. */
-function slotPrezzo(meta,luce,players){ if(!meta) return {testa:0,campo:0,luceApplica:false,giocatori:4};
-  const luceApplica=!!(meta.luceOpt&&luce);
-  const testa=meta.prezzo+(luceApplica?2:0);
+/* Prezzo a testa/campo. Luce sempre inclusa. In 2 (solo fascia diurna) la
+   tariffa è già ridotta (prezzo2, 60') e il campo si divide per 2. */
+function slotPrezzo(meta,players){ if(!meta) return {testa:0,campo:0,giocatori:4};
+  const testa=meta.prezzo;
   const giocatori=(meta.kind==='fascia' && players===2)?2:4;
-  return {testa,campo:testa*giocatori,luceApplica,giocatori}; }
+  return {testa,campo:testa*giocatori,giocatori}; }
 /* Momenti (passo 2 del selettore): raggruppano gli orari per parte del giorno,
    così si mostrano pochi slot per volta (fedele a un Flow multi-schermata). */
 const MOMENTI=[{key:'mattina',label:'Mattina'},{key:'pomeriggio',label:'Pomeriggio'},{key:'sera',label:'Sera'}];
@@ -318,42 +328,54 @@ function dayInfo(off){ const d=new Date(); d.setDate(d.getDate()+off);
     w: off===0?'oggi':(off===1?'domani':['dom','lun','mar','mer','gio','ven','sab'][d.getDay()]),
     n: String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0') }; }
 function offsetForGiorno(g){ for(let o=0;o<=MAX_GIORNI;o++){ if(dayInfo(o).giorno===g) return o; } return null; }
-/* --- OPZIONE + CAPARRA (modello prenotazione) -----------------------------
-   Prenotare = OPZIONARE (blocco NON pagato) con caparra OBBLIGATORIA da versare
-   entro un timer legato alla distanza dalla partita:
+/* --- OPZIONE → PRENOTAZIONE (modello senza caparra) -----------------------
+   Prenotare = OPZIONARE il campo (a tuo nome, GRATIS, nessuna caparra). Hai una
+   finestra legata alla distanza per COMPLETARE LA SQUADRA (gli altri giocatori):
      5–10 gg → 24h · 1–4 gg → 12h · oggi → 1h (mai oltre l'inizio partita).
-   4 CAMPI dietro le quinte: ogni orario ha 4 campi (libero/opzionato/pagato).
-   Vista giocatore (un solo stato per orario, campi nascosti):
-     ≥1 libero → 'free' (verde) · 0 liberi ma ≥1 opzionato → 'opt' (arancione:
-     "pieno ma non pagato", te lo aggiudichi con la caparra) · tutti pagati →
-     'busy' (occupato, nascosto).
-   Caparra NON rimborsabile in caso di disdetta. Tutto SIMULATO (Fase D). */
-const CAPARRA_TESTA=5;           // € a testa — SEGNAPOSTO (importi da tarare)
+   · squadra al completo (4, o 2 nella fascia "in due") → ✅ PRENOTATO (auto).
+   · finestra scaduta e squadra incompleta → il campo si LIBERA.
+   Default = partita PRIVATA; l'organizzatore può aprirla ad altri (flag) →
+   compare in "Unisciti", altri chiedono, lui approva.
+   4 CAMPI dietro le quinte: ogni orario ha 4 campi. Vista giocatore (uno stato
+   per orario, campi nascosti):
+     ≥1 libero → 'free' (verde) · 0 liberi ma ≥1 con partita aperta → 'opt'
+     (arancione: c'è una partita aperta a cui unirsi) · tutti pieni → 'busy'
+     (occupato, nascosto).
+   Disdetta = campo liberato, nulla perso (niente caparra). Tutto SIMULATO. */
 const MAX_GIORNI=10;             // non si prenota oltre 10 giorni in avanti
+const CONCIERGE_FEE=10;          // € a partita — servizio "organizza la partita" (in segreteria)
 function nowMin(){ const n=new Date(); return n.getHours()*60+n.getMinutes(); }
 function courtsFor(off,dow,ora){
   const mins=toMin(ora);
   if(off===0 && mins<=nowMin()) return {free:0,opt:0,paid:4};   // passato → occupato
   const k=(off*31+mins)%13;
-  if(k===2||k===7) return {free:0,opt:2,paid:2};   // pieno, 2 opzionati → ARANCIONE
-  if(k===5)        return {free:0,opt:4,paid:0};   // pieno, tutti opzionati → ARANCIONE (ghiotto)
-  if(k===9)        return {free:0,opt:0,paid:4};   // tutto pagato → occupato (nascosto)
+  if(k===2||k===7) return {free:0,opt:2,paid:2};   // pieno, 2 partite aperte → ARANCIONE
+  if(k===5)        return {free:0,opt:4,paid:0};   // pieno, tutte aperte → ARANCIONE
+  if(k===9)        return {free:0,opt:0,paid:4};   // tutto pieno → occupato (nascosto)
   return {free:4,opt:0,paid:0};                    // libero → verde
 }
 function slotStatus(off,dow,ora){ const c=courtsFor(off,dow,ora);
   return c.free>0 ? 'free' : (c.opt>0 ? 'opt' : 'busy'); }
-/* Tempistica caparra per distanza (giorni) dalla partita. */
-function caparraWindow(off){
+/* Finestra per completare la squadra, per distanza (giorni) dalla partita. */
+function rosterWindow(off){
   if(off===0) return {tier:'last minute', h:1,  lbl:'1 ora'};
   if(off<=4)  return {tier:'via di mezzo', h:12, lbl:'12 ore'};
   return {tier:'programmata', h:24, lbl:'24 ore'};
 }
 function matchStartMs(off,ora){ const d=new Date(); d.setDate(d.getDate()+off); const [h,m]=ora.split(':').map(Number); d.setHours(h,m,0,0); return d.getTime(); }
 /* Scadenza assoluta dell'opzione (ms): adesso + finestra, mai oltre l'inizio partita. */
-function optDeadlineMs(off,ora){ const win=caparraWindow(off); let dl=Date.now()+win.h*3600*1000;
+function optDeadlineMs(off,ora){ const win=rosterWindow(off); let dl=Date.now()+win.h*3600*1000;
   if(off===0) dl=Math.min(dl,matchStartMs(off,ora)); return dl; }
 function fmtRemaining(ms){ if(ms<=0) return 'scaduta'; const m=Math.floor(ms/60000); if(m<60) return m+' min'; return Math.floor(m/60)+'h '+(m%60)+'m'; }
-function caparraTot(giocatori){ return CAPARRA_TESTA*(giocatori||4); }
+/* Roster: l'organizzatore conta come 1; amici[] = gli altri giocatori. */
+function rosterTarget(rec){ return rec.target||4; }
+function rosterFilled(rec){ return 1+((rec.amici&&rec.amici.length)||0); }
+function rosterPosti(rec){ return Math.max(0, rosterTarget(rec)-rosterFilled(rec)); }
+/* Anti-abuso: 1 sola opzione attiva (non confermata, non scaduta) per volta. */
+function activeOption(){ return S.prenotazioni.find(p=>p.stato==='opzionato' && (p.deadline||0)>Date.now()); }
+function blockIfActiveOption(){ const a=activeOption(); if(!a) return false;
+  addInHtml('Hai già un campo in attesa di completamento: <b>'+esc(a.giorno)+' · '+a.ora+'</b>. Completa la squadra o lascialo scadere prima di prenotarne un altro.');
+  addQuick([{label:'📅 Vedi la mia opzione',action:()=>botSay(doMie)}]); return true; }
 /* Conteggio orari DISPONIBILI del giorno (free + opzionato), per l'indicatore. */
 function availSlots(off,dow){ let c=0; daySlotGroups(off,dow,90).forEach(g=>g.slots.forEach(s=>{ if(s.status!=='busy') c++; })); return c; }
 const GIORNI=['domenica','lunedì','martedì','mercoledì','giovedì','venerdì','sabato'];
@@ -377,6 +399,7 @@ function friendName(id){ const f=S.friends.find(x=>x.id===id); return f?f.nome.s
 /* --- Comandi "/" (Commands nativi WhatsApp) e Ice Breakers ----------------- */
 const COMMANDS=[
   {cmd:'/prenota',       desc:'Prenota un campo'},
+  {cmd:'/organizza',     desc:'Fatti organizzare la partita (+10 €)'},
   {cmd:'/partite',       desc:'Unisciti a una partita'},
   {cmd:'/prenotazioni',  desc:'Le mie prenotazioni'},
   {cmd:'/profilo',       desc:'Il mio profilo'},
@@ -414,6 +437,7 @@ function showIceBreakers(){
 function detectIntent(t){
   t=t.toLowerCase();
   if(t[0]==='/'){
+    if(/^\/organizza/.test(t)) return 'concierge';
     if(/^\/(partite|unisci)/.test(t)) return 'unisciti';
     if(/^\/prenotazioni/.test(t)) return 'mie';
     if(/^\/prenota/.test(t)) return 'prenota';
@@ -429,6 +453,7 @@ function detectIntent(t){
   if(/cosa ho|mie prenotaz|le mie|prenotazioni/.test(t)) return 'mie';
   if(/annull|disdet|cancell/.test(t)) return 'annulla';
   if(/modific|spost|cambia orario/.test(t)) return 'modifica';
+  if(/organizz|fatemi la squadra|trovate voi|pensateci voi|concierge/.test(t)) return 'concierge';
   if(/unisc|unirmi|partite? apert|cerco (una )?partita|trova partita|partecip/.test(t)) return 'unisciti';
   if(/prenot|campo|partita|lezione|gioc/.test(t)) return 'prenota';
   if(/ciao|salve|buongiorno|buonasera|ehi|hey|menu/.test(t)) return 'saluto';
@@ -449,6 +474,7 @@ function route(intent,t){
     case 'borsellino': doBorsellino(); break;
     case 'disponibilita': doDisponibilita(t); break;
     case 'mie': doMie(); break;
+    case 'concierge': doConcierge(); break;
     case 'unisciti': doUnisciti(); break;
     case 'annulla': startCancel(); break;
     case 'modifica': startModify(); break;
@@ -459,6 +485,7 @@ function route(intent,t){
 function showMenu(){
   addMenu([
     {section:'Prenotazioni', ic:'🎾', label:'Prenota un campo', text:'Vorrei prenotare un campo'},
+    {section:'Prenotazioni', ic:'🧑‍💼', label:'Fatti organizzare la partita (+10 €)', action:()=>botSay(doConcierge)},
     {section:'Prenotazioni', ic:'🤝', label:'Unisciti a una partita', text:'Vorrei unirmi a una partita'},
     {section:'Prenotazioni', ic:'📅', label:'Le mie prenotazioni', text:'Cosa ho prenotato?'},
     {section:'Account', ic:'👤', label:'Il mio profilo', text:'Il mio profilo'},
@@ -510,16 +537,21 @@ function doDisponibilita(t){
 
 /* ---------- Le mie prenotazioni -------------------------------------------- */
 function statoPren(p){
-  if(p.pagato) return '✅ Confermato · caparra versata';
-  const rem=(p.optDeadline||0)-Date.now();
-  return rem>0 ? ('🟠 Opzionato · caparra '+(p.caparra||caparraTot(p.giocatori))+' € entro '+fmtRemaining(rem)) : '⚪️ Opzione scaduta · campo liberato';
+  if(p.stato==='prenotato') return '✅ Prenotato · squadra al completo';
+  const rem=(p.deadline||0)-Date.now();
+  if(rem<=0) return '⚪️ Opzione scaduta · campo liberato';
+  const win=p.win||rosterWindow(offsetForGiorno(p.giorno)||0).lbl;
+  return '🟠 Opzionato · '+rosterFilled(p)+'/'+rosterTarget(p)+' giocatori · completa entro '+win+(p.aperta?' · 🤝 aperta':' · 🔒 privata');
 }
 function doMie(){
   if(!S.prenotazioni.length){ addInHtml('Al momento non hai prenotazioni future. Vuoi prenotare un campo?'); addQuick([{label:'🎾 Prenota un campo',text:'Vorrei prenotare un campo'}]); return; }
   addInHtml('Le tue prossime prenotazioni:');
-  addCard(S.prenotazioni.map(p=>'· '+esc(p.giorno)+' · '+p.ora+' — Campo '+p.campo+' · '+p.tipo+(p.amici&&p.amici.length?(' · con '+p.amici.join(', ')):'')+(p.aperta&&p.posti>0?(' · 🤝 aperta ('+p.posti+')'):'')+'<br><span style="font-size:12px;color:'+(p.pagato?'#0c5f57':'#8a6d00')+'">'+statoPren(p)+'</span>').join('<br>'));
+  addCard(S.prenotazioni.map(p=>'· '+esc(p.giorno)+' · '+p.ora+' — Campo '+p.campo+' · '+p.tipo+(p.amici&&p.amici.length?(' · con '+p.amici.join(', ')):'')+(p.concierge?' · 🧑‍💼 concierge':'')+'<br><span style="font-size:12px;color:'+(p.stato==='prenotato'?'#0c5f57':'#8a6d00')+'">'+statoPren(p)+'</span>').join('<br>'));
   const btns=[];
-  S.prenotazioni.filter(p=>!p.pagato && (p.optDeadline||0)-Date.now()>0).forEach(p=>btns.push({label:'💰 Paga caparra '+p.ora,action:()=>{ addOut('Paga la caparra di '+p.ora); botSay(()=>paymentButtons(p)); }}));
+  S.prenotazioni.filter(p=>p.stato==='opzionato' && (p.deadline||0)-Date.now()>0).forEach(p=>{
+    btns.push({label:'➕ Completa squadra '+p.ora,action:()=>openAddPlayersFlow(p)});
+    if(!p.aperta && !p.concierge) btns.push({label:'🤝 Apri ad altri '+p.ora,action:()=>{ addOut('Apri ad altri '+p.ora); botSay(()=>openMatchToOthers(p)); }});
+  });
   btns.push({label:'Annulla',action:startCancel}); btns.push({label:'Modifica',action:startModify});
   addQuick(btns);
 }
@@ -552,26 +584,26 @@ function joinRequest(m){
   addSys('In attesa dell\'organizzatore');
   setTimeout(()=>botSay(()=>{
     m.posti--; if(m.con.indexOf(S.player.nome)<0) m.con.push(S.player.nome);
-    const rec={id:++S.seq,giorno:m.giorno,ora:m.ora,campo:m.campo,tipo:'Partita',durata:90,amici:m.con.filter(n=>n!==S.player.nome)};
+    const rec={id:++S.seq,giorno:m.giorno,ora:m.ora,campo:m.campo,tipo:'Partita',durata:90,stato:'prenotato',target:4,amici:m.con.filter(n=>n!==S.player.nome)};
     S.prenotazioni.push(rec); save();
     addInHtml('<b>'+esc(m.organizzatore)+' ha accettato!</b> Sei in partita: '+esc(m.giorno)+' · '+m.ora+' — Campo '+m.campo+'. Buon divertimento.',true);
     maybeHint();
   },400),4200);
 }
-/* lato organizzatore: la MIA partita aperta riceve una richiesta (simulata) */
-function applyOpen(rec,draft,nAmici){
-  if(!draft.aperta) return;
-  const posti=4-1-nAmici; if(posti<=0) return;
-  const pr=String(draft.range||'3.5-4.5').split('-');
-  rec.aperta=true; rec.posti=posti; rec.livMin=parseFloat(pr[0]); rec.livMax=parseFloat(pr[1]);
-}
+/* lato organizzatore: la MIA partita aperta riceve una richiesta (simulata).
+   Accettando, il posto si riempie; a squadra completa → prenotazione confermata. */
 function afterBookingOpen(rec){
-  addSys('Partita aperta ('+rec.posti+(rec.posti>1?' posti':' posto')+') — ti avvisiamo se qualcuno chiede di unirsi');
+  const posti=rosterPosti(rec);
+  addSys('Partita aperta ('+posti+(posti>1?' posti':' posto')+') — ti avvisiamo se qualcuno chiede di unirsi');
   const liv=(rec.livMin&&rec.livMin>1)?rec.livMin.toFixed(1):'3.5';
   setTimeout(()=>botSay(()=>{
-    addInHtml('📩 <b>Elena R.</b> (liv. '+liv+') chiede di unirsi alla tua partita di '+esc(rec.giorno)+' alle '+rec.ora+'.');
+    const r=S.prenotazioni.find(x=>x.id===rec.id); if(!r||r.stato!=='opzionato'||rosterPosti(r)===0) return;
+    addInHtml('📩 <b>Elena R.</b> (liv. '+liv+') chiede di unirsi alla tua partita di '+esc(r.giorno)+' alle '+r.ora+'.');
     addQuick([
-      {label:'Accetta',action:()=>{ addOut('Accetta'); botSay(()=>{ rec.posti--; rec.amici=(rec.amici||[]).concat(['Elena R.']); save(); addInHtml('Elena R. è in partita. '+(rec.posti>0?('Resta'+(rec.posti>1?'no':'')+' '+rec.posti+(rec.posti>1?' posti aperti':' posto aperto')+'.'):'La partita è al completo.'),true); }); }},
+      {label:'Accetta',action:()=>{ addOut('Accetta'); botSay(()=>{ const rr=S.prenotazioni.find(x=>x.id===rec.id); if(!rr||rr.stato!=='opzionato') return;
+        rr.amici=(rr.amici||[]).concat(['Elena R.']); save();
+        if(rosterPosti(rr)===0) confirmBooking(rr);
+        else addInHtml('Elena R. è in partita. '+(rosterPosti(rr)>0?('Rest'+(rosterPosti(rr)>1?'ano':'a')+' '+rosterPosti(rr)+(rosterPosti(rr)>1?' posti aperti':' posto aperto')+'.'):''),true); }); }},
       {label:'Rifiuta',action:()=>{ addOut('Rifiuta'); botSay(()=>addInHtml('Va bene, abbiamo avvisato Elena. Il posto resta aperto.')); }}
     ]);
   },400),7000);
@@ -584,15 +616,23 @@ function startBooking(text){
   addInHtml('Ti apriamo il modulo — scegli un giorno e tocca un orario libero. 👇');
   openBookingFlow({giorno:w.giorno,ora:w.ora,durata:dur});
 }
+/* Concierge: la segreteria organizza la partita per te (+10 € in segreteria). */
+function doConcierge(){
+  if(blockIfActiveOption()) return;
+  addInHtml('Con piacere! Scegli quando vuoi giocare: alla squadra pensiamo noi, cercando altri soci del tuo livello. Il servizio ha un supplemento di <b>'+CONCIERGE_FEE+' € a partita</b>, da saldare in segreteria. 👇');
+  openBookingFlow({concierge:true});
+}
 function openBookingFlow(prefill){
   prefill=prefill||{};
+  if(blockIfActiveOption()) return;                        // 1 sola opzione attiva per volta
+  const concierge=!!prefill.concierge;
   const days=[]; for(let o=0;o<=MAX_GIORNI;o++) days.push(dayInfo(o));
-  const st={ off:0, ora:null, momento:null, tipo:'Partita', players:prefill.players||4, durata:90, amici:(prefill.amici||[]).slice(), aperta:false, range:prefill.range||'3.5-4.5', luce:false };
+  const st={ off:0, ora:null, momento:null, tipo:'Partita', players:prefill.players||4, durata:90, amici:(prefill.amici||[]).slice(), aperta:false, range:prefill.range||'3.5-4.5', concierge:concierge };
   st.durata = st.players===2 ? 60 : (prefill.durata||90);
-  let luceRow=null,luceCb=null,luceHint=null;
   if(prefill.giorno){ const m=days.filter(d=>d.giorno===prefill.giorno)[0]; if(m) st.off=m.off; }
   else{ for(let i=0;i<days.length;i++){ if(availSlots(days[i].off,days[i].dow)>0){ st.off=days[i].off; break; } } }
   const body=el('flow');
+  if(concierge){ body.appendChild(el('luce-hint','🧑‍💼 <b>Organizza la partita</b>: scegli quando vuoi giocare, alla squadra ci pensa la segreteria. Supplemento <b>'+CONCIERGE_FEE+' € a partita</b>, da saldare in segreteria.')); }
   // Passo 1: quando (prossimi 7 giorni con conteggio slot disponibili)
   body.appendChild(fieldLabel('Quando'));
   const dayRow=el('days'); body.appendChild(dayRow);
@@ -601,17 +641,7 @@ function openBookingFlow(prefill){
   const momBox=el('chips'); body.appendChild(momBox);
   // Passo 3: gli orari del momento scelto (chips = ChipsSelector nativo)
   const slotBox=el('slotbox'); body.appendChild(slotBox);
-  body.appendChild(el('flow-legend','<span><i class="dot free"></i>Libero</span><span><i class="dot opt"></i>Opzionato · da pagare</span>'));
-  // Illuminazione: a scelta SOLO sulle fasce diurne (nei fissi è inclusa)
-  body.appendChild(fieldLabel('Illuminazione'));
-  const luceWrap=el('friend-list');
-  luceRow=document.createElement('label'); luceRow.className='friend-row';
-  luceCb=document.createElement('input'); luceCb.type='checkbox';
-  const luceSp=document.createElement('span'); luceSp.innerHTML='💡 Con illuminazione <b>+2 €</b> a testa';
-  luceRow.appendChild(luceCb); luceRow.appendChild(luceSp); luceWrap.appendChild(luceRow);
-  luceHint=el('luce-hint','Solo per gli orari di fascia diurna'); luceWrap.appendChild(luceHint);
-  body.appendChild(luceWrap);
-  luceCb.onchange=()=>{ st.luce=luceCb.checked; updSum(); };
+  body.appendChild(el('flow-legend','<span><i class="dot free"></i>Libero</span><span><i class="dot opt"></i>Partita aperta · unisciti</span>'));
   // In quanti giocate? (solo partite). Nella fascia diurna infrasettimanale
   // "in 2" = slot da 60' a tariffa ridotta (10€/testa); altrove sempre 90' in 4.
   const playWrap=el('flow-play');
@@ -621,36 +651,39 @@ function openBookingFlow(prefill){
     renderMomenti(); renderSlots(); updSum(); });
   playWrap.appendChild(playRow);
   playWrap.appendChild(el('luce-hint',"In 2 vale solo nella fascia diurna: 60' a tariffa ridotta (10 € a testa). Di sera e nel weekend gli orari sono da 90' in 4."));
-  body.appendChild(playWrap);
+  if(!concierge) body.appendChild(playWrap);
   // Amici
+  const friendWrap=el('flow-friends');
   if(S.friends.length){
-    body.appendChild(fieldLabel('Con chi giochi? (facoltativo)'));
+    friendWrap.appendChild(fieldLabel('Con chi giochi? (facoltativo)'));
     const fl=el('friend-list');
     S.friends.forEach(f=>{ const row=document.createElement('label'); row.className='friend-row';
       const cb=document.createElement('input'); cb.type='checkbox'; cb.checked=st.amici.indexOf(f.id)>=0;
-      cb.onchange=()=>{ if(cb.checked) st.amici.push(f.id); else st.amici=st.amici.filter(x=>x!==f.id); };
+      cb.onchange=()=>{ if(cb.checked) st.amici.push(f.id); else st.amici=st.amici.filter(x=>x!==f.id); updSum(); };
       const sp=document.createElement('span'); sp.textContent=f.nome+' · liv. '+f.livello;
       row.appendChild(cb); row.appendChild(sp); fl.appendChild(row); });
-    body.appendChild(fl);
+    friendWrap.appendChild(fl);
   }
-  // Partita aperta ad altri (OptIn nei Flow reali) + livello ammesso
-  const optWrap=el('friend-list');
+  if(!concierge) body.appendChild(friendWrap);
+  // Partita aperta ad altri — DEFAULT privata (flag spento). OptIn nei Flow reali.
+  const optWrap=el('flow-open');
   const optRow=document.createElement('label'); optRow.className='friend-row';
   const optCb=document.createElement('input'); optCb.type='checkbox';
   const optSp=document.createElement('span'); optSp.textContent='🤝 Apri la partita ad altri giocatori del circolo';
   optRow.appendChild(optCb); optRow.appendChild(optSp); optWrap.appendChild(optRow);
-  body.appendChild(optWrap);
+  optWrap.appendChild(el('luce-hint','🔒 Di default la partita è privata: la riempi tu coi tuoi amici. Aprila per far entrare altri soci (li approvi tu).'));
   const rangeLbEl=fieldLabel('Livello ammesso (lo decidi tu)'); rangeLbEl.style.display='none';
-  body.appendChild(rangeLbEl);
+  optWrap.appendChild(rangeLbEl);
   const rangeRow=chipRow([{label:'3.0–4.0',val:'3.0-4.0'},{label:'3.5–4.5',val:'3.5-4.5'},{label:'4.0–5.0',val:'4.0-5.0'},{label:'Tutti',val:'0-7'}],(val,btn,r)=>{ selectOne(r,btn); st.range=val; });
   rangeRow.style.display='none';
-  body.appendChild(rangeRow);
+  optWrap.appendChild(rangeRow);
   optCb.onchange=()=>{ st.aperta=optCb.checked; rangeLbEl.style.display=st.aperta?'':'none'; rangeRow.style.display=st.aperta?'':'none'; };
   preselectChip(rangeRow, st.range);
   if(prefill.aperta){ optCb.checked=true; optCb.onchange(); }
+  if(!concierge) body.appendChild(optWrap);
   // Riepilogo selezione + submit
   const sum=el('flow-sum'); body.appendChild(sum);
-  const foot=document.createElement('button'); foot.className='flow-submit'; foot.textContent='Continua';
+  const foot=document.createElement('button'); foot.className='flow-submit'; foot.textContent=concierge?'Richiedi organizzazione':'Continua';
   foot.onclick=()=>{
     if(!st.ora){ toast('Tocca prima un orario libero.'); return; }
     const d=days[st.off];
@@ -659,9 +692,11 @@ function openBookingFlow(prefill){
     const players=meta&&meta.kind==='fisso'?4:st.players;   // in 2 vale solo sulla fascia diurna
     closeSheet();
     const names=st.amici.map(friendName).filter(Boolean);
-    const pr=slotPrezzo(meta,st.luce,players);
-    addOut('📋 '+d.giorno+' · '+st.ora+' · in '+players+" ("+dur+"') · "+pr.testa+'€/testa'+(names.length?(' · con '+names.join(', ')):'')+(st.aperta?' · aperta ad altri':''));
-    botSay(()=>decideAndPresent({giorno:d.giorno,dow:d.dow,ora:st.ora,tipo:st.tipo,durata:dur,amici:st.amici.slice(),aperta:st.aperta,range:st.range,luce:st.luce,players:players}));
+    const pr=slotPrezzo(meta,players);
+    if(concierge){ addOut('🧑‍💼 Organizzate voi · '+d.giorno+' · '+st.ora+" ("+dur+"')");
+      botSay(()=>decideConcierge({giorno:d.giorno,dow:d.dow,ora:st.ora,tipo:st.tipo,durata:dur,players:players})); return; }
+    addOut('📋 '+d.giorno+' · '+st.ora+' · in '+players+" ("+dur+"') · "+pr.testa+'€/testa'+(names.length?(' · con '+names.join(', ')):'')+(st.aperta?' · aperta ad altri':' · privata'));
+    botSay(()=>decideAndPresent({giorno:d.giorno,dow:d.dow,ora:st.ora,tipo:st.tipo,durata:dur,amici:st.amici.slice(),aperta:st.aperta,range:st.range,players:players}));
   };
   body.appendChild(foot);
 
@@ -702,43 +737,43 @@ function openBookingFlow(prefill){
     if(!st.momento){ slotBox.appendChild(el('slot-empty','Nessun orario disponibile in questo giorno.')); return; }
     const flat=daySlotsFlat(d.off,d.dow,st.durata,st.players).filter(s=>s.status!=='busy'&&momentoKey(s.ora)===st.momento);
     if(!flat.length){ slotBox.appendChild(el('slot-empty','Nessun orario in questa fascia.')); return; }
-    const uniform=flat.every(s=>s.prezzo===flat[0].prezzo), first=flat[0];
+    const inFour=flat.filter(s=>s.status!=='opt');
+    const uniform=inFour.length && inFour.every(s=>s.prezzo===inFour[0].prezzo), first=inFour[0]||flat[0];
     const parts=[];
-    if(first.kind==='fascia'){ if(st.players===2) parts.push("in 2 · 60'"); if(uniform) parts.push(first.prezzo+'€ a testa'); parts.push('luce a scelta (+2)'); }
-    else{ if(uniform) parts.push(first.prezzo+'€ a testa'); parts.push('luce inclusa'); }
-    const hdr=el('slot-fascia'); hdr.textContent=parts.join(' · '); slotBox.appendChild(hdr);
+    if(first.kind==='fascia' && st.players===2) parts.push("in 2 · 60'");
+    if(uniform) parts.push(first.prezzo+'€ a testa');
+    if(parts.length){ const hdr=el('slot-fascia'); hdr.textContent=parts.join(' · '); slotBox.appendChild(hdr); }
     const row=el('chips');
     flat.forEach(s=>{
       const b=document.createElement('button'); b.type='button';
       b.className='chip'+(st.ora===s.ora?' sel':'')+(s.status==='opt'?' opt':'');
-      b.textContent=uniform?s.ora:(s.ora+' · '+s.prezzo+'€');
-      b.onclick=()=>{ st.ora=s.ora; renderSlots(); updSum(); };
+      b.textContent=(s.status==='opt') ? (s.ora+' · 🤝') : (uniform?s.ora:(s.ora+' · '+s.prezzo+'€'));
+      b.onclick=()=>{
+        if(s.status==='opt'){ closeSheet(); botSay(()=>{ addInHtml('Quell\'orario è pieno, ma c\'è una <b>partita aperta</b> a cui puoi unirti. Ecco le partite aperte adatte a te:'); doUnisciti(); }); return; }
+        st.ora=s.ora; renderSlots(); updSum();
+      };
       row.appendChild(b);
     });
     slotBox.appendChild(row);
   }
-  function updLuceRow(){
-    if(!luceRow) return;
-    const d=days[st.off];
-    const meta=st.ora?slotMetaFor(d.off,d.dow,st.ora,st.durata,st.players):null;
-    if(meta && !meta.luceOpt){ luceCb.checked=false; luceCb.disabled=true; st.luce=false; luceRow.style.opacity='.5'; luceHint.textContent='In questo orario la luce è inclusa'; }
-    else{ luceCb.disabled=false; luceRow.style.opacity='1'; luceHint.textContent='Solo per gli orari di fascia diurna'; }
-  }
   function updSum(){
     const d=days[st.off];
-    updLuceRow();
     if(!st.ora){ sum.className='flow-sum'; sum.textContent='Nessun orario selezionato'; return; }
     const meta=slotMetaFor(d.off,d.dow,st.ora,st.durata,st.players);
-    const opt=meta && meta.status==='opt';
     const dur=meta ? (meta.kind==='fisso'?90:st.durata) : st.durata;
-    const pr=slotPrezzo(meta,st.luce,st.players);
-    const win=caparraWindow(d.off);
-    const luceTxt=meta ? (meta.luceOpt ? (pr.luceApplica?' · con luce':' · luce esclusa') : ' · luce inclusa') : '';
+    const players=meta&&meta.kind==='fisso'?4:st.players;
+    const pr=slotPrezzo(meta,players);
+    const win=rosterWindow(d.off);
+    const target=pr.giocatori, filled=1+st.amici.length, mancano=Math.max(0,target-filled);
     sum.className='flow-sum on';
     sum.innerHTML='<b>'+esc(d.giorno)+' · '+st.ora+'–'+addMin(st.ora,dur)+'</b>'
-      +'<br>💶 <b>'+pr.testa+' € a testa</b> · '+pr.campo+' € a campo · '+pr.giocatori+' giocatori'+luceTxt
-      +'<br>💰 Caparra <b>'+caparraTot(pr.giocatori)+' €</b> · da versare entro <b>'+win.lbl+'</b>'
-      +(opt?'<br><span class="warn">🟠 Pieno ma non pagato — te lo aggiudichi con la caparra</span>':'');
+      +(st.concierge
+        ? ('<br>🧑‍💼 Organizza la segreteria · +'+CONCIERGE_FEE+' € a partita'
+          +'<br>💶 <b>'+pr.testa+' € a testa</b> · '+pr.campo+' € a campo')
+        : ('<br>💶 <b>'+pr.testa+' € a testa</b> · '+pr.campo+' € a campo · '+pr.giocatori+' giocatori'
+          +'<br>👥 '+filled+'/'+target+' giocatori'+(mancano>0?(' · mancano '+mancano):' · squadra al completo')
+          +(mancano>0?('<br>⏳ Completa la squadra entro <b>'+win.lbl+'</b>, poi il campo si libera'):'')
+          +'<br>'+(st.aperta?'🤝 Aperta ad altri':'🔒 Privata')));
   }
   openSheet('Prenota un campo', body, 'Scegli giorno, momento e orario');
   renderDays(); renderMomenti(); renderSlots();
@@ -751,79 +786,165 @@ function openBookingFlow(prefill){
 }
 
 function decideAndPresent(draft){
+  if(blockIfActiveOption()) return;
   // Coerenza con la vista disponibilità: se l'orario chiesto a parole è
-  // OCCUPATO (4 campi pagati), proponi il modulo con gli orari disponibili.
+  // OCCUPATO, apri il modulo con gli orari disponibili.
   const off=offsetForGiorno(draft.giorno);
   const draftMeta = off!=null ? slotMetaFor(off,draft.dow,draft.ora,draft.durata,draft.players) : null;
   if(draftMeta && draftMeta.status==='busy'){
-    addInHtml('A quell\'ora è tutto occupato (campi già pagati). Ti apriamo il modulo con gli orari disponibili. 👇');
+    addInHtml('A quell\'ora è tutto occupato. Ti apriamo il modulo con gli orari disponibili. 👇');
     openBookingFlow({giorno:draft.giorno,durata:draft.durata,amici:draft.amici});
     return;
   }
-  const opt = draftMeta && draftMeta.status==='opt';
-  const campo=campoLibero(draft.dow,draft.ora); const fine=addMin(draft.ora,draft.durata);
-  const pr=slotPrezzo(draftMeta,draft.luce,draft.players);
-  draft.campo=campo; draft.fine=fine; draft.giocatori=pr.giocatori; draft.caparra=caparraTot(pr.giocatori);
-  const win=caparraWindow(off||0);
-  const names=(draft.amici||[]).map(friendName).filter(Boolean);
-  const luceNote=draftMeta&&draftMeta.luceOpt ? (pr.luceApplica?' · con luce':' · senza luce') : ' · luce inclusa';
-  if(opt) addInHtml('Questo orario è <b>pieno</b>, ma un campo è solo <b>opzionato</b> (non pagato): puoi <b>aggiudicartelo</b> versando la caparra. 🟠');
-  else addInHtml('Campo disponibile. Te lo <b>opzioniamo</b> a tuo nome?');
-  addCard('<b>Riepilogo</b><br>'+esc(draft.giorno)+' · '+draft.ora+'–'+fine+'<br>Campo '+campo+' · '+draft.tipo+' ('+draft.durata+"')"+(names.length?('<br>Con: '+names.join(', ')):'')+(draft.aperta&&(3-names.length)>0?'<br>🤝 Aperta ad altri giocatori':'')
-    +'<br>💶 <b>'+pr.testa+' € a testa</b> · '+pr.campo+' € a campo · '+pr.giocatori+' giocatori'+luceNote
-    +'<br>💰 Caparra <b>'+draft.caparra+' €</b> (obbligatoria, <b>non rimborsabile</b> se disdici)'
-    +'<br>⏳ Da versare entro <b>'+win.lbl+'</b>, poi il campo si libera'
-    +'<br>A nome di '+esc(S.player.nome));
-  addQuick([
-    {label:(opt?'🟠 Opziona e aggiudicati':'Opziona il campo'),action:()=>{ addOut('Opziona'); botSay(()=>commitOpzione(draft)); }},
-    {label:'Cambia',action:()=>botSay(()=>{ addInHtml('Riapriamo il modulo.'); openBookingFlow(draft); })}
-  ]);
-}
-/* Crea l'OPZIONE (non pagata) e propone il pagamento della caparra. */
-function commitOpzione(draft){
-  const off=offsetForGiorno(draft.giorno);
-  const rec={id:++S.seq,giorno:draft.giorno,ora:draft.ora,campo:draft.campo,tipo:draft.tipo,durata:draft.durata,
-    pagato:false, giocatori:draft.giocatori||4, caparra:draft.caparra||caparraTot(draft.giocatori||4), optDeadline:optDeadlineMs(off||0,draft.ora)};
-  const names=(draft.amici||[]).map(friendName).filter(Boolean); if(names.length) rec.amici=names;
-  applyOpen(rec,draft,names.length);
-  S.prenotazioni.push(rec); save();
-  addInHtml('🟠 <b>Campo opzionato</b> a tuo nome — '+esc(rec.giorno)+' · '+rec.ora+'–'+draft.fine+' · Campo '+rec.campo+'.<br>Versa la <b>caparra di '+rec.caparra+' €</b> entro <b>'+fmtRemaining(rec.optDeadline-Date.now())+'</b>, poi il campo si libera e un altro può prenderselo pagando.',true);
-  paymentButtons(rec);
-  scheduleReminder(rec);
-  if(rec.aperta) afterBookingOpen(rec);
-}
-/* Pulsanti pagamento caparra: borsellino (istantaneo) o circolo. */
-function paymentButtons(rec){
-  addQuick([
-    {label:'💳 Paga dal borsellino ('+euro(S.player.borselloCent)+')',action:()=>{ addOut('Paga dal borsellino'); botSay(()=>payWallet(rec)); }},
-    {label:'🏛️ Passa al circolo',action:()=>{ addOut('Pago al circolo'); botSay(()=>payAtClub(rec)); }}
-  ]);
-}
-/* Promemoria one-shot (NON si ri-arma): su WhatsApp vero è GRATIS, siamo nelle 24h. */
-function scheduleReminder(rec){
-  setTimeout(()=>{ const r=S.prenotazioni.find(x=>x.id===rec.id); if(r && !r.pagato){ botSay(()=>{
-    addInHtml('⏳ <b>Promemoria</b>: ti restano <b>'+fmtRemaining(r.optDeadline-Date.now())+'</b> per versare la caparra di '+r.caparra+' €, poi il campo di '+esc(r.giorno)+' alle '+r.ora+' si libera.');
-    paymentButtons(r);
-  }); } }, 9000);
-}
-function payWallet(rec){
-  const need=rec.caparra*100;
-  if(S.player.borselloCent<need){
-    addInHtml('Saldo insufficiente ('+euro(S.player.borselloCent)+') per la caparra di '+rec.caparra+' €. Vuoi ricaricare il borsellino?');
+  if(draftMeta && draftMeta.status==='opt'){
+    addInHtml('Quell\'orario è pieno, ma c\'è una <b>partita aperta</b> a cui puoi unirti. 🤝');
     addQuick([
-      {label:'💳 Ricarica 20 € (demo)',action:()=>{ addOut('Ricarica 20 €'); botSay(()=>{ S.player.borselloCent+=2000; S.player.ultimoMov='ricarica € 20 (demo)'; save(); addInHtml('Ricaricato. Nuovo saldo <b>'+euro(S.player.borselloCent)+'</b>.',true); paymentButtons(rec); }); }},
-      {label:'🏛️ Pago al circolo',action:()=>{ addOut('Pago al circolo'); botSay(()=>payAtClub(rec)); }}
+      {label:'🤝 Vedi partite aperte',action:()=>botSay(doUnisciti)},
+      {label:'Scegli un altro orario',action:()=>botSay(()=>openBookingFlow({giorno:draft.giorno,amici:draft.amici}))}
     ]);
     return;
   }
-  S.player.borselloCent-=need; S.player.ultimoMov='caparra € '+rec.caparra+' ('+rec.giorno+')';
-  rec.pagato=true; delete rec.optDeadline; save();
-  addInHtml('✅ <b>Caparra versata</b> ('+rec.caparra+' € dal borsellino). Campo <b>blindato</b>: '+esc(rec.giorno)+' · '+rec.ora+' — Campo '+rec.campo+'. Ora nessuno può togliertelo.<br>Saldo residuo: <b>'+euro(S.player.borselloCent)+'</b>.',true);
+  const campo=campoLibero(draft.dow,draft.ora); const fine=addMin(draft.ora,draft.durata);
+  const pr=slotPrezzo(draftMeta,draft.players);
+  const target=pr.giocatori;
+  const names=(draft.amici||[]).map(friendName).filter(Boolean);
+  const filled=1+names.length, mancano=Math.max(0,target-filled);
+  const win=rosterWindow(off||0);
+  draft.campo=campo; draft.fine=fine; draft.target=target; draft.names=names;
+  if(mancano===0) addInHtml('Perfetto, siete già in '+target+'. Confermiamo la prenotazione?');
+  else addInHtml('Campo disponibile. Te lo <b>opzioniamo</b> a tuo nome — poi hai tempo per completare la squadra.');
+  addCard('<b>Riepilogo</b><br>'+esc(draft.giorno)+' · '+draft.ora+'–'+fine+'<br>Campo '+campo+' · '+draft.tipo+' ('+draft.durata+"')"
+    +'<br>💶 <b>'+pr.testa+' € a testa</b> · '+pr.campo+' € a campo · '+target+' giocatori'
+    +'<br>👥 '+filled+'/'+target+' giocatori'+(names.length?(' — con '+names.join(', ')):'')
+    +(mancano>0?('<br>⏳ Completa la squadra entro <b>'+win.lbl+'</b>, poi il campo si libera'):'<br>✅ Squadra al completo')
+    +'<br>'+(draft.aperta?'🤝 Aperta ad altri giocatori':'🔒 Privata')
+    +'<br>A nome di '+esc(S.player.nome));
+  addQuick([
+    {label:(mancano===0?'✅ Conferma prenotazione':'Opziona il campo'),action:()=>{ addOut(mancano===0?'Conferma':'Opziona'); botSay(()=>commitOpzione(draft)); }},
+    {label:'Cambia',action:()=>botSay(()=>{ addInHtml('Riapriamo il modulo.'); openBookingFlow(draft); })}
+  ]);
+}
+/* Crea l'OPZIONE (gratis). Se la squadra è già completa → conferma subito. */
+function commitOpzione(draft){
+  const off=offsetForGiorno(draft.giorno);
+  const target=draft.target||4;
+  const names=draft.names||(draft.amici||[]).map(friendName).filter(Boolean);
+  const rec={id:++S.seq,giorno:draft.giorno,ora:draft.ora,campo:draft.campo,tipo:draft.tipo,durata:draft.durata,
+    target:target, amici:names.slice(), aperta:!!draft.aperta, stato:'opzionato'};
+  if(draft.aperta){ const pr=String(draft.range||'3.5-4.5').split('-'); rec.livMin=parseFloat(pr[0]); rec.livMax=parseFloat(pr[1]); }
+  S.prenotazioni.push(rec);
+  if(rosterPosti(rec)===0){ save(); confirmBooking(rec); return; }
+  rec.deadline=optDeadlineMs(off||0,draft.ora); rec.win=rosterWindow(off||0).lbl; save();
+  addInHtml('🟠 <b>Campo opzionato</b> a tuo nome — '+esc(rec.giorno)+' · '+rec.ora+'–'+draft.fine+' · Campo '+rec.campo+'.<br>Siete <b>'+rosterFilled(rec)+'/'+rosterTarget(rec)+'</b> (mancano '+rosterPosti(rec)+'): completa la squadra entro <b>'+rec.win+'</b>'+(rec.aperta?', oppure aspetta chi chiede di unirsi':', aggiungi i tuoi amici o apri la partita ad altri')+'. Se non completi in tempo, il campo si libera.',true);
+  rosterActionButtons(rec);
+  scheduleRosterReminders(rec, off||0);
+  if(rec.aperta) afterBookingOpen(rec);
+}
+/* Azioni su un'opzione ancora incompleta. */
+function rosterActionButtons(rec){
+  const btns=[{label:'➕ Aggiungi giocatori',action:()=>openAddPlayersFlow(rec)}];
+  if(!rec.aperta && !rec.concierge) btns.push({label:'🤝 Apri ad altri',action:()=>{ addOut('Apri ad altri'); botSay(()=>openMatchToOthers(rec)); }});
+  btns.push({label:'Annulla',action:startCancel});
+  addQuick(btns);
+}
+/* Squadra al completo → prenotazione confermata. */
+function confirmBooking(rec,extra){
+  rec.stato='prenotato'; delete rec.deadline; save();
+  addInHtml('✅ <b>Squadra al completo — prenotazione confermata!</b><br>'+esc(rec.giorno)+' · '+rec.ora+' — Campo '+rec.campo+' · in '+rosterTarget(rec)+(rec.amici&&rec.amici.length?('<br>Con: '+rec.amici.join(', ')):'')+(extra?('<br>'+extra):''),true);
   maybeHint();
 }
-function payAtClub(rec){
-  addInHtml('Ok! Il campo resta <b>opzionato</b> a tuo nome. Passa in segreteria a versare la caparra di <b>'+rec.caparra+' €</b> entro <b>'+fmtRemaining(rec.optDeadline-Date.now())+'</b>, altrimenti si libera.<br><span style="color:#8a6d00">Ricorda: la caparra non è rimborsabile in caso di disdetta.</span>');
-  maybeHint();
+/* Finestra scaduta con squadra incompleta → campo liberato. */
+function expireOption(rec){
+  const r=S.prenotazioni.find(x=>x.id===rec.id); if(!r||r.stato!=='opzionato'||rosterPosti(r)===0) return;
+  S.prenotazioni=S.prenotazioni.filter(x=>x.id!==r.id); save();
+  botSay(()=>addInHtml('⌛️ <b>Tempo scaduto</b>: la squadra per '+esc(r.giorno)+' alle '+r.ora+' non era completa, quindi il campo è stato <b>liberato</b>. Puoi riprovare quando vuoi.'));
+}
+/* Modulo "completa la squadra": aggiungi amici (o un Ospite) a un'opzione. */
+function openAddPlayersFlow(rec){
+  const r=S.prenotazioni.find(x=>x.id===rec.id)||rec;
+  const posti=rosterPosti(r);
+  if(posti===0){ addInHtml('La squadra è già al completo.'); return; }
+  const inTeam=(r.amici||[]).slice();
+  const avail=S.friends.filter(f=>inTeam.indexOf(f.nome.split(' ')[0])<0);
+  const body=el('flow');
+  body.appendChild(el('luce-hint','Mancano <b>'+posti+'</b> giocator'+(posti>1?'i':'e')+' per '+esc(r.giorno)+' alle '+r.ora+'. Scegli chi aggiungere.'));
+  body.appendChild(fieldLabel('Aggiungi giocatori'));
+  const picked=[];
+  const fl=el('friend-list');
+  avail.forEach(f=>{ const row=document.createElement('label'); row.className='friend-row';
+    const cb=document.createElement('input'); cb.type='checkbox';
+    cb.onchange=()=>{ const nm=f.nome.split(' ')[0]; if(cb.checked) picked.push(nm); else { const i=picked.indexOf(nm); if(i>=0) picked.splice(i,1);} };
+    const sp=document.createElement('span'); sp.textContent=f.nome+' · liv. '+f.livello; row.appendChild(cb); row.appendChild(sp); fl.appendChild(row); });
+  body.appendChild(fl);
+  const guestWrap=el('friend-list'); const guestRow=document.createElement('label'); guestRow.className='friend-row';
+  const guestCb=document.createElement('input'); guestCb.type='checkbox';
+  const guestSp=document.createElement('span'); guestSp.textContent='➕ Aggiungi un Ospite';
+  guestRow.appendChild(guestCb); guestRow.appendChild(guestSp); guestWrap.appendChild(guestRow); body.appendChild(guestWrap);
+  const b=document.createElement('button'); b.className='flow-submit'; b.textContent='Aggiungi alla squadra';
+  b.onclick=()=>{
+    let add=picked.slice(); if(guestCb.checked) add.push('Ospite');
+    if(!add.length){ toast('Seleziona almeno un giocatore.'); return; }
+    add=add.slice(0,posti); closeSheet();
+    botSay(()=>{ const rr=S.prenotazioni.find(x=>x.id===r.id); if(!rr){ addInHtml('Prenotazione non più disponibile.'); return; }
+      rr.amici=(rr.amici||[]).concat(add); save();
+      if(rosterPosti(rr)===0) confirmBooking(rr);
+      else { addInHtml('Aggiunt'+(add.length>1?'i':'o')+' '+add.join(', ')+'. Ora siete <b>'+rosterFilled(rr)+'/'+rosterTarget(rr)+'</b>, mancano '+rosterPosti(rr)+'.',true); rosterActionButtons(rr); } });
+  };
+  body.appendChild(b);
+  openSheet('Completa la squadra', body, r.giorno+' · '+r.ora);
+}
+/* Rende una partita privata → aperta ad altri (livello = mio ±0.5). */
+function openMatchToOthers(rec){
+  const r=S.prenotazioni.find(x=>x.id===rec.id)||rec;
+  const l=parseFloat(S.player.livello);
+  r.aperta=true; r.livMin=Math.max(1,Math.round((l-0.5)*10)/10); r.livMax=Math.round((l+0.5)*10)/10; save();
+  addInHtml('🤝 <b>Partita aperta</b> ad altri soci (liv. '+r.livMin.toFixed(1)+'–'+r.livMax.toFixed(1)+'). Ti avvisiamo qui appena qualcuno chiede di unirsi; approvi tu.',true);
+  afterBookingOpen(r);
+}
+/* Promemoria "completa la squadra" — bilanciato: metà + ultima chiamata
+   (nella finestra 1h solo l'ultima). Demo: tempi scalati a pochi secondi.
+   Su WhatsApp vero sono GRATIS perché dentro la finestra 24h. */
+function scheduleRosterReminders(rec, off){
+  const single = off===0;
+  const fire=(kind)=>{ const r=S.prenotazioni.find(x=>x.id===rec.id); if(!r||r.stato!=='opzionato'||rosterPosti(r)===0) return; botSay(()=>rosterReminderMsg(r,kind)); };
+  if(!single) setTimeout(()=>fire('half'), 6000);
+  setTimeout(()=>fire('last'), single?6000:12000);
+  setTimeout(()=>expireOption(rec), single?9000:15000);
+}
+function rosterReminderMsg(r,kind){
+  if(kind==='last') addInHtml('⏳ <b>Ultima chiamata</b>: mancano ancora '+rosterPosti(r)+' giocator'+(rosterPosti(r)>1?'i':'e')+' per '+esc(r.giorno)+' alle '+r.ora+'. Completa a breve, altrimenti il campo si libera.');
+  else addInHtml('⏳ <b>Promemoria</b>: per '+esc(r.giorno)+' alle '+r.ora+' siete '+rosterFilled(r)+'/'+rosterTarget(r)+'. Aggiungi giocatori'+(r.aperta?'':' o apri la partita ad altri')+', altrimenti il campo si libera.');
+  rosterActionButtons(r);
+}
+/* Concierge: la segreteria organizza la partita (+10 € in segreteria). */
+function decideConcierge(draft){
+  if(blockIfActiveOption()) return;
+  const off=offsetForGiorno(draft.giorno); const fine=addMin(draft.ora,draft.durata);
+  const meta=off!=null?slotMetaFor(off,draft.dow,draft.ora,draft.durata,draft.players):null;
+  if(meta && meta.status==='busy'){ addInHtml('A quell\'ora è tutto occupato. Scegli un altro orario. 👇'); openBookingFlow({concierge:true,giorno:draft.giorno}); return; }
+  const pr=slotPrezzo(meta,draft.players); const campo=campoLibero(draft.dow,draft.ora);
+  draft.campo=campo; draft.fine=fine; draft.target=pr.giocatori;
+  addInHtml('Ci pensiamo noi 💪 Ecco il riepilogo della richiesta:');
+  addCard('<b>Organizza la partita</b><br>'+esc(draft.giorno)+' · '+draft.ora+'–'+fine+'<br>Campo '+campo+' · Partita ('+draft.durata+"')"
+    +'<br>💶 <b>'+pr.testa+' € a testa</b> · '+pr.campo+' € a campo'
+    +'<br>🧑‍💼 Servizio organizzazione: <b>+'+CONCIERGE_FEE+' € a partita</b> (in segreteria)'
+    +'<br>👥 Alla squadra pensa la segreteria'
+    +'<br>A nome di '+esc(S.player.nome));
+  addQuick([
+    {label:'✅ Sì, organizzate voi',action:()=>{ addOut('Sì, organizzate voi'); botSay(()=>commitConcierge(draft)); }},
+    {label:'Annulla',action:()=>botSay(()=>addInHtml('Nessun problema, richiesta annullata.'))}
+  ]);
+}
+function commitConcierge(draft){
+  const off=offsetForGiorno(draft.giorno);
+  const rec={id:++S.seq,giorno:draft.giorno,ora:draft.ora,campo:draft.campo,tipo:draft.tipo,durata:draft.durata,
+    target:draft.target||4, amici:[], aperta:false, concierge:true, stato:'opzionato', deadline:optDeadlineMs(off||0,draft.ora), win:rosterWindow(off||0).lbl};
+  S.prenotazioni.push(rec); save();
+  addInHtml('🧑‍💼 <b>Richiesta ricevuta!</b> Il campo di '+esc(rec.giorno)+' alle '+rec.ora+' è opzionato a tuo nome. La segreteria cerca gli altri giocatori e ti aggiorna qui. Il supplemento di <b>'+CONCIERGE_FEE+' €</b> lo salderai in segreteria.',true);
+  setTimeout(()=>{ const r=S.prenotazioni.find(x=>x.id===rec.id); if(!r||r.stato!=='opzionato') return;
+    botSay(()=>{ const nomi=['Andrea T.','Marta P.','Giulio S.'].slice(0, rosterPosti(r)); r.amici=(r.amici||[]).concat(nomi); save();
+      confirmBooking(r,'🧑‍💼 Squadra completata dalla segreteria · +'+CONCIERGE_FEE+' € in segreteria'); });
+  }, 6000);
 }
 
 /* ---------- Annulla / Modifica --------------------------------------------- */
@@ -837,13 +958,12 @@ function cancelStep(t){
   const d=convo.draft;
   if(convo.step==='pick'){ const p=matchPren(t); if(!p){ addInHtml('Non ho individuato la prenotazione. Riprova indicando il giorno.'); return; }
     d.target=p; convo.step='confirm';
-    const warn = p.pagato ? '<br><span style="color:#c0392b">⚠️ La caparra di '+(p.caparra||0)+' € è persa (non rimborsabile).</span>' : '';
-    addInHtml('Vuoi annullare: '+esc(p.giorno)+' · '+p.ora+' — Campo '+p.campo+' · '+p.tipo+'? L’azione è definitiva.'+warn);
+    const warn = p.concierge ? '<br><span style="color:#8a6d00">Nota: se la segreteria ha già organizzato la partita, il supplemento di '+CONCIERGE_FEE+' € resta dovuto.</span>' : '';
+    addInHtml('Vuoi annullare: '+esc(p.giorno)+' · '+p.ora+' — Campo '+p.campo+' · '+p.tipo+'? L’azione è definitiva. Nessuna caparra: non perdi nulla.'+warn);
     addQuick([{label:'Sì, annulla',text:'sì',danger:true},{label:'No',text:'no'}]); return; }
   if(convo.step==='confirm'){
     if(/^s[iì]|conferm|annulla/.test(t.toLowerCase())){ const p=d.target; S.prenotazioni=S.prenotazioni.filter(x=>x.id!==p.id); save();
-      const nota = p.pagato ? (' La caparra di '+(p.caparra||0)+' € non è rimborsabile ed è persa.') : ' Nessuna caparra versata: non perdi nulla.';
-      addInHtml('Fatto. Campo '+p.campo+' di '+esc(p.giorno)+' alle '+p.ora+' liberato.'+nota,true); maybeHint(); }
+      addInHtml('Fatto. Campo '+p.campo+' di '+esc(p.giorno)+' alle '+p.ora+' liberato. Non hai perso nulla.',true); maybeHint(); }
     else addInHtml('Ok, non annullo nulla.');
     resetConvo();
   }
