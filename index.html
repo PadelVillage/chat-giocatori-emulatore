@@ -592,6 +592,7 @@ function doDisponibilita(t){
 /* ---------- Le mie prenotazioni -------------------------------------------- */
 function statoPren(p){
   if(p.stato==='prenotato') return '✅ Prenotato · partita al completo';
+  if(p.concierge) return '🧑‍💼 In organizzazione dalla segreteria (+'+CONCIERGE_FEE+' €)';   // esente da rilascio automatico
   const rem=(p.deadline||0)-Date.now();
   if(rem<=0) return '⚪️ Opzione scaduta · campo liberato';
   const win=p.win||rosterWindow(offsetForGiorno(p.giorno)||0).lbl;
@@ -662,9 +663,15 @@ function joinRequest(m){
   addSys('In attesa dell\'organizzatore');
   setTimeout(()=>botSay(()=>{
     m.posti--; if(m.con.indexOf(S.player.nome)<0) m.con.push(S.player.nome);
-    const rec={id:++S.seq,giorno:m.giorno,ora:m.ora,campo:m.campo,tipo:'Partita',durata:90,stato:'prenotato',target:4,amici:m.con.filter(n=>n!==S.player.nome)};
+    const full = m.posti<=0;                       // se restano posti la partita è ancora incompleta
+    const off = offsetForGiorno(m.giorno);
+    const rec={id:++S.seq,giorno:m.giorno,ora:m.ora,campo:m.campo,tipo:'Partita',durata:90,
+      stato: full?'prenotato':'opzionato', target:4, amici:m.con.filter(n=>n!==S.player.nome), organizzatore:m.organizzatore};
+    if(!full){ rec.deadline=optDeadlineMs(off||0,m.ora); rec.win=rosterWindow(off||0).lbl; }   // stessa regola di rilascio
     S.prenotazioni.push(rec); save();
-    addInHtml('<b>'+esc(m.organizzatore)+' ha accettato!</b> Sei in partita: '+esc(m.giorno)+' · '+m.ora+' — Campo '+m.campo+'. Buon divertimento.',true);
+    if(full){ addInHtml('<b>'+esc(m.organizzatore)+' ha accettato!</b> Partita al completo: '+esc(m.giorno)+' · '+m.ora+' — Campo '+m.campo+'. Buon divertimento.',true); }
+    else { addInHtml('<b>'+esc(m.organizzatore)+' ha accettato!</b> Sei nella partita di '+esc(m.giorno)+' · '+m.ora+' — Campo '+m.campo+'. Siete <b>'+rosterFilled(rec)+'/4</b>: se non si completa entro <b>'+rec.win+'</b>, il campo torna disponibile per altri.',true);
+      scheduleRosterReminders(rec, off||0); }
     maybeHint();
   },400),4200);
 }
@@ -910,7 +917,7 @@ function confirmBooking(rec,extra){
 }
 /* Finestra scaduta con partita incompleta → campo liberato. */
 function expireOption(rec){
-  const r=S.prenotazioni.find(x=>x.id===rec.id); if(!r||r.stato!=='opzionato'||rosterPosti(r)===0) return;
+  const r=S.prenotazioni.find(x=>x.id===rec.id); if(!r||r.stato!=='opzionato'||rosterPosti(r)===0||r.concierge) return;
   S.prenotazioni=S.prenotazioni.filter(x=>x.id!==r.id); save();
   botSay(()=>addInHtml('⌛️ <b>Tempo scaduto</b>: la partita per '+esc(r.giorno)+' alle '+r.ora+' non era completa, quindi il campo è stato <b>liberato</b>. Puoi riprovare quando vuoi.'));
 }
@@ -973,10 +980,12 @@ function openMatchToOthers(rec){
    Su WhatsApp vero sono GRATIS perché dentro la finestra 24h. */
 function scheduleRosterReminders(rec, off){
   const single = off===0;
-  const fire=(kind)=>{ const r=S.prenotazioni.find(x=>x.id===rec.id); if(!r||r.stato!=='opzionato'||rosterPosti(r)===0) return; botSay(()=>rosterReminderMsg(r,kind)); };
+  const gen = rec.gen||0;   // se la prenotazione viene spostata (modify) o delegata, gen/concierge cambiano e questi timer diventano inerti
+  const alive=()=>{ const r=S.prenotazioni.find(x=>x.id===rec.id); return (r && r.stato==='opzionato' && (r.gen||0)===gen && rosterPosti(r)>0 && !r.concierge) ? r : null; };
+  const fire=(kind)=>{ const r=alive(); if(r) botSay(()=>rosterReminderMsg(r,kind)); };
   if(!single) setTimeout(()=>fire('half'), 6000);
   setTimeout(()=>fire('last'), single?6000:12000);
-  setTimeout(()=>expireOption(rec), single?9000:15000);
+  setTimeout(()=>{ const r=alive(); if(r) expireOption(r); }, single?9000:15000);
 }
 function rosterReminderMsg(r,kind){
   if(kind==='last') addInHtml('⏳ <b>Ultima chiamata</b>: mancano ancora '+rosterPosti(r)+' giocator'+(rosterPosti(r)>1?'i':'e')+' per '+esc(r.giorno)+' alle '+r.ora+'. Completa a breve, altrimenti il campo torna disponibile per altri.');
@@ -1065,9 +1074,18 @@ function modifyStep(t){
   if(convo.step==='pick'){ const p=matchPren(t); if(!p){ addInHtml('Non ho individuato la prenotazione.'); return; }
     d.target=p; convo.step='newtime'; addInHtml('A che nuovo orario la sposto? (es. “alle 20:30”)'); return; }
   if(convo.step==='newtime'){ const w=parseWhen(t); if(!w.ora){ addInHtml('Dimmi il nuovo orario, es. “alle 20:30”.'); return; }
-    const idx=S.prenotazioni.findIndex(x=>x.id===d.target.id); const old=S.prenotazioni[idx].ora;
-    if(w.giorno) S.prenotazioni[idx].giorno=w.giorno; S.prenotazioni[idx].ora=w.ora; save();
-    addInHtml('Aggiornata. '+esc(S.prenotazioni[idx].giorno)+' — Campo '+d.target.campo+' ora alle '+w.ora+' (prima '+old+').',true);
+    const idx=S.prenotazioni.findIndex(x=>x.id===d.target.id); const rec=S.prenotazioni[idx]; const old=rec.ora;
+    if(w.giorno) rec.giorno=w.giorno; rec.ora=w.ora;
+    // Se ancora OPZIONATA (non delegata), la finestra di rilascio dipende dalla
+    // distanza dal giorno → va ricalcolata e i timer riarmati; gen++ rende inerti i vecchi.
+    let extra='';
+    if(rec.stato==='opzionato' && !rec.concierge){
+      const noff=offsetForGiorno(rec.giorno)||0;
+      rec.gen=(rec.gen||0)+1; rec.deadline=optDeadlineMs(noff,rec.ora); rec.win=rosterWindow(noff).lbl;
+      save(); scheduleRosterReminders(rec, noff);
+      extra=' Hai <b>'+rec.win+'</b> per completare la partita, altrimenti il campo torna disponibile per altri.';
+    } else save();
+    addInHtml('Aggiornata. '+esc(rec.giorno)+' — Campo '+rec.campo+' ora alle '+w.ora+' (prima '+old+').'+extra,true);
     maybeHint();
     resetConvo();
   }
