@@ -3,6 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<!-- Anti-cache: chiediamo al browser di non tenere in cache questa pagina (evita di
+     mostrare una versione vecchia col telefono, es. promemoria già rimossi). Difesa
+     debole (i meta non ripuliscono una copia GIÀ in cache) → vedi freshnessGuard nel JS. -->
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>Emulatore chat giocatori — Padel Village</title>
 <style>
   :root{--ink:#111b21;--muted:#667781;--wa-green:#128C7E;--wa-bg:#ECE5DD}
@@ -163,7 +169,32 @@
 const LS_KEY='pmo_emu_state_v5';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.9 · 03/07';
+const APP_BUILD='v0.10 · 03/07';
+
+/* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
+   GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
+   dalla cache (è così che riapparivano "Promemoria"/"Ultima chiamata" già rimossi
+   dal codice: il JS vecchio in memoria li ri-programmava). I meta anti-cache non
+   bastano perché non ripuliscono una copia già memorizzata. Qui, all'avvio,
+   scarichiamo il file dal server SENZA cache e confrontiamo APP_BUILD: se il server
+   ha un build diverso da quello in esecuzione, la pagina si ricarica DA SOLA su una
+   URL con build stampato (nuova chiave di cache = fetch garantito fresco). Nessun
+   hard reload manuale; si auto-corregge a ogni visita. Loop-safe: non re-indirizza
+   se la URL contiene già ?b=. */
+(function freshnessGuard(){
+  try{
+    if(location.search.indexOf('b=')!==-1) return;      // già arrivati da un redirect: stop
+    fetch(location.pathname+'?_fresh='+Date.now(),{cache:'no-store'})
+      .then(function(r){ return r.text(); })
+      .then(function(html){
+        var m=html.match(/APP_BUILD='([^']+)'/);
+        if(m && m[1]!==APP_BUILD){
+          location.replace(location.pathname+'?b='+encodeURIComponent(m[1]));
+        }
+      })
+      .catch(function(){});
+  }catch(e){}
+})();
 
 /* --- Dati demo ------------------------------------------------------------- */
 function demoState(){
