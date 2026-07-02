@@ -182,13 +182,6 @@ function demoState(){
     prenotazioni:[
       { id:1, giorno:dayInfo(2).giorno, ora:'19:00', campo:3, tipo:'Partita', durata:90, stato:'prenotato', target:4, amici:['Luca','Sara','Paolo'] }
     ],
-    /* partite APERTE di altri soci (demo). Range livello deciso dall'organizzatore;
-       la terza è fuori range per Marco (4.0) → il filtro NON la mostra. */
-    partiteAperte:[
-      { id:51, giorno:dayInfo(1).giorno, ora:'19:30', campo:2, organizzatore:'Marco B.', livMin:3.5, livMax:4.5, posti:1, con:['Marco B.','Paolo V.','Andrea T.'] },
-      { id:52, giorno:dayInfo(3).giorno, ora:'20:00', campo:1, organizzatore:'Sara L.', livMin:4.0, livMax:5.0, posti:2, con:['Sara L.','Luca P.'] },
-      { id:53, giorno:dayInfo(2).giorno, ora:'18:00', campo:4, organizzatore:'Piero Z.', livMin:2.5, livMax:3.0, posti:1, con:['Piero Z.','Gino B.','Aldo T.'] }
-    ],
     seq:100
   };
 }
@@ -337,13 +330,11 @@ function offsetForGiorno(g){ for(let o=0;o<=MAX_GIORNI;o++){ if(dayInfo(o).giorn
      5–10 gg → 24h · 1–4 gg → 12h · oggi → 1h (mai oltre l'inizio partita).
    · partita al completo (4 giocatori) → ✅ PRENOTATO (auto).
    · finestra scaduta e partita incompleta → il campo si LIBERA.
-   Default = partita PRIVATA; l'organizzatore può aprirla ad altri (flag) →
-   compare in "Unisciti", altri chiedono, lui approva.
+   La partita è sempre PRIVATA (la riempie l'organizzatore con inviti/Ospite o
+   la delega alla segreteria); niente "partite aperte" ad altri soci.
    4 CAMPI dietro le quinte: ogni orario ha 4 campi. Vista giocatore (uno stato
    per orario, campi nascosti):
-     ≥1 libero → 'free' (verde) · 0 liberi ma ≥1 con partita aperta → 'opt'
-     (arancione: c'è una partita aperta a cui unirsi) · tutti pieni → 'busy'
-     (occupato, nascosto).
+     ≥1 libero → 'free' (verde) · tutti pieni → 'busy' (occupato, nascosto).
    Disdetta = campo liberato, nulla perso (nessun anticipo). Tutto SIMULATO. */
 const MAX_GIORNI=10;             // non si prenota oltre 10 giorni in avanti
 const CONCIERGE_FEE=10;          // € a partita — servizio "organizza la partita" (in segreteria)
@@ -353,15 +344,13 @@ function courtsFor(off,dow,ora){
   const mins=toMin(ora);
   // Oggi: uno slot sparisce quando è passato O manca meno dell'anticipo minimo
   // (30') al suo avvio → si può prenotare al massimo fino a 30' prima.
-  if(off===0 && mins<=nowMin()+LEAD_MIN) return {free:0,opt:0,paid:4};
+  if(off===0 && mins<=nowMin()+LEAD_MIN) return {free:0,paid:4};
   const k=(off*31+mins)%13;
-  if(k===2||k===7) return {free:0,opt:2,paid:2};   // pieno, 2 partite aperte → ARANCIONE
-  if(k===5)        return {free:0,opt:4,paid:0};   // pieno, tutte aperte → ARANCIONE
-  if(k===9)        return {free:0,opt:0,paid:4};   // tutto pieno → occupato (nascosto)
-  return {free:4,opt:0,paid:0};                    // libero → verde
+  if(k===2||k===7||k===9) return {free:0,paid:4};  // tutto pieno → occupato (nascosto)
+  return {free:4,paid:0};                           // libero → verde
 }
 function slotStatus(off,dow,ora){ const c=courtsFor(off,dow,ora);
-  return c.free>0 ? 'free' : (c.opt>0 ? 'opt' : 'busy'); }
+  return c.free>0 ? 'free' : 'busy'; }
 /* Finestra per completare la partita, per distanza (giorni) dall'inizio. */
 function rosterWindow(off){
   if(off===0) return {tier:'last minute', h:1,  lbl:'1 ora'};
@@ -383,7 +372,7 @@ function activeOption(){ return S.prenotazioni.find(p=>p.stato==='opzionato' && 
 function blockIfActiveOption(){ const a=activeOption(); if(!a) return false;
   addInHtml('Hai già un campo in attesa di completamento: <b>'+esc(a.giorno)+' · '+a.ora+'</b>. Completa la partita o lascialo scadere prima di prenotarne un altro.');
   addQuick([{label:'📅 Vedi la mia opzione',action:()=>botSay(doMie)}]); return true; }
-/* Conteggio orari DISPONIBILI del giorno (free + opzionato), per l'indicatore. */
+/* Conteggio orari DISPONIBILI (liberi) del giorno, per l'indicatore. */
 function availSlots(off,dow){ let c=0; daySlotGroups(off,dow,90).forEach(g=>g.slots.forEach(s=>{ if(s.status!=='busy') c++; })); return c; }
 const GIORNI=['domenica','lunedì','martedì','mercoledì','giovedì','venerdì','sabato'];
 function parseWhen(txt){
@@ -406,7 +395,6 @@ function friendName(id){ const f=S.friends.find(x=>x.id===id); return f?f.nome.s
 const COMMANDS=[
   {cmd:'/prenota',       desc:'Prenota un campo'},
   {cmd:'/organizza',     desc:'Fatti organizzare la partita (+10 €)'},
-  {cmd:'/partite',       desc:'Unisciti a una partita'},
   {cmd:'/prenotazioni',  desc:'Le mie prenotazioni'},
   {cmd:'/profilo',       desc:'Il mio profilo'},
   {cmd:'/amici',         desc:'I miei amici'},
@@ -429,12 +417,11 @@ let _hintN=0;
 function maybeHint(){ _hintN++; if(_hintN%2===0) addSys('Suggerimento: digita "/" per i comandi in ogni momento'); }
 function showIceBreakers(){
   const wrap=el('ice');
-  /* Solo 3 Ice Breakers (Meta: max 4, no emoji, solo 1° contatto): i due
-     flussi principali + "Altro", che apre il menu con le restanti funzioni.
+  /* 2 Ice Breakers (Meta: max 4, no emoji, solo 1° contatto): il flusso
+     principale + "Altro", che apre il menu con le restanti funzioni.
      Su WhatsApp reale l'Ice Breaker invia un testo predefinito → "Altro"
      invia "Altro" e il routing mostra un List Message con le altre voci. */
   [['Prenota un campo','Vorrei prenotare un campo'],
-   ['Unisciti a una partita','Vorrei unirmi a una partita'],
    ['Altro','Altro']].forEach(x=>{
     const b=document.createElement('button'); b.className='ice-b'; b.textContent=x[0];
     b.onclick=()=>{ wrap.remove(); sendUser(x[1]); };
@@ -449,7 +436,6 @@ function detectIntent(t){
   if(t[0]==='/'){
     if(/^\/aiuto/.test(t)) return 'aiuto';
     if(/^\/organizza/.test(t)) return 'concierge';
-    if(/^\/(partite|unisci)/.test(t)) return 'unisciti';
     if(/^\/prenotazioni/.test(t)) return 'mie';
     if(/^\/prenota/.test(t)) return 'prenota';
     if(/^\/profilo/.test(t)) return 'profilo';
@@ -471,7 +457,6 @@ function detectIntent(t){
   if(/annull|disdet|cancell/.test(t)) return 'annulla';
   if(/modific|spost|cambia orario/.test(t)) return 'modifica';
   if(/organizz|fatemi la (squadra|partita)|trovate voi|pensateci voi|concierge/.test(t)) return 'concierge';
-  if(/unisc|unirmi|partite? apert|cerco (una )?partita|trova partita|partecip/.test(t)) return 'unisciti';
   if(/prenot|campo|partita|lezione|gioc/.test(t)) return 'prenota';
   if(/ciao|salve|buongiorno|buonasera|ehi|hey|menu/.test(t)) return 'saluto';
   return 'fallback';
@@ -494,7 +479,6 @@ function route(intent,t){
     case 'mie': doMie(); break;
     case 'aiuto': doHelp(t); break;
     case 'concierge': doConcierge(); break;
-    case 'unisciti': doUnisciti(); break;
     case 'annulla': startCancel(); break;
     case 'modifica': startModify(); break;
     case 'prenota': startBooking(t); break;
@@ -505,15 +489,14 @@ function showMenu(){
   addMenu([
     {section:'Prenotazioni', ic:'🎾', label:'Prenota un campo', text:'Vorrei prenotare un campo'},
     {section:'Prenotazioni', ic:'🧑‍💼', label:'Fatti organizzare la partita (+10 €)', action:()=>botSay(doConcierge)},
-    {section:'Prenotazioni', ic:'🟠', label:'Unisciti a una partita', text:'Vorrei unirmi a una partita'},
     {section:'Prenotazioni', ic:'📅', label:'Le mie prenotazioni', text:'Cosa ho prenotato?'},
     {section:'Account', ic:'👤', label:'Il mio profilo', text:'Il mio profilo'},
     {section:'Account', ic:'👥', label:'I miei amici', text:'I miei amici'},
     {section:'Account', ic:'💶', label:'Il mio borsellino', text:'Saldo borsellino'}
   ]);
 }
-/* Menu "Altro": le funzioni diverse dai due Ice Breakers già in prima schermata
-   (Prenota / Unisciti). List Message ≤10 righe (fedele a WhatsApp). */
+/* Menu "Altro": le funzioni diverse dall'Ice Breaker già in prima schermata
+   (Prenota). List Message ≤10 righe (fedele a WhatsApp). */
 function showMenuAltro(){
   addMenu([
     {section:'Prenotazioni', ic:'🧑‍💼', label:'Fatti organizzare la partita (+10 €)', action:()=>botSay(doConcierge)},
@@ -565,9 +548,6 @@ function doHelp(t){
   if(/invit|amic/.test(t)){
     addInHtml('<b>Invitare gli amici</b> 👥<br>Quando prenoti (o da “Completa la partita”) selezioni i tuoi amici: ricevono un invito qui su WhatsApp e, <b>appena accettano, entrano in partita</b>. Chi non è ancora sul nostro canale non è invitabile. In alternativa puoi aggiungere un <b>Ospite</b>, che entra subito.');
     addQuick([{label:'🎾 Prenota un campo',text:'Vorrei prenotare un campo'}]); return; }
-  if(/aper|unisc|entr/.test(t)){
-    addInHtml('<b>Partita aperta</b> 🟠<br>Quando prenoti la lasci <b>privata</b> (default) o la <b>apri</b> ad altri soci. Se è aperta, altri possono chiedere di unirsi e <b>approvi tu</b>; il contatto passa sempre dalla segreteria. Puoi anche unirti tu alle partite aperte di altri.');
-    addQuick([{label:'🟠 Unisciti a una partita',text:'Vorrei unirmi a una partita'}]); return; }
   if(/opzion|complet|scad/.test(t)){
     addInHtml('<b>Opzionato → prenotato</b> 🟠→✅<br>Quando prenoti, il campo è <b>opzionato</b> a tuo nome (gratis): hai un po’ di tempo per completare la partita. Appena siete al completo diventa <b>prenotato</b>. Se non completi in tempo, il campo torna automaticamente disponibile per altri giocatori.'); return; }
   if(/cost|prezz|tariff|paga|anticip|accont|depos/.test(t)){
@@ -598,7 +578,7 @@ function statoPren(p){
   const rem=(p.deadline||0)-Date.now();
   if(rem<=0) return '⚪️ Opzione scaduta · campo liberato';
   const win=p.win||rosterWindow(offsetForGiorno(p.giorno)||0).lbl;
-  return '🟠 Opzionato · '+rosterFilled(p)+'/'+rosterTarget(p)+' confermati'+(rosterPending(p)?(' · in attesa: '+p.invitati.join(', ')):'')+' · completa entro '+win+(p.aperta?' · 🟠 aperta':' · 🔒 privata');
+  return '🟠 Opzionato · '+rosterFilled(p)+'/'+rosterTarget(p)+' confermati'+(rosterPending(p)?(' · in attesa: '+p.invitati.join(', ')):'')+' · completa entro '+win;
 }
 /* Le mie prenotazioni: LISTA (List Message ≤10) → tocca → DETTAGLIO con ≤3
    azioni. Pattern fedele a WhatsApp (niente valanga di reply-buttons). */
@@ -617,7 +597,7 @@ function showBookingDetail(id){
   const btns=[];
   if(p.stato==='opzionato' && (p.deadline||0)-Date.now()>0){
     btns.push({label:'👥 Invito gli amici',action:()=>openAddPlayersFlow(p)});
-    if(!p.aperta && !p.concierge) btns.push({label:'🟠 Rendi pubblica',action:()=>{ addOut('Rendi pubblica'); botSay(()=>openMatchToOthers(p)); }});
+    if(!p.concierge) btns.push({label:'🧑‍💼 Ci pensa la segreteria',action:()=>{ addOut('Ci pensa la segreteria'); botSay(()=>delegateConcierge(p)); }});
     btns.push({label:'🗑️ Annulla',action:()=>startCancelOne(p),danger:true});
   } else {
     btns.push({label:'✏️ Modifica orario',action:()=>startModifyOne(p)});
@@ -635,65 +615,6 @@ function startCancelOne(p){
 function startModifyOne(p){
   convo={mode:'modify',step:'newtime',draft:{target:p}};
   addInHtml('A che nuovo orario sposto '+esc(p.giorno)+' · '+p.ora+'? (es. “alle 20:30”)');
-}
-
-/* ---------- Unisciti a una partita (partite aperte) ------------------------
-   Decisioni: range livello DECISO dall'organizzatore (vedi solo dove rientri);
-   ingresso CON APPROVAZIONE dell'organizzatore (qui simulata).
-   Fase D: avviso all'organizzatore = template utility approvato. */
-function livOk(m){ const l=parseFloat(S.player.livello); return l>=m.livMin && l<=m.livMax; }
-function rangeLbl(m){ return m.livMin<=1?'aperta a tutti i livelli':('liv. '+m.livMin.toFixed(1)+'–'+m.livMax.toFixed(1)); }
-function doUnisciti(){
-  const mm=(S.partiteAperte||[]).filter(m=>m.posti>0 && livOk(m));
-  if(!mm.length){
-    addInHtml('Al momento non ci sono partite aperte adatte al tuo livello ('+esc(S.player.livello)+'). Puoi aprirne una tu: prenota un campo e spunta "Apri la partita ad altri giocatori".');
-    addQuick([{label:'🎾 Prenota un campo',text:'Vorrei prenotare un campo'}]); return;
-  }
-  addInHtml('Partite aperte adatte al tuo livello ('+esc(S.player.livello)+') — tocca per i dettagli:');
-  addMenu(mm.map(m=>({section:'Partite aperte', ic:'🟠', label:m.giorno+' · '+m.ora+' · '+m.posti+(m.posti>1?' posti':' posto')+' · '+m.organizzatore, action:()=>botSay(()=>showJoinCard(m))})));
-}
-function showJoinCard(m){
-  addInHtml('Ecco i dettagli:');
-  addCard('<b>'+esc(m.giorno)+' · '+m.ora+'</b> — Campo '+m.campo+'<br>Partita aperta · '+rangeLbl(m)+'<br>In campo: '+m.con.map(esc).join(', ')+'<br>Posti liberi: '+m.posti+'<br>Organizza: '+esc(m.organizzatore));
-  addQuick([
-    {label:'🟠 Chiedi di unirti',action:()=>{ addOut('Chiedo di unirmi'); botSay(()=>joinRequest(m)); }},
-    {label:'Vedi le altre',action:()=>botSay(doUnisciti)}
-  ]);
-}
-function joinRequest(m){
-  addInHtml('Richiesta inviata a '+esc(m.organizzatore)+' — ti avvisiamo qui appena risponde.');
-  addSys('In attesa dell\'organizzatore');
-  setTimeout(()=>botSay(()=>{
-    m.posti--; if(m.con.indexOf(S.player.nome)<0) m.con.push(S.player.nome);
-    const full = m.posti<=0;                       // se restano posti la partita è ancora incompleta
-    const off = offsetForGiorno(m.giorno);
-    const rec={id:++S.seq,giorno:m.giorno,ora:m.ora,campo:m.campo,tipo:'Partita',durata:90,
-      stato: full?'prenotato':'opzionato', target:4, amici:m.con.filter(n=>n!==S.player.nome), organizzatore:m.organizzatore};
-    if(!full){ rec.deadline=optDeadlineMs(off||0,m.ora); rec.win=rosterWindow(off||0).lbl; }   // stessa regola di rilascio
-    S.prenotazioni.push(rec); save();
-    if(full){ addInHtml('<b>'+esc(m.organizzatore)+' ha accettato!</b> Partita al completo: '+esc(m.giorno)+' · '+m.ora+' — Campo '+m.campo+'. Buon divertimento.',true); }
-    else { addInHtml('<b>'+esc(m.organizzatore)+' ha accettato!</b> Sei nella partita di '+esc(m.giorno)+' · '+m.ora+' — Campo '+m.campo+'. Siete <b>'+rosterFilled(rec)+'/4</b>: se non si completa entro <b>'+rec.win+'</b>, il campo torna disponibile per altri.',true);
-      scheduleRosterReminders(rec, off||0); }
-    maybeHint();
-  },400),4200);
-}
-/* lato organizzatore: la MIA partita aperta riceve una richiesta (simulata).
-   Accettando, il posto si riempie; a partita completa → prenotazione confermata. */
-function afterBookingOpen(rec){
-  const posti=rosterPosti(rec);
-  addSys('Partita aperta ('+posti+(posti>1?' posti':' posto')+') — ti avvisiamo se qualcuno chiede di unirsi');
-  const liv=(rec.livMin&&rec.livMin>1)?rec.livMin.toFixed(1):'3.5';
-  setTimeout(()=>botSay(()=>{
-    const r=S.prenotazioni.find(x=>x.id===rec.id); if(!r||r.stato!=='opzionato'||rosterPosti(r)===0) return;
-    addInHtml('📩 <b>Elena R.</b> (liv. '+liv+') chiede di unirsi alla tua partita di '+esc(r.giorno)+' alle '+r.ora+'.');
-    addQuick([
-      {label:'Accetta',action:()=>{ addOut('Accetta'); botSay(()=>{ const rr=S.prenotazioni.find(x=>x.id===rec.id); if(!rr||rr.stato!=='opzionato') return;
-        rr.amici=(rr.amici||[]).concat(['Elena R.']); save();
-        if(rosterPosti(rr)===0) confirmBooking(rr);
-        else addInHtml('Elena R. è in partita. '+(rosterPosti(rr)>0?('Rest'+(rosterPosti(rr)>1?'ano':'a')+' '+rosterPosti(rr)+(rosterPosti(rr)>1?' posti aperti':' posto aperto')+'.'):''),true); }); }},
-      {label:'Rifiuta',action:()=>{ addOut('Rifiuta'); botSay(()=>addInHtml('Va bene, abbiamo avvisato Elena. Il posto resta aperto.')); }}
-    ]);
-  },400),7000);
 }
 
 /* ---------- Prenotazione: WhatsApp Flow (modulo) --------------------------- */
@@ -714,7 +635,7 @@ function openBookingFlow(prefill){
   if(blockIfActiveOption()) return;                        // 1 sola opzione attiva per volta
   const concierge=!!prefill.concierge;
   const days=[]; for(let o=0;o<=MAX_GIORNI;o++) days.push(dayInfo(o));
-  const st={ off:0, ora:null, momento:null, tipo:'Partita', players:4, durata:90, amici:(prefill.amici||[]).slice(), aperta:false, range:prefill.range||'3.5-4.5', concierge:concierge };
+  const st={ off:0, ora:null, momento:null, tipo:'Partita', players:4, durata:90, amici:(prefill.amici||[]).slice(), concierge:concierge };
   if(prefill.giorno){ const m=days.filter(d=>d.giorno===prefill.giorno)[0]; if(m) st.off=m.off; }
   else{ for(let i=0;i<days.length;i++){ if(availSlots(days[i].off,days[i].dow)>0){ st.off=days[i].off; break; } } }
   const body=el('flow');
@@ -727,11 +648,11 @@ function openBookingFlow(prefill){
   const momBox=el('chips'); body.appendChild(momBox);
   // Passo 3: gli orari del momento scelto (chips = ChipsSelector nativo)
   const slotBox=el('slotbox'); body.appendChild(slotBox);
-  body.appendChild(el('flow-legend','<span><i class="dot free"></i>Libero</span><span><i class="dot opt"></i>Partita aperta · unisciti</span>'));
+  body.appendChild(el('flow-legend','<span><i class="dot free"></i>Libero</span>'));
   // Partita sempre 90' in 4 (niente selettore "in quanti giocate").
-  // FASE 1 = SOLO giorno/momento/orario (una scelta per volta). Invita amici,
-  // "ci pensate voi" e "rendi pubblica" sono la FASE 2, DOPO l'opzione: prima ti
-  // assicuri il campo, poi decidi come completare la partita (vedi rosterActionButtons).
+  // FASE 1 = SOLO giorno/momento/orario (una scelta per volta). Invita amici e
+  // "ci pensate voi" sono la FASE 2, DOPO l'opzione: prima ti assicuri il campo,
+  // poi decidi come completare la partita (vedi rosterActionButtons).
   const sum=el('flow-sum');   // riepilogo selezione
   body.appendChild(sum);
   const foot=document.createElement('button'); foot.className='flow-submit'; foot.textContent=concierge?'Richiedi organizzazione':'Continua';
@@ -745,8 +666,8 @@ function openBookingFlow(prefill){
     const pr=slotPrezzo(meta,players);
     if(concierge){ addOut('🧑‍💼 Organizzate voi · '+d.giorno+' · '+st.ora+" ("+dur+"')");
       botSay(()=>decideConcierge({giorno:d.giorno,dow:d.dow,ora:st.ora,tipo:st.tipo,durata:dur,players:players})); return; }
-    addOut('📋 '+d.giorno+' · '+st.ora+' · in '+players+" ("+dur+"') · "+pr.testa+'€/testa'+(names.length?(' · con '+names.join(', ')):'')+(st.aperta?' · aperta ad altri':' · privata'));
-    botSay(()=>decideAndPresent({giorno:d.giorno,dow:d.dow,ora:st.ora,tipo:st.tipo,durata:dur,amici:st.amici.slice(),aperta:st.aperta,range:st.range,players:players}));
+    addOut('📋 '+d.giorno+' · '+st.ora+' · in '+players+" ("+dur+"') · "+pr.testa+'€/testa'+(names.length?(' · con '+names.join(', ')):''));
+    botSay(()=>decideAndPresent({giorno:d.giorno,dow:d.dow,ora:st.ora,tipo:st.tipo,durata:dur,amici:st.amici.slice(),players:players}));
   };
   body.appendChild(foot);
 
@@ -781,18 +702,14 @@ function openBookingFlow(prefill){
     if(!st.momento){ slotBox.appendChild(el('slot-empty','Nessun orario disponibile in questo giorno.')); return; }
     const flat=daySlotsFlat(d.off,d.dow,st.durata,st.players).filter(s=>s.status!=='busy'&&momentoKey(s.ora)===st.momento);
     if(!flat.length){ slotBox.appendChild(el('slot-empty','Nessun orario in questa fascia.')); return; }
-    const inFour=flat.filter(s=>s.status!=='opt');
-    const uniform=inFour.length && inFour.every(s=>s.prezzo===inFour[0].prezzo), first=inFour[0]||flat[0];
+    const uniform=flat.length && flat.every(s=>s.prezzo===flat[0].prezzo), first=flat[0];
     if(uniform){ const hdr=el('slot-fascia'); hdr.textContent=first.prezzo+'€ a testa'; slotBox.appendChild(hdr); }
     const row=el('chips');
     flat.forEach(s=>{
       const b=document.createElement('button'); b.type='button';
-      b.className='chip'+(st.ora===s.ora?' sel':'')+(s.status==='opt'?' opt':'');
-      b.textContent=(s.status==='opt') ? (s.ora+' · 🟠') : (uniform?s.ora:(s.ora+' · '+s.prezzo+'€'));
-      b.onclick=()=>{
-        if(s.status==='opt'){ closeSheet(); botSay(()=>{ addInHtml('Quell\'orario è pieno, ma c\'è una <b>partita aperta</b> a cui puoi unirti. Ecco le partite aperte adatte a te:'); doUnisciti(); }); return; }
-        st.ora=s.ora; renderSlots(); updSum();
-      };
+      b.className='chip'+(st.ora===s.ora?' sel':'');
+      b.textContent=uniform?s.ora:(s.ora+' · '+s.prezzo+'€');
+      b.onclick=()=>{ st.ora=s.ora; renderSlots(); updSum(); };
       row.appendChild(b);
     });
     slotBox.appendChild(row);
@@ -813,8 +730,7 @@ function openBookingFlow(prefill){
           +'<br>💶 <b>'+pr.testa+' € a testa</b> · '+pr.campo+' € a campo')
         : ('<br>💶 <b>'+pr.testa+' € a testa</b> · '+pr.campo+' € a campo · '+pr.giocatori+' giocatori'
           +'<br>👥 1/'+target+' confermati (tu)'+(inviti?(' · ✉️ '+inviti+' invit'+(inviti>1?'i':'o')):'')
-          +'<br>⚠️ <b>ATTENZIONE:</b> completa la partita (servono 4 giocatori) entro <b>'+win.lbl.toUpperCase()+'</b>, se no il campo <b>torna automaticamente disponibile per altri giocatori</b>'
-          +'<br>'+(st.aperta?'🟠 <b>Partita aperta</b> · altri soci possono chiedere di unirsi (li approvi tu)':'🔒 <b>Partita privata</b>')));
+          +'<br>⚠️ <b>ATTENZIONE:</b> completa la partita (servono 4 giocatori) entro <b>'+win.lbl.toUpperCase()+'</b>, se no il campo <b>torna automaticamente disponibile per altri giocatori</b>'));
   }
   openSheet('Prenota un campo', body, 'Scegli giorno, momento e orario');
   renderDays(); renderMomenti(); renderSlots();
@@ -836,14 +752,6 @@ function decideAndPresent(draft){
     openBookingFlow({giorno:draft.giorno,durata:draft.durata,amici:draft.amici});
     return;
   }
-  if(draftMeta && draftMeta.status==='opt'){
-    addInHtml('Quell\'orario è pieno, ma c\'è una <b>partita aperta</b> a cui puoi unirti. 🟠');
-    addQuick([
-      {label:'🟠 Vedi partite aperte',action:()=>botSay(doUnisciti)},
-      {label:'Scegli un altro orario',action:()=>botSay(()=>openBookingFlow({giorno:draft.giorno,amici:draft.amici}))}
-    ]);
-    return;
-  }
   const campo=campoLibero(draft.dow,draft.ora); const fine=addMin(draft.ora,draft.durata);
   const pr=slotPrezzo(draftMeta,draft.players);
   const target=pr.giocatori;
@@ -855,7 +763,6 @@ function decideAndPresent(draft){
     +'<br>💶 <b>'+pr.testa+' € a testa</b> · '+pr.campo+' € a campo · '+target+' giocatori'
     +'<br>👥 1/'+target+' confermati (tu)'+(names.length?('<br>✉️ Inviti: '+names.join(', ')+' (in attesa)'):'')
     +'<br>⚠️ <b>ATTENZIONE:</b> completa la partita (servono 4 giocatori) entro <b>'+win.lbl.toUpperCase()+'</b>, se no il campo <b>torna automaticamente disponibile per altri giocatori</b>'
-    +'<br>'+(draft.aperta?'🟠 <b>Partita aperta</b> · altri soci possono chiedere di unirsi (li approvi tu)':'🔒 <b>Partita privata</b>')
     +'<br>A nome di '+esc(S.player.nome));
   addQuick([
     {label:'Procedi',action:()=>{ addOut('Procedi'); botSay(()=>commitOpzione(draft)); }},   // ≤20 char (limite titolo reply-button WhatsApp); poi le 3 scelte per completare
@@ -869,29 +776,24 @@ function commitOpzione(draft){
   const target=draft.target||4;
   const invited=(draft.names||(draft.amici||[]).map(friendName).filter(Boolean)).slice(0,target-1);
   const rec={id:++S.seq,giorno:draft.giorno,ora:draft.ora,campo:draft.campo,tipo:draft.tipo,durata:draft.durata,
-    target:target, amici:[], invitati:invited.slice(), aperta:!!draft.aperta, stato:'opzionato',
+    target:target, amici:[], invitati:invited.slice(), stato:'opzionato',
     deadline:optDeadlineMs(off||0,draft.ora), win:rosterWindow(off||0).lbl};
-  if(draft.aperta){ const pr=String(draft.range||'3.5-4.5').split('-'); rec.livMin=parseFloat(pr[0]); rec.livMax=parseFloat(pr[1]); }
   S.prenotazioni.push(rec); save();
   const posti=target-1;
   addInHtml('🟠 <b>Campo opzionato</b> a tuo nome — '+esc(rec.giorno)+' · '+rec.ora+'–'+draft.fine+' · Campo '+rec.campo+'.<br>Sei <b>1/'+target+'</b>: '+(posti>1?'mancano '+posti+' giocatori':'manca 1 giocatore')+'. Hai <b>'+rec.win+'</b> per completare la partita, poi il campo si libera.<br><b>Come vuoi completarla?</b> 👇',true);
   rosterActionButtons(rec);
   if(invited.length) sendInvites(rec, invited);
   scheduleRosterReminders(rec, off||0);
-  if(rec.aperta) afterBookingOpen(rec);
 }
 /* FASE 2 — come completare la partita (dopo l'opzione). LIST MESSAGE WhatsApp:
    ogni riga = titolo (≤24 char) + descrizione (≤72 char), così ogni scelta si
-   spiega da sola (i reply-button non hanno descrizione). Se è già pubblica resta
-   solo "invito amici"; se è delegata alla segreteria non servono azioni sui posti.
+   spiega da sola (i reply-button non hanno descrizione). Se è delegata alla
+   segreteria non servono azioni sui posti.
    Annulla/aspetta = da "Le mie prenotazioni". */
 function rosterActionButtons(rec){
   if(rec.concierge){ addQuick([{label:'📅 Le mie prenotazioni',action:()=>botSay(doMie)}]); return; }
   const rows=[{section:'Completa la partita', ic:'👥', label:'Invito i miei amici', desc:'Scegli tu con chi giocare', action:()=>openAddPlayersFlow(rec)}];
-  if(!rec.aperta){
-    rows.push({ic:'🧑‍💼', label:'Ci pensa la segreteria', desc:'Troviamo noi i giocatori · +'+CONCIERGE_FEE+' €', action:()=>{ addOut('Ci pensa la segreteria'); botSay(()=>delegateConcierge(rec)); }});
-    rows.push({ic:'🟠', label:'Apro la partita', desc:'Altri soci chiedono di unirsi, decidi tu', action:()=>{ addOut('Apro la partita'); botSay(()=>openMatchToOthers(rec)); }});
-  }
+  rows.push({ic:'🧑‍💼', label:'Ci pensa la segreteria', desc:'Troviamo noi i giocatori · +'+CONCIERGE_FEE+' €', action:()=>{ addOut('Ci pensa la segreteria'); botSay(()=>delegateConcierge(rec)); }});
   addMenu(rows.slice(0,10));
 }
 /* Ramo "Ci pensate voi": delega alla segreteria un'opzione già presa (+10 €). */
@@ -906,7 +808,7 @@ function delegateConcierge(rec){
 }
 function commitDelegate(r){
   const rr=S.prenotazioni.find(x=>x.id===r.id); if(!rr||rr.stato!=='opzionato'){ addInHtml('Questa prenotazione non è più in attesa.'); return; }
-  rr.concierge=true; rr.aperta=false; save();
+  rr.concierge=true; save();
   addInHtml('🧑‍💼 <b>Ci pensiamo noi!</b> Cerchiamo gli altri giocatori per '+esc(rr.giorno)+' alle '+rr.ora+' e ti aggiorniamo qui. Il supplemento di <b>'+CONCIERGE_FEE+' €</b> lo salderai in segreteria.',true);
   setTimeout(()=>{ const x=S.prenotazioni.find(p=>p.id===rr.id); if(!x||x.stato!=='opzionato') return;
     botSay(()=>{ const nomi=['Andrea T.','Marta P.','Giulio S.'].slice(0, rosterPosti(x)); x.amici=(x.amici||[]).concat(nomi); save();
@@ -970,14 +872,6 @@ function openAddPlayersFlow(rec){
   body.appendChild(b);
   openSheet('Completa la partita', body, r.giorno+' · '+r.ora);
 }
-/* Rende una partita privata → aperta ad altri (livello = mio ±0.5). */
-function openMatchToOthers(rec){
-  const r=S.prenotazioni.find(x=>x.id===rec.id)||rec;
-  const l=parseFloat(S.player.livello);
-  r.aperta=true; r.livMin=Math.max(1,Math.round((l-0.5)*10)/10); r.livMax=Math.round((l+0.5)*10)/10; save();
-  addInHtml('🟠 <b>Partita aperta</b> ad altri soci (liv. '+r.livMin.toFixed(1)+'–'+r.livMax.toFixed(1)+'). Ti avvisiamo qui appena qualcuno chiede di unirsi; approvi tu.',true);
-  afterBookingOpen(r);
-}
 /* Promemoria "completa la partita" — bilanciato: metà + ultima chiamata
    (nella finestra 1h solo l'ultima). Demo: tempi scalati a pochi secondi.
    Su WhatsApp vero sono GRATIS perché dentro la finestra 24h. */
@@ -992,7 +886,7 @@ function scheduleRosterReminders(rec, off){
 }
 function rosterReminderMsg(r,kind){
   if(kind==='last') addInHtml('⏳ <b>Ultima chiamata</b>: mancano ancora '+rosterPosti(r)+' giocator'+(rosterPosti(r)>1?'i':'e')+' per '+esc(r.giorno)+' alle '+r.ora+'. Completa a breve, altrimenti il campo torna disponibile per altri.');
-  else addInHtml('⏳ <b>Promemoria</b>: per '+esc(r.giorno)+' alle '+r.ora+' siete '+rosterFilled(r)+'/'+rosterTarget(r)+'. Aggiungi giocatori'+(r.aperta?'':' o apri la partita ad altri')+', altrimenti il campo torna disponibile per altri.');
+  else addInHtml('⏳ <b>Promemoria</b>: per '+esc(r.giorno)+' alle '+r.ora+' siete '+rosterFilled(r)+'/'+rosterTarget(r)+'. Aggiungi giocatori, altrimenti il campo torna disponibile per altri.');
   rosterActionButtons(r);
 }
 /* Invito amici (WhatsApp reale: a ciascun amico un TEMPLATE utility con Sì/No;
@@ -1008,7 +902,7 @@ function sendInvites(rec, names){
 function inviteResponse(r,nm){
   const declina=/Paolo/.test(nm);                  // demo: Paolo rifiuta, per mostrare il ramo
   r.invitati=(r.invitati||[]).filter(x=>x!==nm);
-  if(declina){ save(); addInHtml('🙅 <b>'+esc(nm)+'</b> non può per '+esc(r.giorno)+' alle '+r.ora+'. Invita qualcun altro'+(r.aperta?'':' o apri la partita ad altri')+'.'); rosterActionButtons(r); return; }
+  if(declina){ save(); addInHtml('🙅 <b>'+esc(nm)+'</b> non può per '+esc(r.giorno)+' alle '+r.ora+'. Invita qualcun altro.'); rosterActionButtons(r); return; }
   r.amici=(r.amici||[]).concat(nm); save();
   if(rosterPosti(r)===0){ confirmBooking(r); return; }
   addInHtml('✅ <b>'+esc(nm)+'</b> ha accettato! Ora siete <b>'+rosterFilled(r)+'/'+rosterTarget(r)+'</b>'+(rosterPending(r)?(' · in attesa: '+r.invitati.join(', ')):' · mancano '+rosterPosti(r))+'.',true);
@@ -1036,7 +930,7 @@ function decideConcierge(draft){
 function commitConcierge(draft){
   const off=offsetForGiorno(draft.giorno);
   const rec={id:++S.seq,giorno:draft.giorno,ora:draft.ora,campo:draft.campo,tipo:draft.tipo,durata:draft.durata,
-    target:draft.target||4, amici:[], aperta:false, concierge:true, stato:'opzionato', deadline:optDeadlineMs(off||0,draft.ora), win:rosterWindow(off||0).lbl};
+    target:draft.target||4, amici:[], concierge:true, stato:'opzionato', deadline:optDeadlineMs(off||0,draft.ora), win:rosterWindow(off||0).lbl};
   S.prenotazioni.push(rec); save();
   addInHtml('🧑‍💼 <b>Richiesta ricevuta!</b> Il campo di '+esc(rec.giorno)+' alle '+rec.ora+' è opzionato a tuo nome. La segreteria cerca gli altri giocatori e ti aggiorna qui. Il supplemento di <b>'+CONCIERGE_FEE+' €</b> lo salderai in segreteria.',true);
   setTimeout(()=>{ const r=S.prenotazioni.find(x=>x.id===rec.id); if(!r||r.stato!=='opzionato') return;
