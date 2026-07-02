@@ -272,13 +272,11 @@ function addMin(hhmm,min){ const [h,m]=hhmm.split(':').map(Number); const tot=h*
    · Sab–Dom: solo fissi ogni 90' (09:00→18:00) = 8€.
    La fascia diurna chiude dove iniziano i fissi; la partita (durata) deve
    rientrare nella fascia → l'ultimo avvio dipende dalla durata. */
-/* prezzo2 = tariffa "in due" della fascia diurna: 10€ a testa MA su slot da 60'
-   (partita corta). Serve a riempire i campi vuoti infrasettimanali senza
-   svendere il campo a 8€×2. Vale solo sulla fascia diurna (fissi/weekend no). */
+/* Partita SEMPRE 90' in 4 (niente tariffa "in due" / slot da 60'). */
 const LISTINO={
-  weekday:{ fascia:{start:'09:00',end:'18:00',prezzo:8,prezzo2:10},
+  weekday:{ fascia:{start:'09:00',end:'18:00',prezzo:8},
             fissi:[{ora:'18:00',prezzo:12},{ora:'19:30',prezzo:13},{ora:'21:00',prezzo:12}] },
-  friday :{ fascia:{start:'09:00',end:'17:30',prezzo:8,prezzo2:10},
+  friday :{ fascia:{start:'09:00',end:'17:30',prezzo:8},
             fissi:[{ora:'17:30',prezzo:12},{ora:'19:00',prezzo:12},{ora:'20:30',prezzo:12}] },
   weekend:{ fascia:null,
             fissi:[{ora:'09:00',prezzo:8},{ora:'10:30',prezzo:8},{ora:'12:00',prezzo:8},{ora:'13:30',prezzo:8},{ora:'15:00',prezzo:8},{ora:'16:30',prezzo:8},{ora:'18:00',prezzo:8}] }
@@ -288,10 +286,9 @@ const LISTINO={
 const MIDDAY={start:12*60,end:15*60,prezzo:10};
 function dayConfig(dow){ if(dow===0||dow===6) return LISTINO.weekend; if(dow===5) return LISTINO.friday; return LISTINO.weekday; }
 function toMin(hhmm){ const [h,m]=hhmm.split(':').map(Number); return h*60+m; }
-/* Prezzo a testa di uno slot di FASCIA diurna: in 2 → tariffa ridotta (60');
-   in 4 → 8€, oppure 10€ se l'avvio è nella fascia centrale 12–15. */
-function fasciaPrezzo(fascia,ora,players){
-  if(players===2) return fascia.prezzo2;
+/* Prezzo a testa di uno slot di FASCIA diurna: 8€, oppure 10€ se l'avvio è
+   nella fascia centrale 12–15 (partita sempre 90' in 4). */
+function fasciaPrezzo(fascia,ora){
   const t=toMin(ora);
   if(t>=MIDDAY.start && t<MIDDAY.end) return MIDDAY.prezzo;
   return fascia.prezzo;
@@ -309,7 +306,7 @@ function daySlotGroups(off,dow,durata,players){
   const cfg=dayConfig(dow); durata=durata||90; players=players||4; const groups=[];
   if(cfg.fascia){
     groups.push({ name:'Fascia diurna', kind:'fascia',
-      slots:fasciaTimes(cfg.fascia,durata).map(t=>({ora:t,prezzo:fasciaPrezzo(cfg.fascia,t,players),kind:'fascia',status:slotStatus(off,dow,t)})) });
+      slots:fasciaTimes(cfg.fascia,durata).map(t=>({ora:t,prezzo:fasciaPrezzo(cfg.fascia,t),kind:'fascia',status:slotStatus(off,dow,t)})) });
   }
   groups.push({ name:(cfg.fascia?'Slot serali':'Slot fissi'), kind:'fisso',
     slots:cfg.fissi.map(f=>({ora:f.ora,prezzo:f.prezzo,kind:'fisso',status:slotStatus(off,dow,f.ora)})) });
@@ -317,12 +314,11 @@ function daySlotGroups(off,dow,durata,players){
 }
 function slotMetaFor(off,dow,ora,durata,players){ const gs=daySlotGroups(off,dow,durata,players);
   for(const g of gs){ const s=g.slots.find(x=>x.ora===ora); if(s) return s; } return null; }
-/* Prezzo a testa/campo. Luce sempre inclusa. In 2 (solo fascia diurna) la
-   tariffa è già ridotta (prezzo2, 60') e il campo si divide per 2. */
-function slotPrezzo(meta,players){ if(!meta) return {testa:0,campo:0,giocatori:4};
+/* Prezzo a testa/campo. Luce sempre inclusa. Partita sempre in 4 (90'):
+   campo = testa × 4. */
+function slotPrezzo(meta){ if(!meta) return {testa:0,campo:0,giocatori:4};
   const testa=meta.prezzo;
-  const giocatori=(meta.kind==='fascia' && players===2)?2:4;
-  return {testa,campo:testa*giocatori,giocatori}; }
+  return {testa,campo:testa*4,giocatori:4}; }
 /* Momenti (passo 2 del selettore): raggruppano gli orari per parte del giorno,
    così si mostrano pochi slot per volta (fedele a un Flow multi-schermata). */
 const MOMENTI=[{key:'mattina',label:'Mattina'},{key:'pomeriggio',label:'Pomeriggio'},{key:'sera',label:'Sera'}];
@@ -396,7 +392,6 @@ function parseWhen(txt){
   return { date:!!target, giorno: target?lbl(target):null, dow: target?target.getDay():null, ora };
 }
 function parseTipo(txt){ const t=txt.toLowerCase(); if(t.includes('lezione'))return 'Lezione'; if(t.includes('partita'))return 'Partita'; return null; }
-function parseDurata(txt){ const m=txt.toLowerCase().match(/(\d{2,3})\s*(?:min|minuti|')/); return m?parseInt(m[1],10):null; }
 function inRegola(){ return S.player.socio && S.player.inRegola && S.player.borselloCent>=0; }
 function isCritica(dow,ora){ if(dow===0){ const h=parseInt((ora||'12').split(':')[0],10); if(h<13) return true; } return false; }
 function campoLibero(dow,ora){ const pool=[3,2,4,1]; return pool[(parseInt((ora||'0').replace(':',''),10))%pool.length]; }
@@ -429,10 +424,13 @@ let _hintN=0;
 function maybeHint(){ _hintN++; if(_hintN%2===0) addSys('Suggerimento: digita "/" per i comandi in ogni momento'); }
 function showIceBreakers(){
   const wrap=el('ice');
+  /* Solo 3 Ice Breakers (Meta: max 4, no emoji, solo 1° contatto): i due
+     flussi principali + "Altro", che apre il menu con le restanti funzioni.
+     Su WhatsApp reale l'Ice Breaker invia un testo predefinito → "Altro"
+     invia "Altro" e il routing mostra un List Message con le altre voci. */
   [['Prenota un campo','Vorrei prenotare un campo'],
    ['Unisciti a una partita','Vorrei unirmi a una partita'],
-   ['Le mie prenotazioni','Cosa ho prenotato?'],
-   ['Il mio borsellino','Saldo borsellino']].forEach(x=>{
+   ['Altro','Altro']].forEach(x=>{
     const b=document.createElement('button'); b.className='ice-b'; b.textContent=x[0];
     b.onclick=()=>{ wrap.remove(); sendUser(x[1]); };
     wrap.appendChild(b);
@@ -459,6 +457,7 @@ function detectIntent(t){
   if(/\bcome\s+(si\s+)?(funziona|fa|faccio|posso|uso|usa|prenot|invit|entr|apr|organizz|pag|dispon|complet)/.test(t)) return 'aiuto';
   if(/\bcosa\s+(puoi|sai|posso)\b/.test(t) || /a cosa serv|spiegami|spiega come|non ho capito|come si usa/.test(t)) return 'aiuto';
   if(/quanto costa|quanto si paga|che prezz|come si paga|serve la caparra|c'è la caparra/.test(t)) return 'aiuto';
+  if(/^altro\b|^altre\b|\baltre funzioni\b|\baltre opzioni\b|\baltro men[uù]\b/.test(t)) return 'altro';
   if(/profil|i miei dati|chi sono/.test(t)) return 'profilo';
   if(/amic|con cui gioc|lista giocator/.test(t)) return 'amici';
   if(/borsell|saldo|credito|monedero|portafogl/.test(t)) return 'borsellino';
@@ -482,6 +481,7 @@ function sendUser(text,silent){
 function route(intent,t){
   switch(intent){
     case 'saluto': addInHtml('Ciao '+esc(S.player.nome.split(' ')[0])+', come possiamo aiutarti? Ecco cosa possiamo fare:'); showMenu(); break;
+    case 'altro': addInHtml('Certo, ecco cos\'altro possiamo fare per te:'); showMenuAltro(); break;
     case 'profilo': doProfilo(); break;
     case 'amici': doAmici(); break;
     case 'borsellino': doBorsellino(); break;
@@ -505,6 +505,18 @@ function showMenu(){
     {section:'Account', ic:'👤', label:'Il mio profilo', text:'Il mio profilo'},
     {section:'Account', ic:'👥', label:'I miei amici', text:'I miei amici'},
     {section:'Account', ic:'💶', label:'Il mio borsellino', text:'Saldo borsellino'}
+  ]);
+}
+/* Menu "Altro": le funzioni diverse dai due Ice Breakers già in prima schermata
+   (Prenota / Unisciti). List Message ≤10 righe (fedele a WhatsApp). */
+function showMenuAltro(){
+  addMenu([
+    {section:'Prenotazioni', ic:'🧑‍💼', label:'Fatti organizzare la partita (+10 €)', action:()=>botSay(doConcierge)},
+    {section:'Prenotazioni', ic:'📅', label:'Le mie prenotazioni', text:'Cosa ho prenotato?'},
+    {section:'Account', ic:'👤', label:'Il mio profilo', text:'Il mio profilo'},
+    {section:'Account', ic:'👥', label:'I miei amici', text:'I miei amici'},
+    {section:'Account', ic:'💶', label:'Il mio borsellino', text:'Saldo borsellino'},
+    {section:'Account', ic:'❓', label:'Come funziona / aiuto', action:()=>botSay(()=>doHelp(''))}
   ]);
 }
 
@@ -674,10 +686,10 @@ function afterBookingOpen(rec){
 
 /* ---------- Prenotazione: WhatsApp Flow (modulo) --------------------------- */
 function startBooking(text){
-  const w=parseWhen(text), dur=parseDurata(text);
-  if(w.date && w.ora){ return decideAndPresent({giorno:w.giorno,dow:w.dow,ora:w.ora,tipo:'Partita',durata:dur||90,amici:[]}); }
+  const w=parseWhen(text);
+  if(w.date && w.ora){ return decideAndPresent({giorno:w.giorno,dow:w.dow,ora:w.ora,tipo:'Partita',durata:90,amici:[]}); }
   addInHtml('Ti apriamo il modulo — scegli un giorno e tocca un orario libero. 👇');
-  openBookingFlow({giorno:w.giorno,ora:w.ora,durata:dur});
+  openBookingFlow({giorno:w.giorno,ora:w.ora});
 }
 /* Concierge: la segreteria organizza la partita per te (+10 € in segreteria). */
 function doConcierge(){
@@ -690,8 +702,7 @@ function openBookingFlow(prefill){
   if(blockIfActiveOption()) return;                        // 1 sola opzione attiva per volta
   const concierge=!!prefill.concierge;
   const days=[]; for(let o=0;o<=MAX_GIORNI;o++) days.push(dayInfo(o));
-  const st={ off:0, ora:null, momento:null, tipo:'Partita', players:prefill.players||4, durata:90, amici:(prefill.amici||[]).slice(), aperta:false, range:prefill.range||'3.5-4.5', concierge:concierge };
-  st.durata = st.players===2 ? 60 : (prefill.durata||90);
+  const st={ off:0, ora:null, momento:null, tipo:'Partita', players:4, durata:90, amici:(prefill.amici||[]).slice(), aperta:false, range:prefill.range||'3.5-4.5', concierge:concierge };
   if(prefill.giorno){ const m=days.filter(d=>d.giorno===prefill.giorno)[0]; if(m) st.off=m.off; }
   else{ for(let i=0;i<days.length;i++){ if(availSlots(days[i].off,days[i].dow)>0){ st.off=days[i].off; break; } } }
   const body=el('flow');
@@ -705,16 +716,7 @@ function openBookingFlow(prefill){
   // Passo 3: gli orari del momento scelto (chips = ChipsSelector nativo)
   const slotBox=el('slotbox'); body.appendChild(slotBox);
   body.appendChild(el('flow-legend','<span><i class="dot free"></i>Libero</span><span><i class="dot opt"></i>Partita aperta · unisciti</span>'));
-  // In quanti giocate? (solo partite). Nella fascia diurna infrasettimanale
-  // "in 2" = slot da 60' a tariffa ridotta (10€/testa); altrove sempre 90' in 4.
-  const playWrap=el('flow-play');
-  playWrap.appendChild(fieldLabel('In quanti giocate?'));
-  const playRow=chipRow([{label:"In 4 · 90'",val:4},{label:"In 2 · 60'",val:2}],(val,btn,r)=>{ selectOne(r,btn); st.players=val; st.durata=val===2?60:90;
-    if(st.ora && !slotMetaFor(days[st.off].off,days[st.off].dow,st.ora,st.durata,st.players)) st.ora=null;
-    renderMomenti(); renderSlots(); updSum(); });
-  playWrap.appendChild(playRow);
-  playWrap.appendChild(el('luce-hint',"In 2 vale solo nella fascia diurna: 60' a tariffa ridotta (10 € a testa). Di sera e nel weekend gli orari sono da 90' in 4."));
-  if(!concierge) body.appendChild(playWrap);
+  // Partita sempre 90' in 4 (niente selettore "in quanti giocate").
   // Amici
   const friendWrap=el('flow-friends');
   if(S.friends.length){
@@ -753,8 +755,7 @@ function openBookingFlow(prefill){
     if(!st.ora){ toast('Tocca prima un orario libero.'); return; }
     const d=days[st.off];
     const meta=slotMetaFor(d.off,d.dow,st.ora,st.durata,st.players);
-    const dur=meta&&meta.kind==='fisso'?90:st.durata;
-    const players=meta&&meta.kind==='fisso'?4:st.players;   // in 2 vale solo sulla fascia diurna
+    const dur=90, players=4;   // partita sempre 90' in 4
     closeSheet();
     const names=st.amici.map(friendName).filter(Boolean);
     const pr=slotPrezzo(meta,players);
@@ -775,13 +776,7 @@ function openBookingFlow(prefill){
       dayRow.appendChild(b);
     });
   }
-  function updPlayersRow(){
-    const hasFascia=!!dayConfig(days[st.off].dow).fascia;
-    playWrap.style.display=hasFascia?'':'none';   // "in 2" ha senso solo dove c'è la fascia diurna
-    if(!hasFascia && st.players!==4){ st.players=4; st.durata=90; const b4=playRow.querySelector('[data-val="4"]'); if(b4) selectOne(playRow,b4); }
-  }
   function renderMomenti(){
-    updPlayersRow();
     momBox.innerHTML='';
     const flat=daySlotsFlat(days[st.off].off,days[st.off].dow,st.durata,st.players).filter(s=>s.status!=='busy');
     const avail=MOMENTI.filter(mm=>flat.some(s=>momentoKey(s.ora)===mm.key));
@@ -804,10 +799,7 @@ function openBookingFlow(prefill){
     if(!flat.length){ slotBox.appendChild(el('slot-empty','Nessun orario in questa fascia.')); return; }
     const inFour=flat.filter(s=>s.status!=='opt');
     const uniform=inFour.length && inFour.every(s=>s.prezzo===inFour[0].prezzo), first=inFour[0]||flat[0];
-    const parts=[];
-    if(first.kind==='fascia' && st.players===2) parts.push("in 2 · 60'");
-    if(uniform) parts.push(first.prezzo+'€ a testa');
-    if(parts.length){ const hdr=el('slot-fascia'); hdr.textContent=parts.join(' · '); slotBox.appendChild(hdr); }
+    if(uniform){ const hdr=el('slot-fascia'); hdr.textContent=first.prezzo+'€ a testa'; slotBox.appendChild(hdr); }
     const row=el('chips');
     flat.forEach(s=>{
       const b=document.createElement('button'); b.type='button';
@@ -842,7 +834,6 @@ function openBookingFlow(prefill){
   }
   openSheet('Prenota un campo', body, 'Scegli giorno, momento e orario');
   renderDays(); renderMomenti(); renderSlots();
-  preselectChip(playRow, st.players||4);
   if(prefill.ora){
     const d=days[st.off]; const meta=slotMetaFor(d.off,d.dow,prefill.ora,st.durata,st.players);
     if(meta && meta.status!=='busy'){ st.momento=momentoKey(prefill.ora); st.ora=prefill.ora; renderMomenti(); renderSlots(); }
