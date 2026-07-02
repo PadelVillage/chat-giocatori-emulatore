@@ -50,7 +50,9 @@
   .menu-row{display:flex;align-items:center;gap:10px;padding:11px 12px;border-top:1px solid #f0f3f4;cursor:pointer}
   .menu-row:active{background:#f4f7f8}
   .menu-ic{width:24px;text-align:center;font-size:16px}
-  .menu-lb{flex:1;font-size:14px;color:var(--ink)}
+  .menu-lb{flex:1;font-size:14px;color:var(--ink);min-width:0}
+  .menu-lb-t{display:block}
+  .menu-lb-d{display:block;font-size:12px;color:var(--muted);margin-top:1px;line-height:1.35}
   .menu-ch{color:#c3cbcf;font-size:18px}
   /* Typing */
   .typing{align-self:flex-start;background:#fff;border-radius:9px;border-top-left-radius:2px;padding:10px 12px;display:inline-flex;gap:4px}
@@ -222,7 +224,7 @@ function addMenu(rows){
   const m=el('menu'); let cur=null;
   rows.forEach(r=>{
     if(r.section && r.section!==cur){ cur=r.section; const h=el('menu-head'); h.textContent=r.section; m.appendChild(h); }
-    const row=el('menu-row','<span class="menu-ic">'+(r.ic||'•')+'</span><span class="menu-lb">'+esc(r.label)+'</span><span class="menu-ch">›</span>');
+    const row=el('menu-row','<span class="menu-ic">'+(r.ic||'•')+'</span><span class="menu-lb"><span class="menu-lb-t">'+esc(r.label)+'</span>'+(r.desc?'<span class="menu-lb-d">'+esc(r.desc)+'</span>':'')+'</span><span class="menu-ch">›</span>');
     row.onclick=()=>{ if(r.action) r.action(); else sendUser(r.text!=null?r.text:r.label); };
     m.appendChild(row);
   });
@@ -871,25 +873,26 @@ function commitOpzione(draft){
     deadline:optDeadlineMs(off||0,draft.ora), win:rosterWindow(off||0).lbl};
   if(draft.aperta){ const pr=String(draft.range||'3.5-4.5').split('-'); rec.livMin=parseFloat(pr[0]); rec.livMax=parseFloat(pr[1]); }
   S.prenotazioni.push(rec); save();
-  addInHtml('🟠 <b>Campo opzionato</b> a tuo nome — '+esc(rec.giorno)+' · '+rec.ora+'–'+draft.fine+' · Campo '+rec.campo+'.<br>Per ora sei <b>1/'+target+'</b>. Adesso <b>completa la partita</b> entro <b>'+rec.win+'</b> — come preferisci? 👇<br>Se non completi in tempo, il campo torna automaticamente disponibile per altri.',true);
+  const posti=target-1;
+  addInHtml('🟠 <b>Campo opzionato</b> a tuo nome — '+esc(rec.giorno)+' · '+rec.ora+'–'+draft.fine+' · Campo '+rec.campo+'.<br>Sei <b>1/'+target+'</b>: '+(posti>1?'mancano '+posti+' giocatori':'manca 1 giocatore')+'. Hai <b>'+rec.win+'</b> per completare la partita, poi il campo si libera.<br><b>Come vuoi completarla?</b> 👇',true);
   rosterActionButtons(rec);
   if(invited.length) sendInvites(rec, invited);
   scheduleRosterReminders(rec, off||0);
   if(rec.aperta) afterBookingOpen(rec);
 }
-/* FASE 2 — come completare la partita (dopo l'opzione). Tre rami = tre reply-
-   button WhatsApp (limite 3): invito amici · ci pensa la segreteria (+10€) ·
-   rendi pubblica. Se è già pubblica resta solo "invito amici"; se è delegata
-   alla segreteria non servono azioni sui posti. Annulla/aspetta = da "Le mie
-   prenotazioni". Etichette ≤20 char (limite titolo reply-button). */
+/* FASE 2 — come completare la partita (dopo l'opzione). LIST MESSAGE WhatsApp:
+   ogni riga = titolo (≤24 char) + descrizione (≤72 char), così ogni scelta si
+   spiega da sola (i reply-button non hanno descrizione). Se è già pubblica resta
+   solo "invito amici"; se è delegata alla segreteria non servono azioni sui posti.
+   Annulla/aspetta = da "Le mie prenotazioni". */
 function rosterActionButtons(rec){
   if(rec.concierge){ addQuick([{label:'📅 Le mie prenotazioni',action:()=>botSay(doMie)}]); return; }
-  const btns=[{label:'👥 Invito gli amici',action:()=>openAddPlayersFlow(rec)}];
+  const rows=[{section:'Completa la partita', ic:'👥', label:'Invito i miei amici', desc:'Scegli tu con chi giocare', action:()=>openAddPlayersFlow(rec)}];
   if(!rec.aperta){
-    btns.push({label:'🧑‍💼 Ci pensate voi',action:()=>{ addOut('Ci pensate voi'); botSay(()=>delegateConcierge(rec)); }});
-    btns.push({label:'🟠 Rendi pubblica',action:()=>{ addOut('Rendi pubblica'); botSay(()=>openMatchToOthers(rec)); }});
+    rows.push({ic:'🧑‍💼', label:'Ci pensa la segreteria', desc:'Troviamo noi i giocatori · +'+CONCIERGE_FEE+' €', action:()=>{ addOut('Ci pensa la segreteria'); botSay(()=>delegateConcierge(rec)); }});
+    rows.push({ic:'🟠', label:'Apro la partita', desc:'Altri soci chiedono di unirsi, decidi tu', action:()=>{ addOut('Apro la partita'); botSay(()=>openMatchToOthers(rec)); }});
   }
-  addQuick(btns.slice(0,3));
+  addMenu(rows.slice(0,10));
 }
 /* Ramo "Ci pensate voi": delega alla segreteria un'opzione già presa (+10 €). */
 function delegateConcierge(rec){
