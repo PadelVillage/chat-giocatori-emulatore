@@ -345,10 +345,13 @@ function offsetForGiorno(g){ for(let o=0;o<=MAX_GIORNI;o++){ if(dayInfo(o).giorn
    Disdetta = campo liberato, nulla perso (nessun anticipo). Tutto SIMULATO. */
 const MAX_GIORNI=10;             // non si prenota oltre 10 giorni in avanti
 const CONCIERGE_FEE=10;          // € a partita — servizio "organizza la partita" (in segreteria)
+const LEAD_MIN=30;               // anticipo minimo: non prenotabile se manca <30' all'avvio
 function nowMin(){ const n=new Date(); return n.getHours()*60+n.getMinutes(); }
 function courtsFor(off,dow,ora){
   const mins=toMin(ora);
-  if(off===0 && mins<=nowMin()) return {free:0,opt:0,paid:4};   // passato → occupato
+  // Oggi: uno slot sparisce quando è passato O manca meno dell'anticipo minimo
+  // (30') al suo avvio → si può prenotare al massimo fino a 30' prima.
+  if(off===0 && mins<=nowMin()+LEAD_MIN) return {free:0,opt:0,paid:4};
   const k=(off*31+mins)%13;
   if(k===2||k===7) return {free:0,opt:2,paid:2};   // pieno, 2 partite aperte → ARANCIONE
   if(k===5)        return {free:0,opt:4,paid:0};   // pieno, tutte aperte → ARANCIONE
