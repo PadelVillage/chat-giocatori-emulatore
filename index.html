@@ -337,7 +337,7 @@ function offsetForGiorno(g){ for(let o=0;o<=MAX_GIORNI;o++){ if(dayInfo(o).giorn
      ≥1 libero → 'free' (verde) · tutti pieni → 'busy' (occupato, nascosto).
    Disdetta = campo liberato, nulla perso (nessun anticipo). Tutto SIMULATO. */
 const MAX_GIORNI=10;             // non si prenota oltre 10 giorni in avanti
-const CONCIERGE_FEE=10;          // € a partita — servizio "organizza la partita" (in segreteria)
+const CONCIERGE_FEE=5;           // € servizio "organizza la partita": addebitato SOLO sulla quota di chi ha prenotato per primo (l'organizzatore), in segreteria
 const LEAD_MIN=30;               // anticipo minimo: non prenotabile se manca <30' all'avvio
 function nowMin(){ const n=new Date(); return n.getHours()*60+n.getMinutes(); }
 function courtsFor(off,dow,ora){
@@ -394,7 +394,7 @@ function friendName(id){ const f=S.friends.find(x=>x.id===id); return f?f.nome.s
 /* --- Comandi "/" (Commands nativi WhatsApp) e Ice Breakers ----------------- */
 const COMMANDS=[
   {cmd:'/prenota',       desc:'Prenota un campo'},
-  {cmd:'/organizza',     desc:'Fatti organizzare la partita (+10 €)'},
+  {cmd:'/organizza',     desc:'Fatti organizzare la partita (+5 €)'},
   {cmd:'/prenotazioni',  desc:'Le mie prenotazioni'},
   {cmd:'/profilo',       desc:'Il mio profilo'},
   {cmd:'/amici',         desc:'I miei amici'},
@@ -488,7 +488,7 @@ function route(intent,t){
 function showMenu(){
   addMenu([
     {section:'Prenotazioni', ic:'🎾', label:'Prenota un campo', text:'Vorrei prenotare un campo'},
-    {section:'Prenotazioni', ic:'🧑‍💼', label:'Fatti organizzare la partita (+10 €)', action:()=>botSay(doConcierge)},
+    {section:'Prenotazioni', ic:'🧑‍💼', label:'Fatti organizzare la partita (+5 €)', action:()=>botSay(doConcierge)},
     {section:'Prenotazioni', ic:'📅', label:'Le mie prenotazioni', text:'Cosa ho prenotato?'},
     {section:'Account', ic:'👤', label:'Il mio profilo', text:'Il mio profilo'},
     {section:'Account', ic:'👥', label:'I miei amici', text:'I miei amici'},
@@ -499,7 +499,7 @@ function showMenu(){
    (Prenota). List Message ≤10 righe (fedele a WhatsApp). */
 function showMenuAltro(){
   addMenu([
-    {section:'Prenotazioni', ic:'🧑‍💼', label:'Fatti organizzare la partita (+10 €)', action:()=>botSay(doConcierge)},
+    {section:'Prenotazioni', ic:'🧑‍💼', label:'Fatti organizzare la partita (+5 €)', action:()=>botSay(doConcierge)},
     {section:'Prenotazioni', ic:'📅', label:'Le mie prenotazioni', text:'Cosa ho prenotato?'},
     {section:'Account', ic:'👤', label:'Il mio profilo', text:'Il mio profilo'},
     {section:'Account', ic:'👥', label:'I miei amici', text:'I miei amici'},
@@ -554,7 +554,7 @@ function doHelp(t){
     addInHtml('<b>Prezzi</b> 💶<br>Ti diamo sempre il prezzo prima di confermare (a testa e a campo). In questa versione <b>non si paga in chat</b>: prenoti senza versare nulla in anticipo e saldi in circolo.');
     addQuick([{label:'🎾 Prenota un campo',text:'Vorrei prenotare un campo'}]); return; }
   if(/organizz|concierge/.test(t)){
-    addInHtml('<b>Organizza la partita</b> 🧑‍💼<br>Scegli quando vuoi giocare e ai giocatori pensiamo noi: cerchiamo altri soci. Supplemento <b>'+CONCIERGE_FEE+' € a partita</b>, da saldare in segreteria.');
+    addInHtml('<b>Organizza la partita</b> 🧑‍💼<br>Scegli quando vuoi giocare e ai giocatori pensiamo noi: cerchiamo altri soci. Supplemento <b>'+CONCIERGE_FEE+' €</b>, addebitato <b>solo sulla quota di chi ha prenotato per primo</b> (tu), da saldare in segreteria.');
     addQuick([{label:'🧑‍💼 Organizzate voi',action:()=>botSay(doConcierge)}]); return; }
   if(/prenot|campo|dispon|gioc/.test(t)){
     addInHtml('<b>Prenotare</b> 🎾<br>Scegli giorno, momento e orario; opzioni il campo a tuo nome e completi la partita. Ti mostriamo sempre il prezzo.');
@@ -624,10 +624,10 @@ function startBooking(text){
   addInHtml('Ti apriamo il modulo — scegli un giorno e tocca un orario libero. 👇');
   openBookingFlow({giorno:w.giorno,ora:w.ora});
 }
-/* Concierge: la segreteria organizza la partita per te (+10 € in segreteria). */
+/* Concierge: la segreteria organizza la partita per te (+5 € sulla quota di chi prenota per primo, in segreteria). */
 function doConcierge(){
   if(blockIfActiveOption()) return;
-  addInHtml('Con piacere! Scegli quando vuoi giocare: ai giocatori pensiamo noi, cercando altri soci del tuo livello. Il servizio ha un supplemento di <b>'+CONCIERGE_FEE+' € a partita</b>, da saldare in segreteria. 👇');
+  addInHtml('Con piacere! Scegli quando vuoi giocare: ai giocatori pensiamo noi, cercando altri soci del tuo livello. Il servizio ha un supplemento di <b>'+CONCIERGE_FEE+' €</b>, addebitato <b>solo sulla quota di chi ha prenotato per primo</b> (tu), da saldare in segreteria. 👇');
   openBookingFlow({concierge:true});
 }
 function openBookingFlow(prefill){
@@ -639,7 +639,7 @@ function openBookingFlow(prefill){
   if(prefill.giorno){ const m=days.filter(d=>d.giorno===prefill.giorno)[0]; if(m) st.off=m.off; }
   else{ for(let i=0;i<days.length;i++){ if(availSlots(days[i].off,days[i].dow)>0){ st.off=days[i].off; break; } } }
   const body=el('flow');
-  if(concierge){ body.appendChild(el('luce-hint','🧑‍💼 <b>Organizza la partita</b>: scegli quando vuoi giocare, ai giocatori ci pensa la segreteria. Supplemento <b>'+CONCIERGE_FEE+' € a partita</b>, da saldare in segreteria.')); }
+  if(concierge){ body.appendChild(el('luce-hint','🧑‍💼 <b>Organizza la partita</b>: scegli quando vuoi giocare, ai giocatori ci pensa la segreteria. Supplemento <b>'+CONCIERGE_FEE+' €</b>, solo sulla quota di chi prenota per primo, da saldare in segreteria.')); }
   // Passo 1: quando (prossimi 7 giorni con conteggio slot disponibili)
   body.appendChild(fieldLabel('Quando'));
   const dayRow=el('days'); body.appendChild(dayRow);
@@ -726,7 +726,7 @@ function openBookingFlow(prefill){
     sum.className='flow-sum on';
     sum.innerHTML='<b>'+esc(d.giorno)+' · '+st.ora+'–'+addMin(st.ora,dur)+'</b>'
       +(st.concierge
-        ? ('<br>🧑‍💼 Organizza la segreteria · +'+CONCIERGE_FEE+' € a partita'
+        ? ('<br>🧑‍💼 Organizza la segreteria · +'+CONCIERGE_FEE+' € (solo sulla tua quota)'
           +'<br>💶 <b>'+pr.testa+' € a testa</b> · '+pr.campo+' € a campo')
         : ('<br>💶 <b>'+pr.testa+' € a testa</b> · '+pr.campo+' € a campo · '+pr.giocatori+' giocatori'
           +'<br>👥 1/'+target+' confermati (tu)'+(inviti?(' · ✉️ '+inviti+' invit'+(inviti>1?'i':'o')):'')
@@ -793,14 +793,14 @@ function commitOpzione(draft){
 function rosterActionButtons(rec){
   if(rec.concierge){ addQuick([{label:'📅 Le mie prenotazioni',action:()=>botSay(doMie)}]); return; }
   const rows=[{section:'Completa la partita', ic:'👥', label:'Invito i miei amici', desc:'Scegli tu con chi giocare', action:()=>openAddPlayersFlow(rec)}];
-  rows.push({ic:'🧑‍💼', label:'Ci pensa la segreteria', desc:'Troviamo noi i giocatori · +'+CONCIERGE_FEE+' €', action:()=>{ addOut('Ci pensa la segreteria'); botSay(()=>delegateConcierge(rec)); }});
+  rows.push({ic:'🧑‍💼', label:'Ci pensa la segreteria', desc:'Troviamo noi i giocatori · +'+CONCIERGE_FEE+' € solo sulla tua quota', action:()=>{ addOut('Ci pensa la segreteria'); botSay(()=>delegateConcierge(rec)); }});
   addMenu(rows.slice(0,10));
 }
-/* Ramo "Ci pensate voi": delega alla segreteria un'opzione già presa (+10 €). */
+/* Ramo "Ci pensate voi": delega alla segreteria un'opzione già presa (+5 € sulla quota di chi prenota per primo). */
 function delegateConcierge(rec){
   const r=S.prenotazioni.find(x=>x.id===rec.id)||rec;
   if(r.stato!=='opzionato'){ addInHtml('Questa prenotazione non è più in attesa.'); return; }
-  addInHtml('Con piacere! Completiamo noi la partita di <b>'+esc(r.giorno)+' · '+r.ora+'</b> cercando altri soci del tuo livello. Supplemento <b>'+CONCIERGE_FEE+' € a partita</b>, da saldare in segreteria. Confermi?');
+  addInHtml('Con piacere! Completiamo noi la partita di <b>'+esc(r.giorno)+' · '+r.ora+'</b> cercando altri soci del tuo livello. Supplemento <b>'+CONCIERGE_FEE+' €</b>, addebitato <b>solo sulla tua quota</b> (di chi ha prenotato per primo), da saldare in segreteria. Confermi?');
   addQuick([
     {label:'✅ Sì, ci pensate voi',action:()=>{ addOut('Sì, ci pensate voi'); botSay(()=>commitDelegate(r)); }},
     {label:'Torna indietro',action:()=>botSay(()=>rosterActionButtons(r))}
@@ -809,7 +809,7 @@ function delegateConcierge(rec){
 function commitDelegate(r){
   const rr=S.prenotazioni.find(x=>x.id===r.id); if(!rr||rr.stato!=='opzionato'){ addInHtml('Questa prenotazione non è più in attesa.'); return; }
   rr.concierge=true; save();
-  addInHtml('🧑‍💼 <b>Ci pensiamo noi!</b> Cerchiamo gli altri giocatori per '+esc(rr.giorno)+' alle '+rr.ora+' e ti aggiorniamo qui. Il supplemento di <b>'+CONCIERGE_FEE+' €</b> lo salderai in segreteria.',true);
+  addInHtml('🧑‍💼 <b>Ci pensiamo noi!</b> Cerchiamo gli altri giocatori per '+esc(rr.giorno)+' alle '+rr.ora+' e ti aggiorniamo qui. Il supplemento di <b>'+CONCIERGE_FEE+' €</b> (solo sulla tua quota) lo salderai in segreteria.',true);
   setTimeout(()=>{ const x=S.prenotazioni.find(p=>p.id===rr.id); if(!x||x.stato!=='opzionato') return;
     botSay(()=>{ const nomi=['Andrea T.','Marta P.','Giulio S.'].slice(0, rosterPosti(x)); x.amici=(x.amici||[]).concat(nomi); save();
       confirmBooking(x,'🧑‍💼 Partita completata dalla segreteria · +'+CONCIERGE_FEE+' € in segreteria'); }); }, 6000);
@@ -908,7 +908,7 @@ function inviteResponse(r,nm){
   addInHtml('✅ <b>'+esc(nm)+'</b> ha accettato! Ora siete <b>'+rosterFilled(r)+'/'+rosterTarget(r)+'</b>'+(rosterPending(r)?(' · in attesa: '+r.invitati.join(', ')):' · mancano '+rosterPosti(r))+'.',true);
   rosterActionButtons(r);
 }
-/* Concierge: la segreteria organizza la partita (+10 € in segreteria). */
+/* Concierge: la segreteria organizza la partita (+5 € sulla quota di chi prenota per primo, in segreteria). */
 function decideConcierge(draft){
   if(blockIfActiveOption()) return;
   const off=offsetForGiorno(draft.giorno); const fine=addMin(draft.ora,draft.durata);
@@ -919,7 +919,7 @@ function decideConcierge(draft){
   addInHtml('Ci pensiamo noi 💪 Ecco il riepilogo della richiesta:');
   addCard('<b>Organizza la partita</b><br>'+esc(draft.giorno)+' · '+draft.ora+'–'+fine+'<br>Campo '+campo+' · Partita ('+draft.durata+"')"
     +'<br>💶 <b>'+pr.testa+' € a testa</b> · '+pr.campo+' € a campo'
-    +'<br>🧑‍💼 Servizio organizzazione: <b>+'+CONCIERGE_FEE+' € a partita</b> (in segreteria)'
+    +'<br>🧑‍💼 Servizio organizzazione: <b>+'+CONCIERGE_FEE+' €</b> · solo sulla tua quota (in segreteria)'
     +'<br>👥 Ai giocatori pensa la segreteria'
     +'<br>A nome di '+esc(S.player.nome));
   addQuick([
@@ -932,7 +932,7 @@ function commitConcierge(draft){
   const rec={id:++S.seq,giorno:draft.giorno,ora:draft.ora,campo:draft.campo,tipo:draft.tipo,durata:draft.durata,
     target:draft.target||4, amici:[], concierge:true, stato:'opzionato', deadline:optDeadlineMs(off||0,draft.ora), win:rosterWindow(off||0).lbl};
   S.prenotazioni.push(rec); save();
-  addInHtml('🧑‍💼 <b>Richiesta ricevuta!</b> Il campo di '+esc(rec.giorno)+' alle '+rec.ora+' è opzionato a tuo nome. La segreteria cerca gli altri giocatori e ti aggiorna qui. Il supplemento di <b>'+CONCIERGE_FEE+' €</b> lo salderai in segreteria.',true);
+  addInHtml('🧑‍💼 <b>Richiesta ricevuta!</b> Il campo di '+esc(rec.giorno)+' alle '+rec.ora+' è opzionato a tuo nome. La segreteria cerca gli altri giocatori e ti aggiorna qui. Il supplemento di <b>'+CONCIERGE_FEE+' €</b> (solo sulla tua quota) lo salderai in segreteria.',true);
   setTimeout(()=>{ const r=S.prenotazioni.find(x=>x.id===rec.id); if(!r||r.stato!=='opzionato') return;
     botSay(()=>{ const nomi=['Andrea T.','Marta P.','Giulio S.'].slice(0, rosterPosti(r)); r.amici=(r.amici||[]).concat(nomi); save();
       confirmBooking(r,'🧑‍💼 Partita completata dalla segreteria · +'+CONCIERGE_FEE+' € in segreteria'); });
