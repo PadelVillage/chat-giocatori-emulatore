@@ -169,7 +169,7 @@
 const LS_KEY='pmo_emu_state_v5';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.10 · 03/07';
+const APP_BUILD='v0.11 · 03/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -373,6 +373,10 @@ function offsetForGiorno(g){ for(let o=0;o<=MAX_GIORNI;o++){ if(dayInfo(o).giorn
    Disdetta = campo liberato, nulla perso (nessun anticipo). Tutto SIMULATO. */
 const MAX_GIORNI=10;             // non si prenota oltre 10 giorni in avanti
 const CONCIERGE_FEE=5;           // € servizio "organizza la partita": addebitato SOLO sulla quota di chi ha prenotato per primo (l'organizzatore), in segreteria
+/* Nota supplemento — riga unica, riusata ovunque (DRY + copy coerente). WhatsApp:
+   testo semplice, enfasi solo con emoji/grassetto. Niente più parentesi "(di chi
+   ha prenotato per primo)": ridondante e prolissa (l'utente l'ha chiesto). */
+const FEE_LINE='💶 +'+CONCIERGE_FEE+' € solo sulla tua quota, in segreteria.';
 const LEAD_MIN=30;               // anticipo minimo: non prenotabile se manca <30' all'avvio
 function nowMin(){ const n=new Date(); return n.getHours()*60+n.getMinutes(); }
 function courtsFor(off,dow,ora){
@@ -595,7 +599,7 @@ function doHelp(t){
     addInHtml('<b>Prezzi</b> 💶<br>Ti diamo sempre il prezzo prima di confermare (a testa e a campo). In questa versione <b>non si paga in chat</b>: prenoti senza versare nulla in anticipo e saldi in circolo.');
     addQuick([{label:'🎾 Prenota un campo',text:'Vorrei prenotare un campo'}]); return; }
   if(/organizz|concierge/.test(t)){
-    addInHtml('<b>Organizza la partita</b> 🧑‍💼<br>Scegli quando vuoi giocare e agli altri giocatori pensiamo noi. Ti chiediamo se vuoi una partita <b>mista</b> o <b>omogenea</b>. Supplemento <b>'+CONCIERGE_FEE+' €</b>, addebitato <b>solo sulla quota di chi ha prenotato per primo</b> (tu), da saldare in segreteria.');
+    addInHtml('🧑‍💼 <b>Organizza la partita</b><br>Scegli quando giocare, ai giocatori pensiamo noi.<br>Ti chiediamo se la vuoi <b>mista</b> o <b>omogenea</b>.<br>'+FEE_LINE);
     addQuick([{label:'🧑‍💼 Organizzate voi',action:()=>botSay(doConcierge)}]); return; }
   if(/prenot|campo|dispon|gioc/.test(t)){
     addInHtml('<b>Prenotare</b> 🎾<br>Scegli giorno, momento e orario; opzioni il campo a tuo nome e completi la partita. Ti mostriamo sempre il prezzo.');
@@ -668,7 +672,7 @@ function startBooking(text){
 /* Concierge: la segreteria organizza la partita per te (+5 € sulla quota di chi prenota per primo, in segreteria). */
 function doConcierge(){
   if(blockIfActiveOption()) return;
-  addInHtml('Con piacere! Scegli quando vuoi giocare: agli altri giocatori pensiamo noi. Il servizio ha un supplemento di <b>'+CONCIERGE_FEE+' €</b>, addebitato <b>solo sulla quota di chi ha prenotato per primo</b> (tu), da saldare in segreteria. 👇');
+  addInHtml('Ci pensiamo noi 🧑‍💼<br>Scegli quando vuoi giocare, ai giocatori pensiamo noi.<br>'+FEE_LINE+' 👇');
   openBookingFlow({concierge:true});
 }
 function openBookingFlow(prefill){
@@ -680,7 +684,7 @@ function openBookingFlow(prefill){
   if(prefill.giorno){ const m=days.filter(d=>d.giorno===prefill.giorno)[0]; if(m) st.off=m.off; }
   else{ for(let i=0;i<days.length;i++){ if(availSlots(days[i].off,days[i].dow)>0){ st.off=days[i].off; break; } } }
   const body=el('flow');
-  if(concierge){ body.appendChild(el('luce-hint','🧑‍💼 <b>Organizza la partita</b>: scegli quando vuoi giocare, ai giocatori ci pensa la segreteria. Supplemento <b>'+CONCIERGE_FEE+' €</b>, solo sulla quota di chi prenota per primo, da saldare in segreteria.')); }
+  if(concierge){ body.appendChild(el('luce-hint','🧑‍💼 <b>Organizza la partita</b><br>Scegli quando vuoi giocare, ai giocatori pensiamo noi.<br>'+FEE_LINE)); }
   // Passo 1: quando (prossimi 7 giorni con conteggio slot disponibili)
   body.appendChild(fieldLabel('Quando'));
   const dayRow=el('days'); body.appendChild(dayRow);
@@ -765,13 +769,13 @@ function openBookingFlow(prefill){
     const win=rosterWindow(d.off);
     const target=pr.giocatori, inviti=st.amici.length;
     sum.className='flow-sum on';
-    sum.innerHTML='<b>'+esc(d.giorno)+' · '+st.ora+'–'+addMin(st.ora,dur)+'</b>'
+    sum.innerHTML='📅 <b>'+esc(d.giorno)+' · '+st.ora+'–'+addMin(st.ora,dur)+'</b>'
       +(st.concierge
-        ? ('<br>🧑‍💼 Organizza la segreteria · +'+CONCIERGE_FEE+' € (solo sulla tua quota)'
-          +'<br>💶 <b>'+pr.testa+' € a testa</b> · '+pr.campo+' € a campo')
-        : ('<br>💶 <b>'+pr.testa+' € a testa</b> · '+pr.campo+' € a campo · '+pr.giocatori+' giocatori'
-          +'<br>👥 1/'+target+' confermati (tu)'+(inviti?(' · ✉️ '+inviti+' invit'+(inviti>1?'i':'o')):'')
-          +'<br>⚠️ <b>ATTENZIONE:</b> completa la partita (servono 4 giocatori) entro <b>'+win.lbl.toUpperCase()+'</b>, se no il campo <b>torna automaticamente disponibile per altri giocatori</b>'));
+        ? ('<br>💶 <b>'+pr.testa+' € a testa</b> · '+pr.campo+' € a campo'
+          +'<br>🧑‍💼 '+FEE_LINE)
+        : ('<br>💶 <b>'+pr.testa+' € a testa</b> · '+pr.campo+' € a campo'
+          +'<br>👥 1/'+target+' (tu)'+(inviti?(' · ✉️ '+inviti+' invit'+(inviti>1?'i':'o')):'')
+          +'<br>⚠️ Completa entro <b>'+win.lbl.toUpperCase()+'</b>, poi torna libero per altri'));
   }
   openSheet('Prenota un campo', body, 'Scegli giorno, momento e orario');
   renderDays(); renderMomenti(); renderSlots();
@@ -799,12 +803,13 @@ function decideAndPresent(draft){
   const names=(draft.amici||[]).map(friendName).filter(Boolean);   // amici scelti = da INVITARE
   const win=rosterWindow(off||0);
   draft.campo=campo; draft.fine=fine; draft.target=target; draft.names=names;
-  addInHtml('Campo disponibile. Te lo <b>opzioniamo</b> a tuo nome'+(names.length?(' e mandiamo l\'invito a '+names.join(', ')):'')+' — poi hai tempo per completare la partita.');
-  addCard('<b>RIEPILOGO</b><br>'+esc(draft.giorno)+' · '+draft.ora+'–'+fine+'<br>Campo '+campo+' · '+draft.tipo+' ('+draft.durata+"')"
-    +'<br>💶 <b>'+pr.testa+' € a testa</b> · '+pr.campo+' € a campo · '+target+' giocatori'
-    +'<br>👥 1/'+target+' confermati (tu)'+(names.length?('<br>✉️ Inviti: '+names.join(', ')+' (in attesa)'):'')
-    +'<br>⚠️ <b>ATTENZIONE:</b> completa la partita (servono 4 giocatori) entro <b>'+win.lbl.toUpperCase()+'</b>, se no il campo <b>torna automaticamente disponibile per altri giocatori</b>'
-    +'<br>A nome di '+esc(S.player.nome));
+  addInHtml('Campo disponibile ✅<br>Te lo <b>opzioniamo</b> a tuo nome'+(names.length?(', invito a '+names.join(', ')):'')+'.');
+  addCard('<b>RIEPILOGO</b>'
+    +'<br>📅 '+esc(draft.giorno)+' · '+draft.ora+'–'+fine
+    +'<br>📍 Campo '+campo+' · '+draft.tipo+' ('+draft.durata+"')"
+    +'<br>💶 <b>'+pr.testa+' € a testa</b> · '+pr.campo+' € a campo'
+    +'<br>👥 1/'+target+' (tu)'+(names.length?(' · ✉️ invito a '+names.join(', ')):'')
+    +'<br>⚠️ Completa entro <b>'+win.lbl.toUpperCase()+'</b>, poi il campo torna libero per altri');
   addQuick([
     {label:'Procedi',action:()=>{ addOut('Procedi'); botSay(()=>commitOpzione(draft)); }},   // ≤20 char (limite titolo reply-button WhatsApp); poi le 3 scelte per completare
     {label:'Cambia',action:()=>botSay(()=>{ addInHtml('Riapriamo il modulo.'); openBookingFlow(draft); })}
@@ -821,7 +826,10 @@ function commitOpzione(draft){
     deadline:optDeadlineMs(off||0,draft.ora), win:rosterWindow(off||0).lbl};
   S.prenotazioni.push(rec); save();
   const posti=target-1;
-  addInHtml('🟠 <b>Campo opzionato</b> a tuo nome — '+esc(rec.giorno)+' · '+rec.ora+'–'+draft.fine+' · Campo '+rec.campo+'.<br>Sei <b>1/'+target+'</b>: '+(posti>1?'mancano '+posti+' giocatori':'manca 1 giocatore')+'. Hai <b>'+rec.win+'</b> per completare la partita, poi il campo si libera.<br><b>Come vuoi completarla?</b> 👇',true);
+  addInHtml('🟠 <b>Campo opzionato</b> a tuo nome'
+    +'<br>📅 '+esc(rec.giorno)+' · '+rec.ora+'–'+draft.fine+' · Campo '+rec.campo
+    +'<br>👥 Sei <b>1/'+target+'</b> · '+(posti>1?'mancano '+posti:'manca 1')+' · hai <b>'+rec.win+'</b> per completare'
+    +'<br><b>Come vuoi completarla?</b> 👇',true);
   rosterActionButtons(rec);
   if(invited.length) sendInvites(rec, invited);
   scheduleRosterReminders(rec, off||0);
@@ -864,7 +872,7 @@ function delegateConcierge(rec){
   const r=S.prenotazioni.find(x=>x.id===rec.id)||rec;
   if(r.stato==='prenotato'){ addInHtml('Questa partita è già al completo 🎾 — non serve la segreteria.'); return; }
   if(r.concierge){ addInHtml('Ci stiamo già pensando noi 🧑‍💼 — ti avvisiamo qui appena la partita è al completo.'); return; }
-  addInHtml('Con piacere! Completiamo noi la partita di <b>'+esc(r.giorno)+' · '+r.ora+'</b> cercando altri giocatori. Supplemento <b>'+CONCIERGE_FEE+' €</b>, addebitato <b>solo sulla tua quota</b> (di chi ha prenotato per primo), da saldare in segreteria. Confermi?');
+  addInHtml('Ci pensiamo noi 🧑‍💼<br>Completiamo la partita di <b>'+esc(r.giorno)+' · '+r.ora+'</b> cercando altri giocatori.<br>'+FEE_LINE+'<br><b>Confermi?</b>');
   addQuick([
     {label:'✅ Sì, ci pensate voi',action:()=>{ addOut('Sì, ci pensate voi'); botSay(()=>askMatchMix(mix=>commitDelegate(r,mix))); }},
     {label:'Torna indietro',action:()=>botSay(()=>rosterActionButtons(r))}
@@ -883,7 +891,10 @@ function commitDelegate(r,mix){
     S.prenotazioni.push(rr);
   }
   rr.concierge=true; rr.mix=mix; save();
-  addInHtml('🧑‍💼 <b>Ci pensiamo noi!</b> Cerchiamo gli altri giocatori per una <b>partita '+mixPhrase(mix)+'</b> ('+esc(rr.giorno)+' alle '+rr.ora+'). <b>Ti avvisiamo qui appena la partita è al completo.</b> Il supplemento di <b>'+CONCIERGE_FEE+' €</b> (solo sulla tua quota) lo salderai in segreteria.',true);
+  addInHtml('🧑‍💼 <b>Ci pensiamo noi!</b>'
+    +'<br>📅 '+esc(rr.giorno)+' · '+rr.ora+' · partita '+mixPhrase(mix)
+    +'<br>Cerchiamo i giocatori e <b>ti avvisiamo appena è al completo</b>.'
+    +'<br>'+FEE_LINE,true);
   setTimeout(()=>{ const x=S.prenotazioni.find(p=>p.id===rr.id); if(!x||x.stato!=='opzionato') return;
     botSay(()=>{ const nomi=fillerNames(x.mix, rosterPosti(x)); x.amici=(x.amici||[]).concat(nomi); save();
       confirmBooking(x,'🧑‍💼 Partita completata dalla segreteria · +'+CONCIERGE_FEE+' € in segreteria'); }); }, 6000);
@@ -891,7 +902,11 @@ function commitDelegate(r,mix){
 /* Partita al completo → prenotazione confermata. */
 function confirmBooking(rec,extra){
   rec.stato='prenotato'; delete rec.deadline; save();
-  addInHtml('✅ <b>Partita al completo — prenotazione confermata!</b><br>'+esc(rec.giorno)+' · '+rec.ora+' — Campo '+rec.campo+' · in '+rosterTarget(rec)+(rec.amici&&rec.amici.length?('<br>Con: '+rec.amici.join(', ')):'')+(extra?('<br>'+extra):''),true);
+  addInHtml('✅ <b>Prenotazione confermata!</b>'
+    +'<br>📅 '+esc(rec.giorno)+' · '+rec.ora
+    +'<br>📍 Campo '+rec.campo+' · in '+rosterTarget(rec)
+    +(rec.amici&&rec.amici.length?('<br>👥 '+rec.amici.join(', ')):'')
+    +(extra?('<br>'+extra):''),true);
   maybeHint(); addQuick([homeBtn()]);
 }
 /* DISATTIVATO nella demo (vedi scheduleRosterReminders): niente auto-rilascio
@@ -984,12 +999,13 @@ function decideConcierge(draft){
   if(meta && meta.status==='busy'){ addInHtml('A quell\'ora è tutto occupato. Scegli un altro orario. 👇'); openBookingFlow({concierge:true,giorno:draft.giorno}); return; }
   const pr=slotPrezzo(meta,draft.players); const campo=campoLibero(draft.dow,draft.ora);
   draft.campo=campo; draft.fine=fine; draft.target=pr.giocatori;
-  addInHtml('Ci pensiamo noi 💪 Ecco il riepilogo della richiesta:');
-  addCard('<b>Organizza la partita</b><br>'+esc(draft.giorno)+' · '+draft.ora+'–'+fine+'<br>Campo '+campo+' · Partita ('+draft.durata+"')"
+  addInHtml('Ci pensiamo noi 💪 Ecco il riepilogo:');
+  addCard('🧑‍💼 <b>Organizza la partita</b>'
+    +'<br>📅 '+esc(draft.giorno)+' · '+draft.ora+'–'+fine
+    +'<br>📍 Campo '+campo+' · Partita ('+draft.durata+"')"
     +'<br>💶 <b>'+pr.testa+' € a testa</b> · '+pr.campo+' € a campo'
-    +'<br>🧑‍💼 Servizio organizzazione: <b>+'+CONCIERGE_FEE+' €</b> · solo sulla tua quota (in segreteria)'
-    +'<br>👥 Ai giocatori pensa la segreteria'
-    +'<br>A nome di '+esc(S.player.nome));
+    +'<br>👥 Ai giocatori pensiamo noi'
+    +'<br>'+FEE_LINE);
   addQuick([
     {label:'✅ Sì, organizzate voi',action:()=>{ addOut('Sì, organizzate voi'); botSay(()=>askMatchMix(mix=>commitConcierge(draft,mix))); }},
     {label:'Annulla',action:()=>botSay(()=>addInHtml('Nessun problema, richiesta annullata.'))}
@@ -1000,7 +1016,10 @@ function commitConcierge(draft,mix){
   const rec={id:++S.seq,giorno:draft.giorno,ora:draft.ora,campo:draft.campo,tipo:draft.tipo,durata:draft.durata,
     target:draft.target||4, amici:[], concierge:true, mix:mix, stato:'opzionato', deadline:optDeadlineMs(off||0,draft.ora), win:rosterWindow(off||0).lbl};
   S.prenotazioni.push(rec); save();
-  addInHtml('🧑‍💼 <b>Richiesta ricevuta!</b> Il campo di '+esc(rec.giorno)+' alle '+rec.ora+' è opzionato a tuo nome. La segreteria cerca gli altri giocatori per una <b>partita '+mixPhrase(mix)+'</b> e ti aggiorna qui. Il supplemento di <b>'+CONCIERGE_FEE+' €</b> (solo sulla tua quota) lo salderai in segreteria.',true);
+  addInHtml('🧑‍💼 <b>Richiesta ricevuta!</b>'
+    +'<br>📅 '+esc(rec.giorno)+' · '+rec.ora+' · partita '+mixPhrase(mix)
+    +'<br>Campo opzionato a tuo nome. Cerchiamo i giocatori e <b>ti avvisiamo appena è al completo</b>.'
+    +'<br>'+FEE_LINE,true);
   setTimeout(()=>{ const r=S.prenotazioni.find(x=>x.id===rec.id); if(!r||r.stato!=='opzionato') return;
     botSay(()=>{ const nomi=fillerNames(r.mix, rosterPosti(r)); r.amici=(r.amici||[]).concat(nomi); save();
       confirmBooking(r,'🧑‍💼 Partita completata dalla segreteria · +'+CONCIERGE_FEE+' € in segreteria'); });
