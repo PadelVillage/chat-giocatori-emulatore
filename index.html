@@ -829,7 +829,7 @@ function openBookingFlow(prefill){
           +'<br>💶 <b>'+pr.testa+' € a testa</b> · '+pr.campo+' € a campo')
         : ('<br>💶 <b>'+pr.testa+' € a testa</b> · '+pr.campo+' € a campo · '+pr.giocatori+' giocatori'
           +'<br>👥 1/'+target+' confermati (tu)'+(inviti?(' · ✉️ '+inviti+' invit'+(inviti>1?'i':'o')):'')
-          +'<br>⏳ Completa la squadra entro <b>'+win.lbl+'</b>: se no, il campo torna automaticamente disponibile per altri giocatori'
+          +'<br>⚠️ <b>ATTENZIONE:</b> completa la squadra entro <b>'+win.lbl.toUpperCase()+'</b>, se no il campo <b>torna automaticamente disponibile per altri giocatori</b>'
           +'<br>'+(st.aperta?'🤝 Aperta ad altri':'🔒 Privata')));
   }
   openSheet('Prenota un campo', body, 'Scegli giorno, momento e orario');
@@ -870,7 +870,7 @@ function decideAndPresent(draft){
   addCard('<b>Riepilogo</b><br>'+esc(draft.giorno)+' · '+draft.ora+'–'+fine+'<br>Campo '+campo+' · '+draft.tipo+' ('+draft.durata+"')"
     +'<br>💶 <b>'+pr.testa+' € a testa</b> · '+pr.campo+' € a campo · '+target+' giocatori'
     +'<br>👥 1/'+target+' confermati (tu)'+(names.length?('<br>✉️ Inviti: '+names.join(', ')+' (in attesa)'):'')
-    +'<br>⏳ Completa la squadra entro <b>'+win.lbl+'</b>: se no, il campo torna automaticamente disponibile per altri giocatori'
+    +'<br>⚠️ <b>ATTENZIONE:</b> completa la squadra entro <b>'+win.lbl.toUpperCase()+'</b>, se no il campo <b>torna automaticamente disponibile per altri giocatori</b>'
     +'<br>'+(draft.aperta?'🤝 Aperta ad altri giocatori':'🔒 Privata')
     +'<br>A nome di '+esc(S.player.nome));
   addQuick([
