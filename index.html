@@ -329,8 +329,8 @@ function dayInfo(off){ const d=new Date(); d.setDate(d.getDate()+off);
     w: off===0?'oggi':(off===1?'domani':['dom','lun','mar','mer','gio','ven','sab'][d.getDay()]),
     n: String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0') }; }
 function offsetForGiorno(g){ for(let o=0;o<=MAX_GIORNI;o++){ if(dayInfo(o).giorno===g) return o; } return null; }
-/* --- OPZIONE → PRENOTAZIONE (modello senza caparra) -----------------------
-   Prenotare = OPZIONARE il campo (a tuo nome, GRATIS, nessuna caparra). Hai una
+/* --- OPZIONE → PRENOTAZIONE (modello a opzione gratuita) ------------------
+   Prenotare = OPZIONARE il campo (a tuo nome, GRATIS, senza anticipi). Hai una
    finestra legata alla distanza per COMPLETARE LA SQUADRA (gli altri giocatori):
      5–10 gg → 24h · 1–4 gg → 12h · oggi → 1h (mai oltre l'inizio partita).
    · squadra al completo (4, o 2 nella fascia "in due") → ✅ PRENOTATO (auto).
@@ -342,7 +342,7 @@ function offsetForGiorno(g){ for(let o=0;o<=MAX_GIORNI;o++){ if(dayInfo(o).giorn
      ≥1 libero → 'free' (verde) · 0 liberi ma ≥1 con partita aperta → 'opt'
      (arancione: c'è una partita aperta a cui unirsi) · tutti pieni → 'busy'
      (occupato, nascosto).
-   Disdetta = campo liberato, nulla perso (niente caparra). Tutto SIMULATO. */
+   Disdetta = campo liberato, nulla perso (nessun anticipo). Tutto SIMULATO. */
 const MAX_GIORNI=10;             // non si prenota oltre 10 giorni in avanti
 const CONCIERGE_FEE=10;          // € a partita — servizio "organizza la partita" (in segreteria)
 function nowMin(){ const n=new Date(); return n.getHours()*60+n.getMinutes(); }
@@ -456,7 +456,7 @@ function detectIntent(t){
   if(/\b(aiuto|help|guida)\b/.test(t)) return 'aiuto';
   if(/\bcome\s+(si\s+)?(funziona|fa|faccio|posso|uso|usa|prenot|invit|entr|apr|organizz|pag|dispon|complet)/.test(t)) return 'aiuto';
   if(/\bcosa\s+(puoi|sai|posso)\b/.test(t) || /a cosa serv|spiegami|spiega come|non ho capito|come si usa/.test(t)) return 'aiuto';
-  if(/quanto costa|quanto si paga|che prezz|come si paga|serve la caparra|c'è la caparra/.test(t)) return 'aiuto';
+  if(/quanto costa|quanto si paga|che prezz|come si paga|serve un anticipo|serve un acconto/.test(t)) return 'aiuto';
   if(/^altro\b|^altre\b|\baltre funzioni\b|\baltre opzioni\b|\baltro men[uù]\b/.test(t)) return 'altro';
   if(/profil|i miei dati|chi sono/.test(t)) return 'profilo';
   if(/amic|con cui gioc|lista giocator/.test(t)) return 'amici';
@@ -565,8 +565,8 @@ function doHelp(t){
     addQuick([{label:'🤝 Unisciti a una partita',text:'Vorrei unirmi a una partita'}]); return; }
   if(/opzion|complet|scad/.test(t)){
     addInHtml('<b>Opzionato → prenotato</b> 🟠→✅<br>Quando prenoti, il campo è <b>opzionato</b> a tuo nome (gratis): hai un po’ di tempo per completare la squadra. Appena siete al completo diventa <b>prenotato</b>. Se non completi in tempo, il campo torna automaticamente disponibile per altri giocatori.'); return; }
-  if(/cost|prezz|tariff|paga|caparr/.test(t)){
-    addInHtml('<b>Prezzi</b> 💶<br>Ti diamo sempre il prezzo prima di confermare (a testa e a campo). In questa versione <b>non si paga in chat</b> e <b>non c’è caparra</b>: si salda in circolo.');
+  if(/cost|prezz|tariff|paga|anticip|accont|depos/.test(t)){
+    addInHtml('<b>Prezzi</b> 💶<br>Ti diamo sempre il prezzo prima di confermare (a testa e a campo). In questa versione <b>non si paga in chat</b>: prenoti senza versare nulla in anticipo e saldi in circolo.');
     addQuick([{label:'🎾 Prenota un campo',text:'Vorrei prenotare un campo'}]); return; }
   if(/organizz|concierge/.test(t)){
     addInHtml('<b>Organizza la partita</b> 🧑‍💼<br>Scegli quando vuoi giocare e alla squadra pensiamo noi: cerchiamo altri soci. Supplemento <b>'+CONCIERGE_FEE+' € a partita</b>, da saldare in segreteria.');
@@ -623,7 +623,7 @@ function showBookingDetail(id){
 function startCancelOne(p){
   convo={mode:'cancel',step:'confirm',draft:{target:p}};
   const warn = p.concierge ? '<br><span style="color:#8a6d00">Nota: se la segreteria ha già organizzato, il supplemento di '+CONCIERGE_FEE+' € resta dovuto.</span>' : '';
-  addInHtml('Vuoi annullare: '+esc(p.giorno)+' · '+p.ora+' — Campo '+p.campo+'? L’azione è definitiva. Nessuna caparra: non perdi nulla.'+warn);
+  addInHtml('Vuoi annullare: '+esc(p.giorno)+' · '+p.ora+' — Campo '+p.campo+'? L’azione è definitiva: non perdi nulla, il campo torna disponibile per altri.'+warn);
   addQuick([{label:'Sì, annulla',text:'sì',danger:true},{label:'No',text:'no'}]);
 }
 function startModifyOne(p){
@@ -1045,7 +1045,7 @@ function cancelStep(t){
   if(convo.step==='pick'){ const p=matchPren(t); if(!p){ addInHtml('Non ho individuato la prenotazione. Riprova indicando il giorno.'); return; }
     d.target=p; convo.step='confirm';
     const warn = p.concierge ? '<br><span style="color:#8a6d00">Nota: se la segreteria ha già organizzato la partita, il supplemento di '+CONCIERGE_FEE+' € resta dovuto.</span>' : '';
-    addInHtml('Vuoi annullare: '+esc(p.giorno)+' · '+p.ora+' — Campo '+p.campo+' · '+p.tipo+'? L’azione è definitiva. Nessuna caparra: non perdi nulla.'+warn);
+    addInHtml('Vuoi annullare: '+esc(p.giorno)+' · '+p.ora+' — Campo '+p.campo+' · '+p.tipo+'? L’azione è definitiva: non perdi nulla, il campo torna disponibile per altri.'+warn);
     addQuick([{label:'Sì, annulla',text:'sì',danger:true},{label:'No',text:'no'}]); return; }
   if(convo.step==='confirm'){
     if(/^s[iì]|conferm|annulla/.test(t.toLowerCase())){ const p=d.target; S.prenotazioni=S.prenotazioni.filter(x=>x.id!==p.id); save();
