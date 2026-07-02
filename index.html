@@ -805,7 +805,8 @@ function rosterActionButtons(rec){
 /* Ramo "Ci pensate voi": delega alla segreteria un'opzione già presa (+5 € sulla quota di chi prenota per primo). */
 function delegateConcierge(rec){
   const r=S.prenotazioni.find(x=>x.id===rec.id)||rec;
-  if(r.stato!=='opzionato'){ addInHtml('Questa prenotazione non è più in attesa.'); return; }
+  if(r.stato==='prenotato'){ addInHtml('Questa partita è già al completo 🎾 — non serve la segreteria.'); return; }
+  if(r.concierge){ addInHtml('Ci stiamo già pensando noi 🧑‍💼 — ti avvisiamo qui appena la partita è al completo.'); return; }
   addInHtml('Con piacere! Completiamo noi la partita di <b>'+esc(r.giorno)+' · '+r.ora+'</b> cercando altri soci del tuo livello. Supplemento <b>'+CONCIERGE_FEE+' €</b>, addebitato <b>solo sulla tua quota</b> (di chi ha prenotato per primo), da saldare in segreteria. Confermi?');
   addQuick([
     {label:'✅ Sì, ci pensate voi',action:()=>{ addOut('Sì, ci pensate voi'); botSay(()=>commitDelegate(r)); }},
@@ -813,9 +814,19 @@ function delegateConcierge(rec){
   ]);
 }
 function commitDelegate(r){
-  const rr=S.prenotazioni.find(x=>x.id===r.id); if(!rr||rr.stato!=='opzionato'){ addInHtml('Questa prenotazione non è più in attesa.'); return; }
+  let rr=S.prenotazioni.find(x=>x.id===r.id);
+  if(rr && rr.stato==='prenotato'){ addInHtml('Questa partita è già al completo 🎾 — non serve la segreteria.'); return; }
+  // Se nel frattempo l'opzione è scaduta (nella demo il timer di rilascio è
+  // accelerato), la RI-OPZIONIAMO: delegare = garanzia della segreteria, il
+  // campo va ri-tenuto. Nel prodotto reale la finestra è di ore → non capita.
+  if(!rr){
+    const off=offsetForGiorno(r.giorno);
+    rr={id:++S.seq,giorno:r.giorno,ora:r.ora,campo:r.campo,tipo:r.tipo||'Partita',durata:r.durata||90,
+      target:r.target||4, amici:[], stato:'opzionato', deadline:optDeadlineMs(off||0,r.ora), win:rosterWindow(off||0).lbl};
+    S.prenotazioni.push(rr);
+  }
   rr.concierge=true; save();
-  addInHtml('🧑‍💼 <b>Ci pensiamo noi!</b> Cerchiamo gli altri giocatori per '+esc(rr.giorno)+' alle '+rr.ora+' e ti aggiorniamo qui. Il supplemento di <b>'+CONCIERGE_FEE+' €</b> (solo sulla tua quota) lo salderai in segreteria.',true);
+  addInHtml('🧑‍💼 <b>Ci pensiamo noi!</b> Cerchiamo gli altri giocatori per '+esc(rr.giorno)+' alle '+rr.ora+'. <b>Ti avvisiamo qui appena la partita è al completo.</b> Il supplemento di <b>'+CONCIERGE_FEE+' €</b> (solo sulla tua quota) lo salderai in segreteria.',true);
   setTimeout(()=>{ const x=S.prenotazioni.find(p=>p.id===rr.id); if(!x||x.stato!=='opzionato') return;
     botSay(()=>{ const nomi=['Andrea T.','Marta P.','Giulio S.'].slice(0, rosterPosti(x)); x.amici=(x.amici||[]).concat(nomi); save();
       confirmBooking(x,'🧑‍💼 Partita completata dalla segreteria · +'+CONCIERGE_FEE+' € in segreteria'); }); }, 6000);
