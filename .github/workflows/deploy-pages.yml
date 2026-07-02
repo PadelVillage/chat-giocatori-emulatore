@@ -5,8 +5,18 @@
 # RESILIENZA: il passo finale di GitHub Pages (actions/deploy-pages) ogni tanto
 # fallisce con un errore transitorio ("Deployment failed, try again later" — è un
 # backend condiviso best-effort, fuori dal controllo del runner). Per questo lo
-# ripetiamo fino a 3 volte con pause crescenti. L'UPLOAD dell'artefatto resta UNO
-# solo (ripeterlo creerebbe artefatti doppi → "Multiple artifacts... count is 2").
+# ripetiamo fino a 4 volte con pause crescenti (30s→60s→90s ≈ 3 min di finestra):
+# i blip sono FREQUENTI e a grappolo, e un re-run manuale ~2-3 min dopo va sempre a
+# buon fine → serve coprire quella finestra, non ritentare tutto in ~1 min. L'UPLOAD
+# dell'artefatto resta UNO solo (ripeterlo creerebbe artefatti doppi → "Multiple
+# artifacts... count is 2").
+#
+# ⚠️ NOTA sul gating (per non riscambiarlo per un bug): ogni tentativo ha
+# `continue-on-error: true`, quindi se FALLISCE mostra comunque un ✓ verde nella UI
+# (conclusion=success) MA il suo `outcome` resta `failure`. Il retry è gated su
+# `outcome`, non su conclusion: perciò "tentativo 2" parte SOLO se il tentativo 1 è
+# davvero fallito (✓ verde ≠ successo reale). Gli step "Esito tentativo N" loggano
+# l'outcome reale per rendere leggibile questa distinzione.
 name: Deploy static content to Pages
 
 on:
@@ -28,7 +38,7 @@ jobs:
   deploy:
     environment:
       name: github-pages
-      url: ${{ steps.dep1.outputs.page_url || steps.dep2.outputs.page_url || steps.dep3.outputs.page_url }}
+      url: ${{ steps.dep1.outputs.page_url || steps.dep2.outputs.page_url || steps.dep3.outputs.page_url || steps.dep4.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -41,22 +51,43 @@ jobs:
           path: '.'          # sito statico: tutta la root (index.html + .nojekyll)
 
       # --- Deploy con retry (solo questo passo, artefatto già caricato una volta) ---
-      - name: Deploy to GitHub Pages (tentativo 1)
+      # I tentativi 1→3 hanno `continue-on-error: true` per poter passare al retry;
+      # il 4° (finale) NO, così un fallimento persistente fa fallire davvero il job.
+      - name: Deploy to GitHub Pages (tentativo 1/4)
         id: dep1
         continue-on-error: true
         uses: actions/deploy-pages@v4
+      - name: Esito tentativo 1
+        run: echo "tentativo 1 → outcome=${{ steps.dep1.outcome }}"
+
       - name: Pausa prima del 2° tentativo
         if: steps.dep1.outcome == 'failure'
-        run: sleep 20
-      - name: Deploy to GitHub Pages (tentativo 2)
+        run: sleep 30
+      - name: Deploy to GitHub Pages (tentativo 2/4)
         id: dep2
         if: steps.dep1.outcome == 'failure'
         continue-on-error: true
         uses: actions/deploy-pages@v4
+      - name: Esito tentativo 2
+        if: steps.dep1.outcome == 'failure'
+        run: echo "tentativo 2 → outcome=${{ steps.dep2.outcome }}"
+
       - name: Pausa prima del 3° tentativo
         if: steps.dep1.outcome == 'failure' && steps.dep2.outcome == 'failure'
-        run: sleep 40
-      - name: Deploy to GitHub Pages (tentativo 3, finale)
+        run: sleep 60
+      - name: Deploy to GitHub Pages (tentativo 3/4)
         id: dep3
         if: steps.dep1.outcome == 'failure' && steps.dep2.outcome == 'failure'
+        continue-on-error: true
+        uses: actions/deploy-pages@v4
+      - name: Esito tentativo 3
+        if: steps.dep1.outcome == 'failure' && steps.dep2.outcome == 'failure'
+        run: echo "tentativo 3 → outcome=${{ steps.dep3.outcome }}"
+
+      - name: Pausa prima del 4° tentativo
+        if: steps.dep1.outcome == 'failure' && steps.dep2.outcome == 'failure' && steps.dep3.outcome == 'failure'
+        run: sleep 90
+      - name: Deploy to GitHub Pages (tentativo 4/4, finale)
+        id: dep4
+        if: steps.dep1.outcome == 'failure' && steps.dep2.outcome == 'failure' && steps.dep3.outcome == 'failure'
         uses: actions/deploy-pages@v4
