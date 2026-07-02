@@ -858,7 +858,7 @@ function decideAndPresent(draft){
     +'<br>'+(draft.aperta?'🟠 <b>Partita aperta</b> · altri soci possono chiedere di unirsi (li approvi tu)':'🔒 <b>Partita privata</b>')
     +'<br>A nome di '+esc(S.player.nome));
   addQuick([
-    {label:'Procedi',action:()=>{ addOut('Procedi'); botSay(()=>commitOpzione(draft)); }},   // ≤20 char (limite titolo reply-button WhatsApp); poi le 3 scelte per completare
+    {label:'Procedi e opziona',action:()=>{ addOut('Procedi e opziona'); botSay(()=>commitOpzione(draft)); }},   // 17 char (≤20 limite titolo reply-button WhatsApp); poi le 3 scelte per completare
     {label:'Cambia',action:()=>botSay(()=>{ addInHtml('Riapriamo il modulo.'); openBookingFlow(draft); })}
   ]);
 }
