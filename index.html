@@ -166,6 +166,7 @@ const LS_KEY='pmo_emu_state_v5';
 function demoState(){
   return {
     player:{ nome:'Marco Aprea', numero:'+39 333 123 4567', socio:true, livello:'4.0', inRegola:true,
+             genere:'M',   // dal dato anagrafica: serve alla domanda concierge "mista o omogenea" (F = donna)
              borselloCent:2400, ultimoMov:'ricarica € 20 il 28/06' },
     /* suWhatsApp = ha dato l'opt-in al canale → invitabile con un template.
        Chi non ce l'ha (Giulia) è mostrato come voce disabilitata (enabled:false
@@ -560,7 +561,7 @@ function doHelp(t){
     addInHtml('<b>Prezzi</b> 💶<br>Ti diamo sempre il prezzo prima di confermare (a testa e a campo). In questa versione <b>non si paga in chat</b>: prenoti senza versare nulla in anticipo e saldi in circolo.');
     addQuick([{label:'🎾 Prenota un campo',text:'Vorrei prenotare un campo'}]); return; }
   if(/organizz|concierge/.test(t)){
-    addInHtml('<b>Organizza la partita</b> 🧑‍💼<br>Scegli quando vuoi giocare e ai giocatori pensiamo noi: cerchiamo altri soci. Supplemento <b>'+CONCIERGE_FEE+' €</b>, addebitato <b>solo sulla quota di chi ha prenotato per primo</b> (tu), da saldare in segreteria.');
+    addInHtml('<b>Organizza la partita</b> 🧑‍💼<br>Scegli quando vuoi giocare e agli altri giocatori pensiamo noi. Ti chiediamo se vuoi una partita <b>mista</b> o <b>omogenea</b>. Supplemento <b>'+CONCIERGE_FEE+' €</b>, addebitato <b>solo sulla quota di chi ha prenotato per primo</b> (tu), da saldare in segreteria.');
     addQuick([{label:'🧑‍💼 Organizzate voi',action:()=>botSay(doConcierge)}]); return; }
   if(/prenot|campo|dispon|gioc/.test(t)){
     addInHtml('<b>Prenotare</b> 🎾<br>Scegli giorno, momento e orario; opzioni il campo a tuo nome e completi la partita. Ti mostriamo sempre il prezzo.');
@@ -580,7 +581,7 @@ function doDisponibilita(t){
 /* ---------- Le mie prenotazioni -------------------------------------------- */
 function statoPren(p){
   if(p.stato==='prenotato') return '✅ Prenotato · partita al completo';
-  if(p.concierge) return '🧑‍💼 In organizzazione dalla segreteria (+'+CONCIERGE_FEE+' €)';   // esente da rilascio automatico
+  if(p.concierge) return '🧑‍💼 In organizzazione dalla segreteria (+'+CONCIERGE_FEE+' €)'+(p.mix?(' · partita '+mixPhrase(p.mix)):'');   // esente da rilascio automatico
   const rem=(p.deadline||0)-Date.now();
   if(rem<=0) return '⚪️ Opzione scaduta · campo liberato';
   const win=p.win||rosterWindow(offsetForGiorno(p.giorno)||0).lbl;
@@ -633,7 +634,7 @@ function startBooking(text){
 /* Concierge: la segreteria organizza la partita per te (+5 € sulla quota di chi prenota per primo, in segreteria). */
 function doConcierge(){
   if(blockIfActiveOption()) return;
-  addInHtml('Con piacere! Scegli quando vuoi giocare: ai giocatori pensiamo noi, cercando altri soci del tuo livello. Il servizio ha un supplemento di <b>'+CONCIERGE_FEE+' €</b>, addebitato <b>solo sulla quota di chi ha prenotato per primo</b> (tu), da saldare in segreteria. 👇');
+  addInHtml('Con piacere! Scegli quando vuoi giocare: agli altri giocatori pensiamo noi. Il servizio ha un supplemento di <b>'+CONCIERGE_FEE+' €</b>, addebitato <b>solo sulla quota di chi ha prenotato per primo</b> (tu), da saldare in segreteria. 👇');
   openBookingFlow({concierge:true});
 }
 function openBookingFlow(prefill){
@@ -803,17 +804,39 @@ function rosterActionButtons(rec){
   addMenu(rows.slice(0,10));
 }
 /* Ramo "Ci pensate voi": delega alla segreteria un'opzione già presa (+5 € sulla quota di chi prenota per primo). */
+/* ---------- Preferenza partita: MISTA o OMOGENEA (solo concierge) -----------
+   Quando organizza la SEGRETERIA le chiediamo se vuole una partita mista
+   (uomini e donne) o omogenea (stesso genere di chi prenota). La domanda si
+   adatta al genere del richiedente (dato reale = anagrafica socio). */
+function isDonna(){ return String(S.player.genere||'M').toUpperCase()==='F'; }
+function omogeneaLbl(){ return isDonna() ? 'Solo donne' : 'Solo uomini'; }               // ≤20 char (titolo reply-button)
+function mixPhrase(mix){ return mix==='mista' ? 'mista' : (isDonna() ? 'tra sole donne' : 'tra soli uomini'); }
+function fillerNames(mix, n){
+  const uomini=['Andrea T.','Giulio S.','Marco V.','Luca P.'];
+  const donne =['Marta P.','Elena R.','Sara L.','Chiara B.'];
+  const misti =['Andrea T.','Marta P.','Giulio S.','Elena R.'];
+  const pool = mix==='omogenea' ? (isDonna()?donne:uomini) : misti;
+  return pool.slice(0, n);
+}
+/* Chiede mista/omogenea, poi chiama done(mix). 2 reply-button (fedele WA). */
+function askMatchMix(done){
+  addInHtml('Perfetto. Un\'ultima cosa: preferisci una partita <b>mista</b> (uomini e donne) o <b>omogenea</b> ('+(isDonna()?'sole donne':'soli uomini')+')?');
+  addQuick([
+    {label:'👫 Mista',action:()=>{ addOut('Mista'); botSay(()=>done('mista')); }},
+    {label:(isDonna()?'👩 ':'👨 ')+omogeneaLbl(),action:()=>{ addOut(omogeneaLbl()); botSay(()=>done('omogenea')); }}
+  ]);
+}
 function delegateConcierge(rec){
   const r=S.prenotazioni.find(x=>x.id===rec.id)||rec;
   if(r.stato==='prenotato'){ addInHtml('Questa partita è già al completo 🎾 — non serve la segreteria.'); return; }
   if(r.concierge){ addInHtml('Ci stiamo già pensando noi 🧑‍💼 — ti avvisiamo qui appena la partita è al completo.'); return; }
-  addInHtml('Con piacere! Completiamo noi la partita di <b>'+esc(r.giorno)+' · '+r.ora+'</b> cercando altri soci del tuo livello. Supplemento <b>'+CONCIERGE_FEE+' €</b>, addebitato <b>solo sulla tua quota</b> (di chi ha prenotato per primo), da saldare in segreteria. Confermi?');
+  addInHtml('Con piacere! Completiamo noi la partita di <b>'+esc(r.giorno)+' · '+r.ora+'</b> cercando altri giocatori. Supplemento <b>'+CONCIERGE_FEE+' €</b>, addebitato <b>solo sulla tua quota</b> (di chi ha prenotato per primo), da saldare in segreteria. Confermi?');
   addQuick([
-    {label:'✅ Sì, ci pensate voi',action:()=>{ addOut('Sì, ci pensate voi'); botSay(()=>commitDelegate(r)); }},
+    {label:'✅ Sì, ci pensate voi',action:()=>{ addOut('Sì, ci pensate voi'); botSay(()=>askMatchMix(mix=>commitDelegate(r,mix))); }},
     {label:'Torna indietro',action:()=>botSay(()=>rosterActionButtons(r))}
   ]);
 }
-function commitDelegate(r){
+function commitDelegate(r,mix){
   let rr=S.prenotazioni.find(x=>x.id===r.id);
   if(rr && rr.stato==='prenotato'){ addInHtml('Questa partita è già al completo 🎾 — non serve la segreteria.'); return; }
   // Se nel frattempo l'opzione è scaduta (nella demo il timer di rilascio è
@@ -825,10 +848,10 @@ function commitDelegate(r){
       target:r.target||4, amici:[], stato:'opzionato', deadline:optDeadlineMs(off||0,r.ora), win:rosterWindow(off||0).lbl};
     S.prenotazioni.push(rr);
   }
-  rr.concierge=true; save();
-  addInHtml('🧑‍💼 <b>Ci pensiamo noi!</b> Cerchiamo gli altri giocatori per '+esc(rr.giorno)+' alle '+rr.ora+'. <b>Ti avvisiamo qui appena la partita è al completo.</b> Il supplemento di <b>'+CONCIERGE_FEE+' €</b> (solo sulla tua quota) lo salderai in segreteria.',true);
+  rr.concierge=true; rr.mix=mix; save();
+  addInHtml('🧑‍💼 <b>Ci pensiamo noi!</b> Cerchiamo gli altri giocatori per una <b>partita '+mixPhrase(mix)+'</b> ('+esc(rr.giorno)+' alle '+rr.ora+'). <b>Ti avvisiamo qui appena la partita è al completo.</b> Il supplemento di <b>'+CONCIERGE_FEE+' €</b> (solo sulla tua quota) lo salderai in segreteria.',true);
   setTimeout(()=>{ const x=S.prenotazioni.find(p=>p.id===rr.id); if(!x||x.stato!=='opzionato') return;
-    botSay(()=>{ const nomi=['Andrea T.','Marta P.','Giulio S.'].slice(0, rosterPosti(x)); x.amici=(x.amici||[]).concat(nomi); save();
+    botSay(()=>{ const nomi=fillerNames(x.mix, rosterPosti(x)); x.amici=(x.amici||[]).concat(nomi); save();
       confirmBooking(x,'🧑‍💼 Partita completata dalla segreteria · +'+CONCIERGE_FEE+' € in segreteria'); }); }, 6000);
 }
 /* Partita al completo → prenotazione confermata. */
@@ -893,13 +916,12 @@ function openAddPlayersFlow(rec){
    (nella finestra 1h solo l'ultima). Demo: tempi scalati a pochi secondi.
    Su WhatsApp vero sono GRATIS perché dentro la finestra 24h. */
 function scheduleRosterReminders(rec, off){
-  const single = off===0;
-  const gen = rec.gen||0;   // se la prenotazione viene spostata (modify) o delegata, gen/concierge cambiano e questi timer diventano inerti
-  const alive=()=>{ const r=S.prenotazioni.find(x=>x.id===rec.id); return (r && r.stato==='opzionato' && (r.gen||0)===gen && rosterPosti(r)>0 && !r.concierge) ? r : null; };
-  const fire=(kind)=>{ const r=alive(); if(r) botSay(()=>rosterReminderMsg(r,kind)); };
-  if(!single) setTimeout(()=>fire('half'), 6000);
-  setTimeout(()=>fire('last'), single?6000:12000);
-  setTimeout(()=>{ const r=alive(); if(r) expireOption(r); }, single?9000:15000);
+  /* DISATTIVATO nella demo: la raffica di promemoria + "tempo scaduto"
+     interrompeva il walkthrough (l'opzione scadeva mentre navighi). Il concetto
+     "se non completi la partita il campo torna disponibile" resta nella copy del
+     RIEPILOGO e in statoPren; l'auto-rilascio è una regola del prodotto (finestra
+     di ore reali), qui NON simulata a tempo. expireOption/rosterReminderMsg
+     restano definite ma non più chiamate automaticamente. */
 }
 function rosterReminderMsg(r,kind){
   if(kind==='last') addInHtml('⏳ <b>Ultima chiamata</b>: mancano ancora '+rosterPosti(r)+' giocator'+(rosterPosti(r)>1?'i':'e')+' per '+esc(r.giorno)+' alle '+r.ora+'. Completa a breve, altrimenti il campo torna disponibile per altri.');
@@ -940,18 +962,18 @@ function decideConcierge(draft){
     +'<br>👥 Ai giocatori pensa la segreteria'
     +'<br>A nome di '+esc(S.player.nome));
   addQuick([
-    {label:'✅ Sì, organizzate voi',action:()=>{ addOut('Sì, organizzate voi'); botSay(()=>commitConcierge(draft)); }},
+    {label:'✅ Sì, organizzate voi',action:()=>{ addOut('Sì, organizzate voi'); botSay(()=>askMatchMix(mix=>commitConcierge(draft,mix))); }},
     {label:'Annulla',action:()=>botSay(()=>addInHtml('Nessun problema, richiesta annullata.'))}
   ]);
 }
-function commitConcierge(draft){
+function commitConcierge(draft,mix){
   const off=offsetForGiorno(draft.giorno);
   const rec={id:++S.seq,giorno:draft.giorno,ora:draft.ora,campo:draft.campo,tipo:draft.tipo,durata:draft.durata,
-    target:draft.target||4, amici:[], concierge:true, stato:'opzionato', deadline:optDeadlineMs(off||0,draft.ora), win:rosterWindow(off||0).lbl};
+    target:draft.target||4, amici:[], concierge:true, mix:mix, stato:'opzionato', deadline:optDeadlineMs(off||0,draft.ora), win:rosterWindow(off||0).lbl};
   S.prenotazioni.push(rec); save();
-  addInHtml('🧑‍💼 <b>Richiesta ricevuta!</b> Il campo di '+esc(rec.giorno)+' alle '+rec.ora+' è opzionato a tuo nome. La segreteria cerca gli altri giocatori e ti aggiorna qui. Il supplemento di <b>'+CONCIERGE_FEE+' €</b> (solo sulla tua quota) lo salderai in segreteria.',true);
+  addInHtml('🧑‍💼 <b>Richiesta ricevuta!</b> Il campo di '+esc(rec.giorno)+' alle '+rec.ora+' è opzionato a tuo nome. La segreteria cerca gli altri giocatori per una <b>partita '+mixPhrase(mix)+'</b> e ti aggiorna qui. Il supplemento di <b>'+CONCIERGE_FEE+' €</b> (solo sulla tua quota) lo salderai in segreteria.',true);
   setTimeout(()=>{ const r=S.prenotazioni.find(x=>x.id===rec.id); if(!r||r.stato!=='opzionato') return;
-    botSay(()=>{ const nomi=['Andrea T.','Marta P.','Giulio S.'].slice(0, rosterPosti(r)); r.amici=(r.amici||[]).concat(nomi); save();
+    botSay(()=>{ const nomi=fillerNames(r.mix, rosterPosti(r)); r.amici=(r.amici||[]).concat(nomi); save();
       confirmBooking(r,'🧑‍💼 Partita completata dalla segreteria · +'+CONCIERGE_FEE+' € in segreteria'); });
   }, 6000);
 }
