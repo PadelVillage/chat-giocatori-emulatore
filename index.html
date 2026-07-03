@@ -193,7 +193,7 @@
 const LS_KEY='pmo_emu_state_v7';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.35 · 03/07';
+const APP_BUILD='v0.36 · 03/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -589,11 +589,11 @@ function maybeHint(){ _hintN++; if(_hintN%2===0) addSys('Suggerimento: digita "/
 function showIceBreakers(){
   const wrap=el('ice');
   /* 2 Ice Breakers (Meta: max 4, no emoji, solo 1° contatto): il flusso
-     principale + "Altro", che apre il menu con le restanti funzioni.
-     Su WhatsApp reale l'Ice Breaker invia un testo predefinito → "Altro"
-     invia "Altro" e il routing mostra un List Message con le altre voci. */
+     principale + "Vedi il menu". Su WhatsApp reale l'Ice Breaker invia un testo
+     predefinito → "Vedi il menu" invia "Vedi il menu" e il routing risponde con
+     un List Message ("Ecco il menu 👇" + pulsante ☰ Menu → le voci nello sheet). */
   [['Prenota un campo','Vorrei prenotare un campo'],
-   ['Altro','Altro']].forEach(x=>{
+   ['Vedi il menu','Vedi il menu']].forEach(x=>{
     const b=document.createElement('button'); b.className='ice-b'; b.textContent=x[0];
     b.onclick=()=>{ wrap.remove(); sendUser(x[1]); };
     wrap.appendChild(b);
@@ -618,7 +618,7 @@ function detectIntent(t){
   if(/\bcome\s+(si\s+)?(funziona|fa|faccio|posso|uso|usa|prenot|invit|entr|apr|organizz|pag|dispon|complet)/.test(t)) return 'aiuto';
   if(/\bcosa\s+(puoi|sai|posso)\b/.test(t) || /a cosa serv|spiegami|spiega come|non ho capito|come si usa/.test(t)) return 'aiuto';
   if(/quanto costa|quanto si paga|che prezz|come si paga|serve un anticipo|serve un acconto/.test(t)) return 'aiuto';
-  if(/^altro\b|^altre\b|\baltre funzioni\b|\baltre opzioni\b|\baltro men[uù]\b/.test(t)) return 'altro';
+  if(/^altro\b|^altre\b|\baltre funzioni\b|\baltre opzioni\b|\baltro men[uù]\b|vedi il men[uù]/.test(t)) return 'altro';
   if(/profil|i miei dati|chi sono/.test(t)) return 'profilo';
   if(/amic|con cui gioc|lista giocator/.test(t)) return 'amici';
   if(/borsell|saldo|credito|monedero|portafogl/.test(t)) return 'borsellino';
@@ -642,7 +642,7 @@ function sendUser(text,silent){
 function route(intent,t){
   switch(intent){
     case 'saluto': showMenu('Ciao '+esc(S.player.nome.split(' ')[0])+', come possiamo aiutarti? 👇'); break;
-    case 'altro': showMenuAltro('Certo, ecco cos\'altro possiamo fare per te 👇'); break;
+    case 'altro': showMenuAltro('Ecco il menu 👇'); break;
     case 'profilo': doProfilo(); break;
     case 'amici': doAmici(); break;
     case 'borsellino': doBorsellino(); break;
