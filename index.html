@@ -53,6 +53,7 @@
   .menu{align-self:flex-start;width:min(92%,340px);background:#fff;border-radius:9px;border-top-left-radius:2px;overflow:hidden;
     box-shadow:0 1px 1px rgba(0,0,0,.06);flex:0 0 auto}
   .menu-head{font-size:11px;letter-spacing:.5px;text-transform:uppercase;color:var(--muted);padding:10px 12px 3px;font-weight:600}
+  .menu-body{font-size:13.5px;color:var(--ink);padding:11px 12px 9px;line-height:1.4}   /* corpo del List Message (testo sopra le voci) */
   .menu-row{display:flex;align-items:center;gap:10px;padding:11px 12px;border-top:1px solid #f0f3f4;cursor:pointer}
   .menu-row:active{background:#f4f7f8}
   .menu-ic{width:24px;text-align:center;font-size:16px}
@@ -178,7 +179,7 @@
 const LS_KEY='pmo_emu_state_v6';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.21 · 03/07';
+const APP_BUILD='v0.22 · 03/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -259,8 +260,9 @@ function addQuick(btns){
     wrap.appendChild(btn); });
   chat.appendChild(wrap); scrollDown();
 }
-function addMenu(rows){
+function addMenu(rows, opts){
   const m=el('menu'); let cur=null;
+  if(opts&&opts.body){ const b=el('menu-body'); b.innerHTML=opts.body; m.appendChild(b); }   // corpo del List Message
   rows.forEach(r=>{
     if(r.section && r.section!==cur){ cur=r.section; const h=el('menu-head'); h.textContent=r.section; m.appendChild(h); }
     const row=el('menu-row','<span class="menu-ic">'+(r.ic||'•')+'</span><span class="menu-lb"><span class="menu-lb-t">'+esc(r.label)+'</span>'+(r.desc?'<span class="menu-lb-d">'+esc(r.desc)+'</span>':'')+'</span><span class="menu-ch">›</span>');
@@ -973,29 +975,33 @@ function commitOpzione(draft){
     target:target, amici:[], invitati:invited.slice(), stato:'opzionato',
     deadline:optDeadlineMs(off||0,draft.ora), win:rosterWindow(off||0).lbl};
   S.prenotazioni.push(rec); save();
-  const posti=target-1;
   const fine=draft.fine||addMin(rec.ora,rec.durata);
   const priceLine=(draft.prezzoTesta!=null)?('<br>💶 <b>'+draft.prezzoTesta+' € a testa</b> · '+draft.prezzoCampo+' € a campo'):'';
+  // Card 1 = RICEVUTA pulita (cosa hai preso). Lo stato roster + "come
+  // completare" vive nella card 2 (corpo del List Message), dove stanno le scelte.
   addInHtml('🟠 <b>Campo opzionato</b> a tuo nome'
     +'<br>📅 '+esc(rec.giorno)+' · '+rec.ora+'–'+fine+' · Campo '+rec.campo
     +priceLine
-    +'<br>👥 Sei <b>1/'+target+'</b> · '+(posti>1?'mancano '+posti:'manca 1')+' · hai <b>'+rec.win+'</b> per completare'
-    +(invited.length?('<br>✉️ Invito a '+invited.join(', ')):'')
-    +'<br><b>Come vuoi completarla?</b> 👇',true);
+    +(invited.length?('<br>✉️ Invito a '+invited.join(', ')):''),true);
   rosterActionButtons(rec);
   if(invited.length) sendInvites(rec, invited);
   scheduleRosterReminders(rec, off||0);
 }
 /* FASE 2 — come completare la partita (dopo l'opzione). LIST MESSAGE WhatsApp:
-   ogni riga = titolo (≤24 char) + descrizione (≤72 char), così ogni scelta si
-   spiega da sola (i reply-button non hanno descrizione). Se è delegata alla
-   segreteria non servono azioni sui posti.
+   il CORPO della lista porta lo stato roster + la domanda (così la ricevuta — card
+   1 — resta pulita e non si ripete "completa"); ogni riga = titolo (≤24 char) +
+   descrizione (≤72 char), così ogni scelta si spiega da sola (i reply-button non
+   hanno descrizione). Se è delegata alla segreteria non servono azioni sui posti.
    Annulla/aspetta = da "Le mie prenotazioni". */
 function rosterActionButtons(rec){
   if(rec.concierge){ addQuick([{label:'📅 Le mie prenotazioni',action:()=>botSay(doMie)}]); return; }
-  const rows=[{section:'Completa la partita', ic:'👥', label:'Invito i miei amici', desc:'Scegli tu con chi giocare', action:()=>openAddPlayersFlow(rec)}];
+  const posti=rosterPosti(rec);
+  const body='👥 Sei <b>'+rosterFilled(rec)+'/'+rosterTarget(rec)+'</b> · '
+    +(posti>1?'mancano <b>'+posti+'</b> giocatori':'manca <b>1</b> giocatore')
+    +' · hai <b>'+rec.win+'</b> per completare.<br><b>Come vuoi completarla?</b> 👇';
+  const rows=[{ic:'👥', label:'Invito i miei amici', desc:'Scegli tu con chi giocare', action:()=>openAddPlayersFlow(rec)}];
   rows.push({ic:'🧑‍💼', label:'Ci pensa la segreteria', desc:'Troviamo noi i giocatori · +'+CONCIERGE_FEE+' € solo sulla tua quota', action:()=>{ addOut('Ci pensa la segreteria'); botSay(()=>delegateConcierge(rec)); }});
-  addMenu(rows.slice(0,10));
+  addMenu(rows.slice(0,10), {body:body});
 }
 /* Ramo "Ci pensate voi": delega alla segreteria un'opzione già presa (+5 € sulla quota di chi prenota per primo). */
 /* ---------- Preferenza partita: MISTA o OMOGENEA (solo concierge) -----------
