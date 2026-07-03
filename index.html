@@ -191,7 +191,7 @@
 const LS_KEY='pmo_emu_state_v7';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.30 · 03/07';
+const APP_BUILD='v0.31 · 03/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -427,7 +427,7 @@ const CONCIERGE_FEE=5;           // € servizio "organizza la partita": addebit
 /* Nota supplemento — riga unica, riusata ovunque (DRY + copy coerente). WhatsApp:
    testo semplice, enfasi solo con emoji/grassetto. Niente più parentesi "(di chi
    ha prenotato per primo)": ridondante e prolissa (l'utente l'ha chiesto). */
-const FEE_LINE='💶 +'+CONCIERGE_FEE+' € solo sulla tua quota, in segreteria.';
+const FEE_LINE='💶 +'+CONCIERGE_FEE+' € solo sulla tua quota, da pagare in segreteria.';
 /* Numero WhatsApp Business del circolo (demo) — usato nei link wa.me d'invito. */
 const CLUB_WA='393510001234';
 /* Rubrica finta del giocatore: simula il selettore contatti nativo di WhatsApp
@@ -839,7 +839,7 @@ function showBookingDetail(id){
    del testo → enfasi con emoji 💶 + grassetto. */
 function conciergeCancelNote(p){
   if(p && p.concierge && p.stato==='prenotato')
-    return '<br>💶 La segreteria ha <b>già completato</b> la partita: il supplemento di <b>'+CONCIERGE_FEE+' €</b> resta dovuto, in segreteria.';
+    return '<br>💶 La segreteria ha <b>già completato</b> la partita: il supplemento di <b>'+CONCIERGE_FEE+' €</b> resta dovuto, da pagare in segreteria.';
   return '';
 }
 /* Annulla/Modifica su una prenotazione specifica (riusa cancelStep/modifyStep). */
@@ -1129,7 +1129,7 @@ function commitDelegate(r,mix){
     +'<br>'+FEE_LINE,true);
   setTimeout(()=>{ const x=S.prenotazioni.find(p=>p.id===rr.id); if(!x||x.stato!=='opzionato') return;
     botSay(()=>{ const nomi=fillerNames(x.mix, rosterPosti(x)); x.amici=(x.amici||[]).concat(nomi); save();
-      confirmBooking(x,'🧑‍💼 Partita completata dalla segreteria · +'+CONCIERGE_FEE+' € in segreteria'); }); }, 6000);
+      confirmBooking(x,'🧑‍💼 Partita completata dalla segreteria · +'+CONCIERGE_FEE+' € da pagare in segreteria'); }); }, 6000);
 }
 /* Partita al completo → prenotazione confermata. */
 function confirmBooking(rec,extra){
@@ -1287,7 +1287,7 @@ function commitConcierge(draft,mix){
     +'<br>'+FEE_LINE,true);
   setTimeout(()=>{ const r=S.prenotazioni.find(x=>x.id===rec.id); if(!r||r.stato!=='opzionato') return;
     botSay(()=>{ const nomi=fillerNames(r.mix, rosterPosti(r)); r.amici=(r.amici||[]).concat(nomi); save();
-      confirmBooking(r,'🧑‍💼 Partita completata dalla segreteria · +'+CONCIERGE_FEE+' € in segreteria'); });
+      confirmBooking(r,'🧑‍💼 Partita completata dalla segreteria · +'+CONCIERGE_FEE+' € da pagare in segreteria'); });
   }, 6000);
 }
 
