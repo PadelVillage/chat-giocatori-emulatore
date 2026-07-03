@@ -179,7 +179,7 @@
 const LS_KEY='pmo_emu_state_v6';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.22 · 03/07';
+const APP_BUILD='v0.23 · 03/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -437,7 +437,7 @@ function rosterPending(rec){ return (rec.invitati&&rec.invitati.length)||0; } //
 function activeOption(){ return S.prenotazioni.find(p=>p.stato==='opzionato' && (p.deadline||0)>Date.now()); }
 function blockIfActiveOption(){ const a=activeOption(); if(!a) return false;
   addInHtml('Hai già un campo in attesa di completamento: <b>'+esc(a.giorno)+' · '+a.ora+'</b>. Completa la partita o lascialo scadere prima di prenotarne un altro.');
-  addQuick([{label:'📅 Vedi la mia opzione',action:()=>botSay(doMie)}]); return true; }
+  addQuick([{label:'📅 Vedi la mia prenotazione',action:()=>botSay(doMie)}]); return true; }
 /* --- TUTELA NO-SHOW (strike / blocco soft) --------------------------------
    Niente caparra e niente pagamento in chat → su un no-show il circolo non ha
    appiglio economico. Modello scelto con l'utente = STRIKE / BLOCCO SOFT:
@@ -728,7 +728,7 @@ function doHelp(t){
     addInHtml('<b>Invitare gli amici</b> 👥<br>Da “Completa la partita” selezioni i tuoi amici (soci): ricevono un messaggio con <b>✅ Confermo / ❌ Non posso</b> e, <b>appena confermano, entrano in partita</b>. Chi non è ancora sul nostro canale non è invitabile (prima deve scriverci). In partita solo giocatori iscritti — niente ospiti.');
     addQuick([{label:'🎾 Prenota un campo',text:'Vorrei prenotare un campo'}]); return; }
   if(/opzion|complet|scad/.test(t)){
-    addInHtml('<b>Opzionato → prenotato</b> 🟠→✅<br>Quando prenoti, il campo è <b>opzionato</b> a tuo nome (gratis): hai un po’ di tempo per completare la partita. Appena siete al completo diventa <b>prenotato</b>. Se non completi in tempo, il campo torna automaticamente disponibile per altri giocatori.'); addQuick([homeBtn()]); return; }
+    addInHtml('<b>Come funziona</b> 🎾<br>Quando prenoti, il campo è <b>tenuto a tuo nome</b> (gratis): hai un po’ di tempo per <b>completare la partita</b> (inviti gli amici o ci pensa la segreteria). Appena siete al completo è <b>confermata</b>. Se non completi in tempo, il campo torna disponibile per altri giocatori.'); addQuick([homeBtn()]); return; }
   if(/cost|prezz|tariff|paga|anticip|accont|depos/.test(t)){
     addInHtml('<b>Prezzi</b> 💶<br>Ti diamo sempre il prezzo prima di confermare (a testa e a campo). In questa versione <b>non si paga in chat</b>: prenoti senza versare nulla in anticipo e saldi in circolo.');
     addQuick([{label:'🎾 Prenota un campo',text:'Vorrei prenotare un campo'}]); return; }
@@ -736,7 +736,7 @@ function doHelp(t){
     addInHtml('🧑‍💼 <b>Organizza la partita</b><br>Scegli quando giocare, ai giocatori pensiamo noi.<br>Ti chiediamo se la vuoi <b>mista</b> o <b>omogenea</b>.<br>'+FEE_LINE);
     addQuick([{label:'🧑‍💼 Organizzate voi',action:()=>botSay(doConcierge)}]); return; }
   if(/prenot|campo|dispon|gioc/.test(t)){
-    addInHtml('<b>Prenotare</b> 🎾<br>Scegli giorno, momento e orario; opzioni il campo a tuo nome e completi la partita. Ti mostriamo sempre il prezzo.');
+    addInHtml('<b>Prenotare</b> 🎾<br>Scegli giorno, momento e orario; prenoti il campo a tuo nome e completi la partita. Ti mostriamo sempre il prezzo.');
     addQuick([{label:'🎾 Prenota un campo',text:'Vorrei prenotare un campo'}]); return; }
   // guida generale (List Message)
   addInHtml('Ecco cosa posso fare per te — scrivimi con parole tue oppure tocca una voce 👇');
@@ -752,12 +752,15 @@ function doDisponibilita(t){
 
 /* ---------- Le mie prenotazioni -------------------------------------------- */
 function statoPren(p){
+  // Terminologia utente: SEMPRE "prenotato" (mai "opzionato" — gergo). Lo stato
+  // interno resta 'opzionato' (incompleto) vs 'prenotato' (al completo): sono due
+  // valori distinti in codice, ma all'utente diciamo "prenotato · da completare".
   if(p.stato==='prenotato') return '✅ Prenotato · partita al completo';
   if(p.concierge) return '🧑‍💼 In organizzazione dalla segreteria (+'+CONCIERGE_FEE+' €)'+(p.mix?(' · partita '+mixPhrase(p.mix)):'');   // esente da rilascio automatico
   const rem=(p.deadline||0)-Date.now();
-  if(rem<=0) return '⚪️ Opzione scaduta · campo liberato';
+  if(rem<=0) return '⚪️ Prenotazione scaduta · campo liberato';
   const win=p.win||rosterWindow(offsetForGiorno(p.giorno)||0).lbl;
-  return '🟠 Opzionato · '+rosterFilled(p)+'/'+rosterTarget(p)+' confermati'+(rosterPending(p)?(' · in attesa: '+p.invitati.join(', ')):'')+' · completa entro '+win;
+  return '🟠 Prenotato · da completare '+rosterFilled(p)+'/'+rosterTarget(p)+(rosterPending(p)?(' · in attesa: '+p.invitati.join(', ')):'')+' · entro '+win;
 }
 /* Le mie prenotazioni: LISTA (List Message ≤10) → tocca → DETTAGLIO con ≤3
    azioni. Pattern fedele a WhatsApp (niente valanga di reply-buttons). */
@@ -979,7 +982,7 @@ function commitOpzione(draft){
   const priceLine=(draft.prezzoTesta!=null)?('<br>💶 <b>'+draft.prezzoTesta+' € a testa</b> · '+draft.prezzoCampo+' € a campo'):'';
   // Card 1 = RICEVUTA pulita (cosa hai preso). Lo stato roster + "come
   // completare" vive nella card 2 (corpo del List Message), dove stanno le scelte.
-  addInHtml('🟠 <b>Campo opzionato</b> a tuo nome'
+  addInHtml('🟠 <b>Campo prenotato</b> a tuo nome'
     +'<br>📅 '+esc(rec.giorno)+' · '+rec.ora+'–'+fine+' · Campo '+rec.campo
     +priceLine
     +(invited.length?('<br>✉️ Invito a '+invited.join(', ')):''),true);
@@ -1001,6 +1004,8 @@ function rosterActionButtons(rec){
     +' · hai <b>'+rec.win+'</b> per completare.<br><b>Come vuoi completarla?</b> 👇';
   const rows=[{ic:'👥', label:'Invito i miei amici', desc:'Scegli tu con chi giocare', action:()=>openAddPlayersFlow(rec)}];
   rows.push({ic:'🧑‍💼', label:'Ci pensa la segreteria', desc:'Troviamo noi i giocatori · +'+CONCIERGE_FEE+' € solo sulla tua quota', action:()=>{ addOut('Ci pensa la segreteria'); botSay(()=>delegateConcierge(rec)); }});
+  // Sezione separata: modificare la prenotazione in questa fase (cambia giorno/orario).
+  rows.push({section:'Oppure', ic:'✏️', label:'Modifica la prenotazione', desc:'Cambia giorno o orario', action:()=>{ addOut('Modifica la prenotazione'); botSay(()=>startModifyOne(rec)); }});
   addMenu(rows.slice(0,10), {body:body});
 }
 /* Ramo "Ci pensate voi": delega alla segreteria un'opzione già presa (+5 € sulla quota di chi prenota per primo). */
@@ -1175,7 +1180,7 @@ function commitConcierge(draft,mix){
   S.prenotazioni.push(rec); save();
   addInHtml('🧑‍💼 <b>Richiesta ricevuta!</b>'
     +'<br>📅 '+esc(rec.giorno)+' · '+rec.ora+' · partita '+mixPhrase(mix)
-    +'<br>Campo opzionato a tuo nome. Cerchiamo i giocatori e <b>ti avvisiamo appena è al completo</b>.'
+    +'<br>Campo prenotato a tuo nome. Cerchiamo i giocatori e <b>ti avvisiamo appena è al completo</b>.'
     +'<br>'+FEE_LINE,true);
   setTimeout(()=>{ const r=S.prenotazioni.find(x=>x.id===rec.id); if(!r||r.stato!=='opzionato') return;
     botSay(()=>{ const nomi=fillerNames(r.mix, rosterPosti(r)); r.amici=(r.amici||[]).concat(nomi); save();
@@ -1220,16 +1225,17 @@ function modifyStep(t){
     if(w.giorno) rec.giorno=w.giorno; rec.ora=w.ora;
     // Se ancora OPZIONATA (non delegata), la finestra di rilascio dipende dalla
     // distanza dal giorno → va ricalcolata e i timer riarmati; gen++ rende inerti i vecchi.
-    let extra='';
+    let reshow=false;
     if(rec.stato==='opzionato' && !rec.concierge){
       const noff=offsetForGiorno(rec.giorno)||0;
       rec.gen=(rec.gen||0)+1; rec.deadline=optDeadlineMs(noff,rec.ora); rec.win=rosterWindow(noff).lbl;
       save(); scheduleRosterReminders(rec, noff);
-      extra=' Hai <b>'+rec.win+'</b> per completare la partita, altrimenti il campo torna disponibile per altri.';
+      reshow=true;   // ancora da completare → riproponiamo le scelte (il corpo lista ridice "hai X per completare")
     } else save();
-    addInHtml('Aggiornata. '+esc(rec.giorno)+' — Campo '+rec.campo+' ora alle '+w.ora+' (prima '+old+').'+extra,true);
-    maybeHint(); addQuick([homeBtn()]);
+    addInHtml('✅ Aggiornata: '+esc(rec.giorno)+' · '+w.ora+' — Campo '+rec.campo+' (prima '+old+').',true);
     resetConvo();
+    if(reshow){ botSay(()=>rosterActionButtons(rec)); }
+    else { maybeHint(); addQuick([homeBtn()]); }
   }
 }
 function matchPren(t){
@@ -1247,7 +1253,7 @@ function boot(){
   try{ console.log('Emulatore Padel Village — build', APP_BUILD); }catch(e){}
   hideCmdPop(); _hintN=0;
   addSys('Suggerimento: digita "/" per i comandi rapidi in ogni momento');
-  botSay(()=>{ addInHtml('Ciao '+esc(S.player.nome.split(' ')[0])+', hai contattato la segreteria di Padel Village. Come possiamo aiutarti? Tocca un\'opzione qui sotto o scrivici pure.'); showIceBreakers(); },500);
+  botSay(()=>{ addInHtml('Ciao '+esc(S.player.nome.split(' ')[0])+', hai contattato la segreteria di Padel Village. Come possiamo aiutarti? Tocca una voce qui sotto o scrivici pure.'); showIceBreakers(); },500);
 }
 /* Composer stile WhatsApp/staff: la freccia d'INVIO ↑ appare solo quando c'è testo
    (dopo aver scritto o dettato); il mic 🎤 resta sempre visibile alla sua sinistra. */
