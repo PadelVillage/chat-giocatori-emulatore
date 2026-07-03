@@ -175,7 +175,7 @@
 const LS_KEY='pmo_emu_state_v6';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.18 · 03/07';
+const APP_BUILD='v0.19 · 03/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -1159,8 +1159,11 @@ function boot(){
   addSys('Suggerimento: digita "/" per i comandi rapidi in ogni momento');
   botSay(()=>{ addInHtml('Ciao '+esc(S.player.nome.split(' ')[0])+', hai contattato la segreteria di Padel Village. Come possiamo aiutarti? Tocca un\'opzione qui sotto o scrivici pure.'); showIceBreakers(); },500);
 }
-document.getElementById('bar').addEventListener('submit',e=>{ e.preventDefault(); const f=document.getElementById('field'); const v=f.value.trim(); hideCmdPop(); if(!v) return; f.value=''; sendUser(v); });
-field.addEventListener('input',()=>{ const v=field.value; if(v.charAt(0)==='/') showCmdPop(v.trim()); else hideCmdPop(); });
+/* Composer stile WhatsApp/staff: la freccia d'INVIO ↑ appare solo quando c'è testo
+   (dopo aver scritto o dettato); il mic 🎤 resta sempre visibile alla sua sinistra. */
+function toggleComposer(){ const send=document.getElementById('send'); if(!send) return; send.style.display=(field.value&&field.value.trim())?'':'none'; }
+document.getElementById('bar').addEventListener('submit',e=>{ e.preventDefault(); const f=document.getElementById('field'); const v=f.value.trim(); hideCmdPop(); if(!v) return; f.value=''; sendUser(v); toggleComposer(); });
+field.addEventListener('input',()=>{ const v=field.value; if(v.charAt(0)==='/') showCmdPop(v.trim()); else hideCmdPop(); toggleComposer(); });
 document.getElementById('resetBtn').addEventListener('click',()=>{ resetDemo(); boot(); });
 document.getElementById('emojiBtn').addEventListener('click',()=>toast('Solo demo 🙂'));
 document.getElementById('clipBtn').addEventListener('click',()=>toast('Allegati: solo demo'));
@@ -1198,6 +1201,7 @@ document.getElementById('clipBtn').addEventListener('click',()=>toast('Allegati:
     try{ rec.start(); dictating=true; micBtn.classList.add('recording'); field.focus(); }catch(e){ stopUI(); }
   });
 })();
+toggleComposer();   // stato iniziale: campo vuoto → freccia d'invio nascosta, solo il mic
 boot();
 </script>
 </body>
