@@ -193,7 +193,7 @@
 const LS_KEY='pmo_emu_state_v7';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.34 · 03/07';
+const APP_BUILD='v0.35 · 03/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -566,7 +566,6 @@ function friendName(id){ const f=S.friends.find(x=>x.id===id); return f?f.nome.s
 const COMMANDS=[
   {cmd:'/menu',          desc:'Torna al menu principale'},
   {cmd:'/prenota',       desc:'Prenota un campo'},
-  {cmd:'/organizza',     desc:'Fatti organizzare la partita (+5 €)'},
   {cmd:'/prenotazioni',  desc:'Le mie prenotazioni'},
   {cmd:'/profilo',       desc:'Il mio profilo'},
   {cmd:'/amici',         desc:'I miei amici'},
@@ -607,7 +606,6 @@ function detectIntent(t){
   t=t.toLowerCase();
   if(t[0]==='/'){
     if(/^\/aiuto/.test(t)) return 'aiuto';
-    if(/^\/organizza/.test(t)) return 'concierge';
     if(/^\/prenotazioni/.test(t)) return 'mie';
     if(/^\/prenota/.test(t)) return 'prenota';
     if(/^\/profilo/.test(t)) return 'profilo';
@@ -628,8 +626,10 @@ function detectIntent(t){
   if(/cosa ho|mie prenotaz|le mie|prenotazioni/.test(t)) return 'mie';
   if(/annull|disdet|cancell/.test(t)) return 'annulla';
   if(/modific|spost|cambia orario/.test(t)) return 'modifica';
-  if(/organizz|fatemi la (squadra|partita)|trovate voi|pensateci voi|concierge/.test(t)) return 'concierge';
-  if(/prenot|campo|partita|lezione|gioc/.test(t)) return 'prenota';
+  // "organizza/concierge" NON è più un ingresso standalone (opzione A): il concierge
+  // esiste solo DOPO aver preso il campo (schermata "Completa la partita"). Le frasi
+  // tipo "organizzatemi la partita" cadono su 'prenota' → prima prendi lo slot.
+  if(/prenot|campo|partita|lezione|gioc|organizz|trovate voi|pensateci voi/.test(t)) return 'prenota';
   if(/ciao|salve|buongiorno|buonasera|ehi|hey|menu/.test(t)) return 'saluto';
   return 'fallback';
 }
@@ -649,7 +649,6 @@ function route(intent,t){
     case 'disponibilita': doDisponibilita(t); break;
     case 'mie': doMie(); break;
     case 'aiuto': doHelp(t); break;
-    case 'concierge': doConcierge(); break;
     case 'annulla': startCancel(); break;
     case 'modifica': startModify(); break;
     case 'prenota': startBooking(t); break;
@@ -671,24 +670,27 @@ function accountRows(){
     {section:'Account', ic:'💶', label:'Il mio borsellino', desc:'Saldo e ultimo movimento', text:'Saldo borsellino'}
   ];
 }
+/* Voci del menu — IDENTICHE nel menu principale e in "Altro" (scelta utente).
+   NIENTE "Organizza la partita" qui: il concierge non è un'azione a sé, è il modo
+   in cui CHIUDI la partita dopo aver preso il campo → vive nella schermata
+   "Completa la partita → Ci pensa la segreteria". (vedi decisione concierge). */
+function menuRows(){
+  return [
+    {section:'Prenotazioni', ic:'🎾', label:'Prenota un campo', desc:'Scegli giorno e orario', text:'Vorrei prenotare un campo'},
+    {section:'Prenotazioni', ic:'📅', label:'Le mie prenotazioni', desc:'Vedi, modifica o disdici', text:'Cosa ho prenotato?'}
+  ].concat(accountRows());
+}
 /* Menu principale = List Message fedele: UNA card (corpo=body) + UN pulsante
    "☰ Menu" → le voci (titolo+descrizione) in una schermata a comparsa. */
 function showMenu(body){
-  addListMessage({ body: body||'Ecco cosa possiamo fare per te 👇', button:'Menu', title:'Cosa possiamo fare', rows:[
-    {section:'Prenotazioni', ic:'🎾', label:'Prenota un campo', desc:'Scegli giorno e orario', text:'Vorrei prenotare un campo'},
-    {section:'Prenotazioni', ic:'🧑‍💼', label:'Organizza la partita', desc:'Ai giocatori pensiamo noi · +5 € sulla tua quota', action:()=>botSay(doConcierge)},
-    {section:'Prenotazioni', ic:'📅', label:'Le mie prenotazioni', desc:'Vedi, modifica o disdici', text:'Cosa ho prenotato?'}
-  ].concat(accountRows()) });
+  addListMessage({ body: body||'Ecco cosa possiamo fare per te 👇', button:'Menu', title:'Cosa possiamo fare', rows: menuRows() });
 }
-/* Menu "Altro": le funzioni diverse dall'Ice Breaker già in prima schermata
-   (Prenota). Stesso List Message fedele. */
+/* Menu "Altro" = STESSE voci del menu principale (scelta utente); niente "Come funziona".
+   Il pulsante della List dice "Menu" (non "Altro"): così, dopo l'Ice Breaker "Altro",
+   compare "☰ Menu" da aprire — non la stessa parola due volte. Titolo sheet = come il
+   menu principale (il contenuto è identico). Fedeltà WA: la List si apre col suo pulsante. */
 function showMenuAltro(body){
-  addListMessage({ body: body||'Ecco cos\'altro possiamo fare per te 👇', button:'Altro', title:'Altro', rows:[
-    {section:'Prenotazioni', ic:'🧑‍💼', label:'Organizza la partita', desc:'Ai giocatori pensiamo noi · +5 € sulla tua quota', action:()=>botSay(doConcierge)},
-    {section:'Prenotazioni', ic:'📅', label:'Le mie prenotazioni', desc:'Vedi, modifica o disdici', text:'Cosa ho prenotato?'}
-  ].concat(accountRows(), [
-    {section:'Aiuto', ic:'❓', label:'Come funziona', desc:'Domande frequenti e aiuto', action:()=>botSay(()=>doHelp(''))}
-  ]) });
+  addListMessage({ body: body||'Ecco cos\'altro possiamo fare per te 👇', button:'Menu', title:'Cosa possiamo fare', rows: menuRows() });
 }
 
 /* ---------- Profilo -------------------------------------------------------- */
@@ -779,8 +781,8 @@ function doHelp(t){
     addInHtml('<b>Prezzi</b> 💶<br>Ti diamo sempre il prezzo <b>a testa</b> prima di confermare. In questa versione <b>non si paga in chat</b>: prenoti senza versare nulla in anticipo e saldi in circolo.');
     addQuick([{label:'🎾 Prenota un campo',text:'Vorrei prenotare un campo'}]); return; }
   if(/organizz|concierge/.test(t)){
-    addInHtml('🧑‍💼 <b>Organizza la partita</b><br>Scegli quando giocare, ai giocatori pensiamo noi.<br>Ti chiediamo se la vuoi <b>mista</b> o <b>omogenea</b>.<br>'+FEE_LINE);
-    addQuick([{label:'🧑‍💼 Organizzate voi',action:()=>botSay(doConcierge)}]); return; }
+    addInHtml('🧑‍💼 <b>Ci pensa la segreteria</b><br>Prima <b>prenoti un campo</b>, poi — nella schermata <b>Completa la partita</b> — puoi delegarci di trovare i giocatori. Ti chiediamo se la vuoi <b>mista</b> o <b>omogenea</b>.<br>'+FEE_LINE);
+    addQuick([{label:'🎾 Prenota un campo',text:'Vorrei prenotare un campo'}]); return; }
   if(/prenot|campo|dispon|gioc/.test(t)){
     addInHtml('<b>Prenotare</b> 🎾<br>Scegli giorno, momento e orario; prenoti il campo a tuo nome e completi la partita. Ti mostriamo sempre il prezzo.');
     addQuick([{label:'🎾 Prenota un campo',text:'Vorrei prenotare un campo'}]); return; }
@@ -867,7 +869,10 @@ function startBooking(text){
   addInHtml('Ti apriamo il modulo — scegli un giorno e tocca un orario libero. 👇');
   openBookingFlow({giorno:w.giorno,ora:w.ora});
 }
-/* Concierge: la segreteria organizza la partita per te (+5 € sulla quota di chi prenota per primo, in segreteria). */
+/* ⚠️ CONCIERGE STANDALONE — NON più cablato (opzione A, scelta utente 03/07): nessun
+   comando/intent/menu lo raggiunge. Il concierge esiste SOLO come completamento
+   DOPO la prenotazione (delegateConcierge, schermata "Completa la partita"). Funzione
+   e ramo `openBookingFlow({concierge:true})` tenuti per riferimento, non invocati. */
 function doConcierge(){
   if(blockIfNoShow()) return;                              // prenotazioni sospese (tutela no-show)
   if(blockIfActiveOption()) return;
