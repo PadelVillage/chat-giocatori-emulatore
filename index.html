@@ -193,7 +193,7 @@
 const LS_KEY='pmo_emu_state_v7';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.37 · 04/07';
+const APP_BUILD='v0.38 · 04/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -745,7 +745,7 @@ function openContactPicker(ctx){
 function normNum(n){ return (n||'').replace(/\D/g,''); }
 function isGiaAmico(entry){ return S.friends.some(f=>normNum(f.numero)===normNum(entry.numero)); }
 /* Ritorno al modulo "Completa la partita" dopo un'aggiunta al volo (se ctx.backTo). */
-function backToRoster(ctx){ if(!ctx||!ctx.backTo) return null; return ()=>{ const rr=S.prenotazioni.find(x=>x.id===ctx.backTo); if(rr) openAddPlayersFlow(rr); else homeMenu(); }; }
+function backToRoster(ctx){ if(!ctx||!ctx.backTo) return null; return ()=>{ const rr=S.prenotazioni.find(x=>x.id===ctx.backTo); if(rr) botSay(()=>addFlowLaunch('Torniamo al modulo — spunta gli amici che giocano con te. 👇', ()=>openAddPlayersFlow(rr))); else homeMenu(); }; }
 /* Il giocatore ha condiviso un contatto → 3 rami secondo l'anagrafica. */
 function shareContact(entry, ctx){
   const back=backToRoster(ctx);
@@ -838,7 +838,7 @@ function showBookingDetail(id){
     +'<br>'+statoPren(p));
   const btns=[];
   if(p.stato==='opzionato' && (p.deadline||0)-Date.now()>0){
-    btns.push({label:'👥 Invito gli amici',action:()=>openAddPlayersFlow(p)});
+    btns.push({label:'👥 Invito gli amici',action:()=>{ addOut('Invito gli amici'); botSay(()=>addFlowLaunch('Apriamo il modulo — spunta gli amici che giocano con te. 👇', ()=>openAddPlayersFlow(p))); }});
     if(!p.concierge) btns.push({label:'🧑‍💼 Ci pensa la segreteria',action:()=>{ addOut('Ci pensa la segreteria'); botSay(()=>delegateConcierge(p)); }});
     btns.push({label:'🗑️ Annulla',action:()=>startCancelOne(p),danger:true});
   } else {
@@ -1101,7 +1101,7 @@ function rosterActionButtons(rec, opts){
       +' · hai <b>'+rec.win+'</b> per completare la partita';
   // Le voci (con descrizione) vivono NELLA SCHERMATA che apre il pulsante (fedele a WA).
   const rows=[
-    {section:'Completa la partita', ic:'👥', label:'Invito i miei amici', desc:rosterPending(rec)?('Invita o revoca · '+rosterPending(rec)+' in attesa'):'Scegli tu con chi giocare', action:()=>openAddPlayersFlow(rec)},
+    {section:'Completa la partita', ic:'👥', label:'Invito i miei amici', desc:rosterPending(rec)?('Invita o revoca · '+rosterPending(rec)+' in attesa'):'Scegli tu con chi giocare', action:()=>botSay(()=>addFlowLaunch('Apriamo il modulo — spunta gli amici che giocano con te. 👇', ()=>openAddPlayersFlow(rec)))},
     {ic:'🧑‍💼', label:'Ci pensa la segreteria', desc:'Troviamo noi i giocatori · +'+CONCIERGE_FEE+' € solo sulla tua quota', action:()=>botSay(()=>delegateConcierge(rec))},
     {section:'Oppure', ic:'✏️', label:'Modifica la prenotazione', desc:'Cambia giorno o orario', action:()=>botSay(()=>{ addFlowLaunch('Riapriamo il modulo — scegli di nuovo giorno e orario. 👇', ()=>openBookingFlow({editId:rec.id, giorno:rec.giorno, ora:rec.ora})); })}
   ];
