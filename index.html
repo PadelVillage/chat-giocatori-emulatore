@@ -49,6 +49,9 @@
   .qr .qbtn:first-child{border-top:0}
   .qbtn.danger{color:#c0392b}
   .qbtn:active{background:#f2f5f6}
+  /* Reply-button "spesi": dopo il tap restano in cronologia ma inerti (fedele WA) */
+  .qr.spent .qbtn{color:#8696a0;cursor:default;pointer-events:none}
+  .qr.spent .qbtn.danger{color:#b09a9a}
   /* Menu a lista (list message) */
   .menu{align-self:flex-start;width:min(92%,340px);background:#fff;border-radius:9px;border-top-left-radius:2px;overflow:hidden;
     box-shadow:0 1px 1px rgba(0,0,0,.06);flex:0 0 auto}
@@ -184,7 +187,7 @@
 const LS_KEY='pmo_emu_state_v7';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.28 · 03/07';
+const APP_BUILD='v0.29 · 03/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -264,8 +267,12 @@ function addInHtml(html,ticks){ const e=el('in', html+'<span class="meta">'+now(
 function addCard(html){ chat.appendChild(el('card',html)); scrollDown(); }
 function addQuick(btns){
   const wrap=el('qr');
+  let spent=false;
   btns.forEach(b=>{ const btn=document.createElement('button'); btn.className='qbtn'+(b.danger?' danger':''); btn.textContent=b.label;
-    btn.onclick=()=>{ wrap.remove(); if(b.action) b.action(); else sendUser(b.text!=null?b.text:b.label,b.silent); };
+    // Fedele a WhatsApp: dopo il tap i reply-button RESTANO nella cronologia ma
+    // diventano inerti (grigi, non ri-cliccabili) — non spariscono più.
+    btn.onclick=()=>{ if(spent) return; spent=true; wrap.classList.add('spent');
+      if(b.action) b.action(); else sendUser(b.text!=null?b.text:b.label,b.silent); };
     wrap.appendChild(btn); });
   chat.appendChild(wrap); scrollDown();
 }
