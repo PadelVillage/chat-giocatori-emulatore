@@ -193,7 +193,7 @@
 const LS_KEY='pmo_emu_state_v7';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.33 · 03/07';
+const APP_BUILD='v0.34 · 03/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -637,7 +637,6 @@ function sendUser(text,silent){
   if(!silent) addOut(text);
   const t=text.trim(); if(!t) return;
   if(convo.mode==='cancel') return botSay(()=>cancelStep(t));
-  if(convo.mode==='modify') return botSay(()=>modifyStep(t));
   botSay(()=>route(detectIntent(t),t));
 }
 function route(intent,t){
@@ -828,7 +827,7 @@ function showBookingDetail(id){
     if(!p.concierge) btns.push({label:'🧑‍💼 Ci pensa la segreteria',action:()=>{ addOut('Ci pensa la segreteria'); botSay(()=>delegateConcierge(p)); }});
     btns.push({label:'🗑️ Annulla',action:()=>startCancelOne(p),danger:true});
   } else {
-    btns.push({label:'✏️ Modifica orario',action:()=>startModifyOne(p)});
+    btns.push({label:'✏️ Modifica orario',action:()=>botSay(()=>{ addInHtml('Riapriamo il modulo — scegli di nuovo giorno e orario. 👇'); openBookingFlow({editId:p.id, giorno:p.giorno, ora:p.ora}); })});
     btns.push({label:'🗑️ Annulla',action:()=>startCancelOne(p),danger:true});
   }
   addQuick(btns.slice(0,3));
@@ -845,7 +844,8 @@ function conciergeCancelNote(p){
     return '<br>💶 La segreteria ha <b>già completato</b> la partita: il supplemento di <b>'+CONCIERGE_FEE+' €</b> resta dovuto, da pagare in segreteria.';
   return '';
 }
-/* Annulla/Modifica su una prenotazione specifica (riusa cancelStep/modifyStep). */
+/* Annulla su una prenotazione specifica (riusa cancelStep). La modifica riapre
+   invece il modulo in edit-mode → openBookingFlow({editId})/applyEdit. */
 function startCancelOne(p){
   const late=isLateCancel(p);
   convo={mode:'cancel',step:'confirm',draft:{target:p,late:late}};
@@ -858,10 +858,6 @@ function startCancelOne(p){
 function cancelWarn(late){ return late
   ? '<br>⚠️ <b>Disdetta tardiva</b>: mancano meno di <b>48h</b> all\'avvio → conta come un\'assenza.'
   : '<br>L’azione è definitiva: non perdi nulla, il campo torna disponibile per altri.'; }
-function startModifyOne(p){
-  convo={mode:'modify',step:'newtime',draft:{target:p}};
-  addInHtml('A che nuovo orario sposto '+esc(p.giorno)+' · '+p.ora+'? (es. “alle 20:30”)');
-}
 
 /* ---------- Prenotazione: WhatsApp Flow (modulo) --------------------------- */
 function startBooking(text){
@@ -975,9 +971,19 @@ function openBookingFlow(prefill){
     const dur=meta ? (meta.kind==='fisso'?90:st.durata) : st.durata;
     const players=meta&&meta.kind==='fisso'?4:st.players;
     const pr=slotPrezzo(meta,players);
+    sum.className='flow-sum on';
+    // Modifica di una prenotazione GIÀ completa (o delegata alla segreteria): il
+    // roster non cambia spostando l'orario → niente riga "1/4 · completa entro"
+    // (sarebbe fuorviante), solo data + prezzo (+ nota concierge se delegata).
+    const editRec=editId?S.prenotazioni.find(x=>x.id===editId):null;
+    if(editRec && (editRec.stato==='prenotato' || editRec.concierge)){
+      sum.innerHTML='📅 <b>'+esc(d.giorno)+' · '+st.ora+'–'+addMin(st.ora,dur)+'</b>'
+        +'<br>💶 <b>'+pr.testa+' € a testa</b>'
+        +(editRec.concierge?('<br>🧑‍💼 '+FEE_LINE):'');
+      return;
+    }
     const win=rosterWindow(d.off);
     const target=pr.giocatori, inviti=st.amici.length;
-    sum.className='flow-sum on';
     sum.innerHTML='📅 <b>'+esc(d.giorno)+' · '+st.ora+'–'+addMin(st.ora,dur)+'</b>'
       +(st.concierge
         ? ('<br>💶 <b>'+pr.testa+' € a testa</b>'
@@ -1010,7 +1016,12 @@ function applyEdit(editId,d,ora,meta){
   save();
   // Card UNICA aggiornata (stesso List Message, header "aggiornata").
   if(rec.stato==='opzionato' && !rec.concierge) rosterActionButtons(rec, {header:'✅ <b>Prenotazione aggiornata</b>'});
-  else homeMenu();
+  else {
+    // Prenotazione GIÀ completa (o delegata alla segreteria): nessuna fase di
+    // completamento da riproporre → conferma segmentata + ritorno al menu.
+    addInHtml('✅ <b>Prenotazione aggiornata</b><br>📅 '+esc(rec.giorno)+' · '+rec.ora+'<br>📍 Campo '+rec.campo);
+    homeMenu();
+  }
 }
 
 function decideAndPresent(draft){
@@ -1318,31 +1329,10 @@ function cancelStep(t){
 }
 function startModify(){
   if(!S.prenotazioni.length){ addInHtml('Non hai prenotazioni da modificare.'); return; }
-  convo={mode:'modify',step:'pick',draft:{}};
   addInHtml('Quale prenotazione vuoi modificare?');
-  addQuick(S.prenotazioni.map(p=>({label:p.giorno+' · '+p.ora+' — Campo '+p.campo, text:'modifica '+p.id})));
-}
-function modifyStep(t){
-  const d=convo.draft;
-  if(convo.step==='pick'){ const p=matchPren(t); if(!p){ addInHtml('Non ho individuato la prenotazione.'); return; }
-    d.target=p; convo.step='newtime'; addInHtml('A che nuovo orario la sposto? (es. “alle 20:30”)'); return; }
-  if(convo.step==='newtime'){ const w=parseWhen(t); if(!w.ora){ addInHtml('Dimmi il nuovo orario, es. “alle 20:30”.'); return; }
-    const idx=S.prenotazioni.findIndex(x=>x.id===d.target.id); const rec=S.prenotazioni[idx]; const old=rec.ora;
-    if(w.giorno) rec.giorno=w.giorno; rec.ora=w.ora;
-    // Se ancora OPZIONATA (non delegata), la finestra di rilascio dipende dalla
-    // distanza dal giorno → va ricalcolata e i timer riarmati; gen++ rende inerti i vecchi.
-    let reshow=false;
-    if(rec.stato==='opzionato' && !rec.concierge){
-      const noff=offsetForGiorno(rec.giorno)||0;
-      rec.gen=(rec.gen||0)+1; rec.deadline=optDeadlineMs(noff,rec.ora); rec.win=rosterWindow(noff).lbl;
-      save(); scheduleRosterReminders(rec, noff);
-      reshow=true;   // ancora da completare → riproponiamo le scelte (il corpo lista ridice "hai X per completare la partita")
-    } else save();
-    addInHtml('✅ Aggiornata: '+esc(rec.giorno)+' · '+w.ora+' — Campo '+rec.campo+' (prima '+old+').',true);
-    resetConvo();
-    if(reshow){ botSay(()=>rosterActionButtons(rec)); }
-    else { maybeHint(); homeMenu(); }
-  }
+  // Ogni scelta riapre il MODULO in edit-mode (come showBookingDetail / le opzioni):
+  // niente più prompt a testo per il nuovo orario.
+  addQuick(S.prenotazioni.map(p=>({label:p.giorno+' · '+p.ora+' — Campo '+p.campo, action:()=>botSay(()=>{ addInHtml('Riapriamo il modulo — scegli di nuovo giorno e orario. 👇'); openBookingFlow({editId:p.id, giorno:p.giorno, ora:p.ora}); })})));
 }
 function matchPren(t){
   t=t.toLowerCase(); const byId=t.match(/\b(\d{1,4})\b/); if(byId){ const p=S.prenotazioni.find(x=>x.id===parseInt(byId[1],10)); if(p) return p; }
