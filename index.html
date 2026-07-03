@@ -179,7 +179,7 @@
 const LS_KEY='pmo_emu_state_v6';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.23 · 03/07';
+const APP_BUILD='v0.24 · 03/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -834,8 +834,11 @@ function doConcierge(){
 }
 function openBookingFlow(prefill){
   prefill=prefill||{};
-  if(blockIfNoShow()) return;                              // prenotazioni sospese (tutela no-show)
-  if(blockIfActiveOption()) return;                        // 1 sola opzione attiva per volta
+  const editId=prefill.editId||null;                       // MODIFICA: rifai il giro sul modulo e AGGIORNA la prenotazione esistente
+  if(!editId){                                             // in modifica NON blocchiamo: l'opzione attiva è proprio quella che stiamo cambiando
+    if(blockIfNoShow()) return;                            // prenotazioni sospese (tutela no-show)
+    if(blockIfActiveOption()) return;                      // 1 sola opzione attiva per volta
+  }
   const concierge=!!prefill.concierge;
   const days=[]; for(let o=0;o<=MAX_GIORNI;o++) days.push(dayInfo(o));
   const st={ off:0, ora:null, momento:null, tipo:'Partita', players:4, durata:90, amici:(prefill.amici||[]).slice(), concierge:concierge };
@@ -858,7 +861,7 @@ function openBookingFlow(prefill){
   // poi decidi come completare la partita (vedi rosterActionButtons).
   const sum=el('flow-sum');   // riepilogo selezione
   body.appendChild(sum);
-  const foot=document.createElement('button'); foot.className='flow-submit'; foot.textContent=concierge?'Richiedi organizzazione':'Continua';
+  const foot=document.createElement('button'); foot.className='flow-submit'; foot.textContent=editId?'Salva':(concierge?'Richiedi organizzazione':'Continua');
   foot.onclick=()=>{
     if(!st.ora){ toast('Tocca prima un orario libero.'); return; }
     const d=days[st.off];
@@ -867,6 +870,8 @@ function openBookingFlow(prefill){
     closeSheet();
     const names=st.amici.map(friendName).filter(Boolean);
     const pr=slotPrezzo(meta,players);
+    if(editId){ addOut('✏️ '+d.giorno+' · '+st.ora);
+      botSay(()=>applyEdit(editId,d,st.ora,meta)); return; }
     if(concierge){ addOut('🧑‍💼 Organizzate voi · '+d.giorno+' · '+st.ora+" ("+dur+"')");
       botSay(()=>decideConcierge({giorno:d.giorno,dow:d.dow,ora:st.ora,tipo:st.tipo,durata:dur,players:players})); return; }
     addOut('📋 '+d.giorno+' · '+st.ora+' · in '+players+" ("+dur+"') · "+pr.testa+'€/testa'+(names.length?(' · con '+names.join(', ')):''));
@@ -935,13 +940,34 @@ function openBookingFlow(prefill){
           +'<br>👥 1/'+target+' (tu)'+(inviti?(' · ✉️ '+inviti+' invit'+(inviti>1?'i':'o')):'')
           +'<br>⚠️ Completa entro <b>'+win.lbl.toUpperCase()+'</b>, poi torna libero per altri'));
   }
-  openSheet('Prenota un campo', body, 'Scegli giorno, momento e orario');
+  openSheet(editId?'Modifica la prenotazione':'Prenota un campo', body, 'Scegli giorno, momento e orario');
   renderDays(); renderMomenti(); renderSlots();
   if(prefill.ora){
     const d=days[st.off]; const meta=slotMetaFor(d.off,d.dow,prefill.ora,st.durata,st.players);
     if(meta && meta.status!=='busy'){ st.momento=momentoKey(prefill.ora); st.ora=prefill.ora; renderMomenti(); renderSlots(); }
   }
   updSum();
+}
+/* MODIFICA: applica al record esistente la nuova scelta fatta nel modulo (giorno/
+   orario), ricalcola la finestra di completamento e ripropone le scelte. NON crea
+   una nuova prenotazione (a differenza di decideAndPresent). */
+function applyEdit(editId,d,ora,meta){
+  const rec=S.prenotazioni.find(x=>x.id===editId);
+  if(!rec){ addInHtml('Quella prenotazione non è più disponibile.'); addQuick([homeBtn()]); return; }
+  rec.giorno=d.giorno; rec.ora=ora; rec.campo=campoLibero(d.dow,ora); rec.durata=90;
+  if(rec.stato==='opzionato' && !rec.concierge){
+    const noff=offsetForGiorno(rec.giorno)||0;
+    rec.gen=(rec.gen||0)+1; rec.deadline=optDeadlineMs(noff,ora); rec.win=rosterWindow(noff).lbl;
+    scheduleRosterReminders(rec, noff);
+  }
+  save();
+  const pr=slotPrezzo(meta,4), fine=addMin(ora,90);
+  addInHtml('✅ <b>Prenotazione aggiornata</b>'
+    +'<br>📅 '+esc(rec.giorno)+' · '+ora+'–'+fine+' · Campo '+rec.campo
+    +'<br>💶 <b>'+pr.testa+' € a testa</b> · '+pr.campo+' € a campo',true);
+  // Ancora da completare → riproponi le scelte; se già al completo → menu.
+  if(rec.stato==='opzionato' && !rec.concierge) rosterActionButtons(rec);
+  else addQuick([homeBtn()]);
 }
 
 function decideAndPresent(draft){
@@ -1004,8 +1030,9 @@ function rosterActionButtons(rec){
     +' · hai <b>'+rec.win+'</b> per completare.<br><b>Come vuoi completarla?</b> 👇';
   const rows=[{ic:'👥', label:'Invito i miei amici', desc:'Scegli tu con chi giocare', action:()=>openAddPlayersFlow(rec)}];
   rows.push({ic:'🧑‍💼', label:'Ci pensa la segreteria', desc:'Troviamo noi i giocatori · +'+CONCIERGE_FEE+' € solo sulla tua quota', action:()=>{ addOut('Ci pensa la segreteria'); botSay(()=>delegateConcierge(rec)); }});
-  // Sezione separata: modificare la prenotazione in questa fase (cambia giorno/orario).
-  rows.push({section:'Oppure', ic:'✏️', label:'Modifica la prenotazione', desc:'Cambia giorno o orario', action:()=>{ addOut('Modifica la prenotazione'); botSay(()=>startModifyOne(rec)); }});
+  // Sezione separata: modificare la prenotazione in questa fase. RIAPRE IL MODULO
+  // "Prenota un campo" (in edit-mode) e rifai il giro da capo — non un prompt a testo.
+  rows.push({section:'Oppure', ic:'✏️', label:'Modifica la prenotazione', desc:'Cambia giorno o orario', action:()=>{ addOut('Modifica la prenotazione'); botSay(()=>{ addInHtml('Riapriamo il modulo — scegli di nuovo giorno e orario. 👇'); openBookingFlow({editId:rec.id, giorno:rec.giorno, ora:rec.ora}); }); }});
   addMenu(rows.slice(0,10), {body:body});
 }
 /* Ramo "Ci pensate voi": delega alla segreteria un'opzione già presa (+5 € sulla quota di chi prenota per primo). */
