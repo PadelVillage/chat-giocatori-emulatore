@@ -45,7 +45,9 @@
   .qr{align-self:flex-start;width:min(86%,320px);background:#fff;border-radius:9px;overflow:hidden;margin-top:-2px;
     box-shadow:0 1px 1px rgba(0,0,0,.06);display:flex;flex-direction:column;flex:0 0 auto}
   .qbtn{display:flex;align-items:center;justify-content:center;gap:6px;padding:11px;font-size:14px;color:#027eb5;
-    border-top:1px solid #eff2f3;cursor:pointer;background:none;border-left:0;border-right:0;border-bottom:0;width:100%;font-family:inherit}
+    border-top:1px solid #eff2f3;cursor:pointer;background:none;border-left:0;border-right:0;border-bottom:0;width:100%;font-family:inherit;
+    outline:none;-webkit-tap-highlight-color:transparent}
+  .qbtn:focus,.qbtn:focus-visible{outline:none}
   .qr .qbtn:first-child{border-top:0}
   .qbtn.danger{color:#c0392b}
   .qbtn:active{background:#f2f5f6}
@@ -191,7 +193,7 @@
 const LS_KEY='pmo_emu_state_v7';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.31 · 03/07';
+const APP_BUILD='v0.32 · 03/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -275,7 +277,7 @@ function addQuick(btns){
   btns.forEach(b=>{ const btn=document.createElement('button'); btn.className='qbtn'+(b.danger?' danger':''); btn.textContent=b.label;
     // Fedele a WhatsApp: dopo il tap i reply-button RESTANO nella cronologia ma
     // diventano inerti (grigi, non ri-cliccabili) — non spariscono più.
-    btn.onclick=()=>{ if(spent) return; spent=true; wrap.classList.add('spent');
+    btn.onclick=()=>{ if(spent) return; spent=true; wrap.classList.add('spent'); btn.blur();  // niente focus-ring residuo dopo il tap (i reply-button ora restano in cronologia)
       if(b.action) b.action(); else sendUser(b.text!=null?b.text:b.label,b.silent); };
     wrap.appendChild(btn); });
   chat.appendChild(wrap); scrollDown();
