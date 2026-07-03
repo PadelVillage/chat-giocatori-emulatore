@@ -166,10 +166,10 @@
    fedelmente su WhatsApp reale (componenti/limiti Flows + policy Meta).
    Verificare sui doc Meta PRIMA di aggiungere grafica/layout/interazioni.
    ========================================================================== */
-const LS_KEY='pmo_emu_state_v5';
+const LS_KEY='pmo_emu_state_v6';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.13 · 03/07';
+const APP_BUILD='v0.14 · 03/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -202,14 +202,15 @@ function demoState(){
     player:{ nome:'Marco Aprea', numero:'+39 333 123 4567', socio:true, livello:'4.0', inRegola:true,
              genere:'M',   // dal dato anagrafica: serve alla domanda concierge "mista o omogenea" (F = donna)
              borselloCent:2400, ultimoMov:'ricarica € 20 il 28/06' },
-    /* suWhatsApp = ha dato l'opt-in al canale → invitabile con un template.
-       Chi non ce l'ha (Giulia) è mostrato come voce disabilitata (enabled:false
-       nel CheckboxGroup del Flow reale): non possiamo scrivergli. */
+    /* Amici = SOCI del circolo (numero in anagrafica). Niente livello: dopo la
+       rimozione delle partite aperte non filtra più nulla. suWhatsApp = ha scritto
+       al canale (opt-in) → invitabile; chi non ce l'ha (Giulia) è mostrato come
+       voce disabilitata (enabled:false del CheckboxGroup Flow): non possiamo scrivergli. */
     friends:[
-      {id:11,nome:'Luca Bianchi',livello:'3.5',suWhatsApp:true},
-      {id:12,nome:'Sara Rossi',livello:'4.0',suWhatsApp:true},
-      {id:13,nome:'Giulia Verdi',livello:'3.0',suWhatsApp:false},
-      {id:14,nome:'Paolo Neri',livello:'4.5',suWhatsApp:true}
+      {id:11,nome:'Luca Bianchi', numero:'+39 333 555 0102', suWhatsApp:true},
+      {id:12,nome:'Sara Rossi',   numero:'+39 333 555 0103', suWhatsApp:true},
+      {id:13,nome:'Giulia Verdi', numero:'+39 333 555 0104', suWhatsApp:false},
+      {id:14,nome:'Paolo Neri',   numero:'+39 333 555 0105', suWhatsApp:true}
     ],
     /* Demo pulita: una prenotazione confermata come esempio, NESSUNA opzione
        attiva (altrimenti la guardia "1 opzione per volta" bloccherebbe subito
@@ -377,6 +378,18 @@ const CONCIERGE_FEE=5;           // € servizio "organizza la partita": addebit
    testo semplice, enfasi solo con emoji/grassetto. Niente più parentesi "(di chi
    ha prenotato per primo)": ridondante e prolissa (l'utente l'ha chiesto). */
 const FEE_LINE='💶 +'+CONCIERGE_FEE+' € solo sulla tua quota, in segreteria.';
+/* Numero WhatsApp Business del circolo (demo) — usato nei link wa.me d'invito. */
+const CLUB_WA='393510001234';
+/* Rubrica finta del giocatore: simula il selettore contatti nativo di WhatsApp
+   (📎 → Contatto), che qui non possiamo aprire davvero. Su WA reale il business NON
+   legge la rubrica: è il giocatore a condividere un contatto e noi riceviamo nome+numero.
+   Copre i 3 rami: socio-non-amico (si aggiunge) · già-amico · non-socio (→ invito a iscriversi). */
+const RUBRICA=[
+  {nome:'Andrea Gialli', numero:'+39 333 555 0101', socio:true,  suWhatsApp:true},   // socio non amico → si aggiunge
+  {nome:'Luca Bianchi',  numero:'+39 333 555 0102', socio:true,  suWhatsApp:true},   // già amico
+  {nome:'Elena Bruni',   numero:'+39 333 555 0106', socio:true,  suWhatsApp:false},  // socia non ancora sul canale → si aggiunge (invitabile dopo)
+  {nome:'Marco Esterno', numero:'+39 333 555 0199', socio:false, suWhatsApp:false}   // non socio → ramo iscrizione
+];
 const LEAD_MIN=30;               // anticipo minimo: non prenotabile se manca <30' all'avvio
 function nowMin(){ const n=new Date(); return n.getHours()*60+n.getMinutes(); }
 function courtsFor(off,dow,ora){
@@ -564,24 +577,60 @@ function doProfilo(){
 /* ---------- Amici ---------------------------------------------------------- */
 function doAmici(){
   addInHtml('I tuoi amici con cui giochi:');
-  addCard(S.friends.length ? S.friends.map(f=>'👤 '+esc(f.nome)+' · liv. '+esc(f.livello)).join('<br>') : 'Ancora nessun amico in lista.');
+  addCard(S.friends.length ? S.friends.map(f=>'👤 '+esc(f.nome)).join('<br>') : 'Ancora nessun amico in lista.');
   addQuick([{label:'➕ Aggiungi amico',action:openAddFriendFlow},{label:'🎾 Prenota con un amico',action:()=>botSay(()=>{ addInHtml('Apriamo il modulo — trovi gli amici in fondo, spunta chi gioca con te.'); openBookingFlow({}); })},homeBtn()]);
 }
+/* Aggiungi amico = il giocatore CONDIVIDE un contatto (📎 → Contatto). Su WhatsApp
+   reale il business non legge la rubrica: riceve nome+numero solo se il giocatore
+   condivide. Qui simuliamo il selettore contatti con RUBRICA. L'amico dev'essere un
+   SOCIO (numero in anagrafica); se non lo è, gli si manda un invito a iscriversi. */
 function openAddFriendFlow(){
+  addInHtml('Per aggiungere un amico, <b>condividi il suo contatto</b>: 📎 → <b>Contatto</b> e scegli chi vuoi aggiungere. 👇');
+  openContactPicker();
+}
+function openContactPicker(){
   const body=el('flow');
-  body.appendChild(fieldLabel('Nome amico'));
-  const inp=document.createElement('input'); inp.className='flow-inp'; inp.placeholder='Es. Andrea Gialli'; body.appendChild(inp);
-  body.appendChild(fieldLabel('Livello'));
-  let liv='3.5';
-  const row=chipRow(['3.0','3.5','4.0','4.5'].map(v=>({label:v,val:v})),(val,btn,r)=>{ selectOne(r,btn); liv=val; });
-  body.appendChild(row);
-  const b=document.createElement('button'); b.className='flow-submit'; b.textContent='Aggiungi amico';
-  b.onclick=()=>{ const nome=inp.value.trim(); if(!nome){ toast('Scrivi il nome.'); return; }
-    S.friends.push({id:++S.seq,nome,livello:liv}); save(); closeSheet();
-    botSay(()=>addInHtml('Aggiunto! <b>'+esc(nome)+'</b> è ora tra i tuoi amici.',true)); };
-  body.appendChild(b);
-  openSheet('Aggiungi amico', body, 'Solo demo — nessun invito reale');
-  preselectChip(row,'3.5');
+  body.appendChild(el('luce-hint','La tua rubrica — tocca il contatto da condividere con la segreteria.'));
+  const list=el('friend-list');
+  RUBRICA.forEach(c=>{ const row=el('friend-row'); row.style.justifyContent='space-between';
+    row.innerHTML='<span>👤 '+esc(c.nome)+'</span><span style="color:var(--muted);font-size:12px">'+esc(c.numero)+'</span>';
+    row.onclick=()=>{ closeSheet(); shareContact(c); }; list.appendChild(row); });
+  body.appendChild(list);
+  openSheet('Condividi un contatto', body, 'La tua rubrica · solo demo');
+}
+function normNum(n){ return (n||'').replace(/\D/g,''); }
+function isGiaAmico(entry){ return S.friends.some(f=>normNum(f.numero)===normNum(entry.numero)); }
+/* Il giocatore ha condiviso un contatto → 3 rami secondo l'anagrafica. */
+function shareContact(entry){
+  addOut('📇 '+entry.nome);                                    // il giocatore "invia" il contatto
+  botSay(()=>{
+    if(!entry.socio){ inviteToJoin(entry); return; }           // non in anagrafica → invito a iscriversi
+    if(isGiaAmico(entry)){ addInHtml('👍 <b>'+esc(entry.nome)+'</b> è già tra i tuoi amici.'); addQuick([{label:'👥 I miei amici',text:'I miei amici'},homeBtn()]); return; }
+    S.friends.push({id:++S.seq, nome:entry.nome, numero:entry.numero, suWhatsApp:entry.suWhatsApp}); save();
+    addInHtml('✅ Ho aggiunto <b>'+esc(entry.nome)+'</b> ai tuoi amici.'
+      +(entry.suWhatsApp?'':'<br>ℹ️ Non è ancora sul nostro canale: sarà invitabile a giocare appena ci avrà scritto.'),true);
+    addQuick([{label:'🎾 Prenota',text:'Vorrei prenotare un campo'},{label:'👥 I miei amici',text:'I miei amici'},homeBtn()]);
+  });
+}
+/* Ramo non-socio: NON possiamo scrivergli noi (niente opt-in → policy Meta). Diamo
+   al giocatore un invito PRONTO da inoltrare lui; quando il nuovo giocatore ci scrive
+   parte la sua iscrizione (definita nella sua futura chat, non qui). */
+function inviteToJoin(entry){
+  const nome1=entry.nome.split(' ')[0];
+  addInHtml('🙂 <b>'+esc(entry.nome)+'</b> non è ancora iscritto a Padel Village, quindi non possiamo aggiungerlo tra gli amici.<br>Puoi invitarlo tu: gli inoltri l’invito e, appena ci scrive, lo iscriviamo.');
+  addQuick([
+    {label:'✉️ Invita '+nome1, action:()=>{ addOut('Invita '+nome1); botSay(()=>showJoinInvite(entry)); }},
+    {label:'Lascia stare', action:()=>botSay(()=>addInHtml('Ok, nessun problema.')) }
+  ]);
+}
+function showJoinInvite(entry){
+  const nome1=entry.nome.split(' ')[0];
+  addSys('Inoltra questo messaggio a '+nome1+' 👇');
+  addInHtml('🎾 <b>Padel Village</b>'
+    +'<br>Un amico ti invita a giocare con noi!'
+    +'<br>Scrivici su WhatsApp per iscriverti e prenotare un campo 👇'
+    +'<br>https://wa.me/'+CLUB_WA+'?text=Ciao!%20Vorrei%20iscrivermi%20a%20Padel%20Village');
+  addQuick([homeBtn()]);
 }
 
 /* ---------- Borsellino ----------------------------------------------------- */
@@ -939,7 +988,7 @@ function openAddPlayersFlow(rec){
     const cb=document.createElement('input'); cb.type='checkbox';
     if(!f.suWhatsApp){ cb.disabled=true; row.style.opacity='.5'; }
     cb.onchange=()=>{ if(cb.checked) picked.push(nm); else { const i=picked.indexOf(nm); if(i>=0) picked.splice(i,1);} };
-    const sp=document.createElement('span'); sp.innerHTML=esc(f.nome)+' · liv. '+esc(f.livello)+(f.suWhatsApp?'':' · <i>non ancora sul canale</i>'); row.appendChild(cb); row.appendChild(sp); fl.appendChild(row); });
+    const sp=document.createElement('span'); sp.innerHTML=esc(f.nome)+(f.suWhatsApp?'':' · <i>non ancora sul canale</i>'); row.appendChild(cb); row.appendChild(sp); fl.appendChild(row); });
   body.appendChild(fl);
   body.appendChild(fieldLabel('Oppure'));
   const guestWrap=el('friend-list'); const guestRow=document.createElement('label'); guestRow.className='friend-row';
