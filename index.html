@@ -169,7 +169,7 @@
 const LS_KEY='pmo_emu_state_v5';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.12 · 03/07';
+const APP_BUILD='v0.13 · 03/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -650,10 +650,19 @@ function showBookingDetail(id){
   }
   addQuick(btns.slice(0,3));
 }
+/* Supplemento concierge in caso di disdetta: dovuto SOLO se la segreteria ha
+   già organizzato la partita (stato 'prenotato' = completata). Finché è ancora
+   'in organizzazione' (opzionato) non è dovuto nulla. Fedeltà WA: niente colore
+   del testo → enfasi con emoji 💶 + grassetto. */
+function conciergeCancelNote(p){
+  if(p && p.concierge && p.stato==='prenotato')
+    return '<br>💶 La segreteria ha <b>già completato</b> la partita: il supplemento di <b>'+CONCIERGE_FEE+' €</b> resta dovuto, in segreteria.';
+  return '';
+}
 /* Annulla/Modifica su una prenotazione specifica (riusa cancelStep/modifyStep). */
 function startCancelOne(p){
   convo={mode:'cancel',step:'confirm',draft:{target:p}};
-  const warn = p.concierge ? '<br><span style="color:#8a6d00">Nota: se la segreteria ha già organizzato, il supplemento di '+CONCIERGE_FEE+' € resta dovuto.</span>' : '';
+  const warn = conciergeCancelNote(p);
   addInHtml('Vuoi annullare: '+esc(p.giorno)+' · '+p.ora+' — Campo '+p.campo+'? L’azione è definitiva: non perdi nulla, il campo torna disponibile per altri.'+warn);
   addQuick([{label:'Sì, annulla',text:'sì',danger:true},{label:'No',text:'no'}]);
 }
@@ -1037,7 +1046,7 @@ function cancelStep(t){
   const d=convo.draft;
   if(convo.step==='pick'){ const p=matchPren(t); if(!p){ addInHtml('Non ho individuato la prenotazione. Riprova indicando il giorno.'); return; }
     d.target=p; convo.step='confirm';
-    const warn = p.concierge ? '<br><span style="color:#8a6d00">Nota: se la segreteria ha già organizzato la partita, il supplemento di '+CONCIERGE_FEE+' € resta dovuto.</span>' : '';
+    const warn = conciergeCancelNote(p);
     addInHtml('Vuoi annullare: '+esc(p.giorno)+' · '+p.ora+' — Campo '+p.campo+' · '+p.tipo+'? L’azione è definitiva: non perdi nulla, il campo torna disponibile per altri.'+warn);
     addQuick([{label:'Sì, annulla',text:'sì',danger:true},{label:'No',text:'no'}]); return; }
   if(convo.step==='confirm'){
