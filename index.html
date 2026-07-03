@@ -181,10 +181,10 @@
    fedelmente su WhatsApp reale (componenti/limiti Flows + policy Meta).
    Verificare sui doc Meta PRIMA di aggiungere grafica/layout/interazioni.
    ========================================================================== */
-const LS_KEY='pmo_emu_state_v6';
+const LS_KEY='pmo_emu_state_v7';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.26 · 03/07';
+const APP_BUILD='v0.27 · 03/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -221,12 +221,16 @@ function demoState(){
     /* Amici = SOCI del circolo (numero in anagrafica). Niente livello: dopo la
        rimozione delle partite aperte non filtra più nulla. suWhatsApp = ha scritto
        al canale (opt-in) → invitabile; chi non ce l'ha (Giulia) è mostrato come
-       voce disabilitata (enabled:false del CheckboxGroup Flow): non possiamo scrivergli. */
+       voce disabilitata (enabled:false del CheckboxGroup Flow): non possiamo scrivergli.
+       optOut = ha risposto "🔕 Non invitarmi più" a un invito → non-invitabile (igiene
+       Meta: rispettare l'opt-out evita di finire flaggati come spam). Demo: Paolo RIFIUTA,
+       Davide fa OPT-OUT (per mostrare i due rami oltre alla conferma). */
     friends:[
-      {id:11,nome:'Luca Bianchi', numero:'+39 333 555 0102', suWhatsApp:true},
-      {id:12,nome:'Sara Rossi',   numero:'+39 333 555 0103', suWhatsApp:true},
-      {id:13,nome:'Giulia Verdi', numero:'+39 333 555 0104', suWhatsApp:false},
-      {id:14,nome:'Paolo Neri',   numero:'+39 333 555 0105', suWhatsApp:true}
+      {id:11,nome:'Luca Bianchi',  numero:'+39 333 555 0102', suWhatsApp:true},
+      {id:12,nome:'Sara Rossi',    numero:'+39 333 555 0103', suWhatsApp:true},
+      {id:13,nome:'Giulia Verdi',  numero:'+39 333 555 0104', suWhatsApp:false},
+      {id:14,nome:'Paolo Neri',    numero:'+39 333 555 0105', suWhatsApp:true},
+      {id:15,nome:'Davide Gallo',  numero:'+39 333 555 0107', suWhatsApp:true}
     ],
     /* Demo pulita: una prenotazione confermata come esempio, NESSUNA opzione
        attiva (altrimenti la guardia "1 opzione per volta" bloccherebbe subito
@@ -456,6 +460,9 @@ function rosterTarget(rec){ return rec.target||4; }
 function rosterFilled(rec){ return 1+((rec.amici&&rec.amici.length)||0); }   // confermati (organizzatore + amici che hanno confermato)
 function rosterPosti(rec){ return Math.max(0, rosterTarget(rec)-rosterFilled(rec)); }
 function rosterPending(rec){ return (rec.invitati&&rec.invitati.length)||0; } // inviti in attesa di risposta
+// posti ancora invitabili ORA = posti liberi meno gli inviti già in sospeso (che ne
+// coprono uno ciascuno). Evita di invitare più gente dei posti (niente scarto silenzioso).
+function rosterInvitable(rec){ return Math.max(0, rosterPosti(rec)-rosterPending(rec)); }
 /* Anti-abuso: 1 sola opzione attiva (non confermata, non scaduta) per volta. */
 function activeOption(){ return S.prenotazioni.find(p=>p.stato==='opzionato' && (p.deadline||0)>Date.now()); }
 function blockIfActiveOption(){ const a=activeOption(); if(!a) return false;
@@ -754,7 +761,7 @@ function doBorsellino(){ addInHtml('Il tuo borsellino: <b>'+euro(S.player.borsel
 function doHelp(t){
   t=(t||'').toLowerCase();
   if(/invit|amic/.test(t)){
-    addInHtml('<b>Invitare gli amici</b> 👥<br>Da “Completa la partita” selezioni i tuoi amici (soci): ricevono un messaggio con <b>✅ Confermo / ❌ Non posso</b> e, <b>appena confermano, entrano in partita</b>. Chi non è ancora sul nostro canale non è invitabile (prima deve scriverci). In partita solo giocatori iscritti — niente ospiti.');
+    addInHtml('<b>Invitare gli amici</b> 👥<br>Da “Completa la partita” selezioni i tuoi amici (soci): ricevono un messaggio con <b>✅ Confermo / ❌ Non posso</b> e, <b>appena confermano, entrano in partita</b>. Puoi invitarne solo quanti sono i posti liberi, e <b>revocare</b> un invito ancora in attesa. Chi non è sul nostro canale, o ha scelto <b>🔕 Non invitarmi più</b>, non è invitabile. In partita solo giocatori iscritti — niente ospiti.');
     addQuick([{label:'🎾 Prenota un campo',text:'Vorrei prenotare un campo'}]); return; }
   if(/opzion|complet|scad/.test(t)){
     addInHtml('<b>Come funziona</b> 🎾<br>Quando prenoti, il campo è <b>tenuto a tuo nome</b> (gratis): hai un po’ di tempo per <b>completare la partita</b> (inviti gli amici o ci pensa la segreteria). Appena siete al completo è <b>confermata</b>. Se non completi in tempo, il campo torna disponibile per altri giocatori.'); addQuick([homeBtn()]); return; }
@@ -1056,7 +1063,7 @@ function rosterActionButtons(rec, opts){
       +' · hai <b>'+rec.win+'</b> per completare';
   // Le voci (con descrizione) vivono NELLA SCHERMATA che apre il pulsante (fedele a WA).
   const rows=[
-    {section:'Completa la partita', ic:'👥', label:'Invito i miei amici', desc:'Scegli tu con chi giocare', action:()=>openAddPlayersFlow(rec)},
+    {section:'Completa la partita', ic:'👥', label:'Invito i miei amici', desc:rosterPending(rec)?('Invita o revoca · '+rosterPending(rec)+' in attesa'):'Scegli tu con chi giocare', action:()=>openAddPlayersFlow(rec)},
     {ic:'🧑‍💼', label:'Ci pensa la segreteria', desc:'Troviamo noi i giocatori · +'+CONCIERGE_FEE+' € solo sulla tua quota', action:()=>botSay(()=>delegateConcierge(rec))},
     {section:'Oppure', ic:'✏️', label:'Modifica la prenotazione', desc:'Cambia giorno o orario', action:()=>botSay(()=>{ addInHtml('Riapriamo il modulo — scegli di nuovo giorno e orario. 👇'); openBookingFlow({editId:rec.id, giorno:rec.giorno, ora:rec.ora}); })}
   ];
@@ -1138,39 +1145,81 @@ function expireOption(rec){ /* disattivato in demo */ }
 function openAddPlayersFlow(rec){
   const r=S.prenotazioni.find(x=>x.id===rec.id)||rec;
   const posti=rosterPosti(r);
-  if(posti===0){ addInHtml('La partita è già al completo.'); return; }
+  if(posti===0){ addInHtml('La partita è già al completo. 🎾'); return; }
+  const pending=rosterPending(r);
+  const cap=rosterInvitable(r);   // quanti se ne possono invitare ORA (posti liberi − inviti in sospeso)
   const taken=(r.amici||[]).concat(r.invitati||[]);
   const avail=S.friends.filter(f=>taken.indexOf(f.nome.split(' ')[0])<0);
   const body=el('flow');
-  body.appendChild(el('luce-hint','Manca'+(posti>1?'no':'')+' <b>'+posti+'</b> giocator'+(posti>1?'i':'e')+' per '+esc(r.giorno)+' alle '+r.ora+'. Invita i tuoi amici: ricevono <b>✅ Confermo / ❌ Non posso</b> e il posto si riempie quando confermano.'));
+  body.appendChild(el('luce-hint','Manca'+(posti>1?'no':'')+' <b>'+posti+'</b> giocator'+(posti>1?'i':'e')+' per '+esc(r.giorno)+' alle '+r.ora+'. Ogni invito è un messaggio con <b>✅ Confermo / ❌ Non posso</b>: il posto si riempie quando confermano.'));
+  // --- Inviti in sospeso + REVOCA (uno per posto occupato in attesa di risposta) ---
+  if(pending){
+    body.appendChild(fieldLabel('Inviti in sospeso'));
+    const pl=el('friend-list');
+    (r.invitati||[]).forEach(nm=>{
+      const row=el('friend-row'); row.style.justifyContent='space-between';
+      const sp=document.createElement('span'); sp.innerHTML='✉️ '+esc(nm)+' · <i>in attesa</i>';
+      const rev=document.createElement('button'); rev.type='button'; rev.textContent='Revoca';
+      rev.style.cssText='padding:5px 12px;background:transparent;border:1px solid #e2b3b3;border-radius:9px;color:#c0392b;font-size:12.5px;font-weight:600;cursor:pointer';
+      rev.onclick=()=>revokeInvite(r.id,nm);
+      row.appendChild(sp); row.appendChild(rev); pl.appendChild(row);
+    });
+    body.appendChild(pl);
+  }
+  // --- Picker invito (CAP esplicito: non più dei posti liberi, niente scarto silenzioso) ---
   body.appendChild(fieldLabel('Invita amici'));
+  if(cap===0){
+    body.appendChild(el('luce-hint','Hai già inviti in sospeso per <b>tutti</b> i posti liberi. Aspetta le risposte, oppure <b>revoca</b> un invito qui sopra per invitarne altri.'));
+  }
   const picked=[];
+  const counter=el('luce-hint','');
   const fl=el('friend-list');
   if(!avail.length){ fl.appendChild(el('luce-hint','Nessun amico da invitare al momento — aggiungine uno qui sotto.')); }
-  avail.forEach(f=>{ const nm=f.nome.split(' ')[0]; const row=document.createElement('label'); row.className='friend-row';
+  avail.forEach(f=>{ const nm=f.nome.split(' ')[0];
+    const disabled = !f.suWhatsApp || f.optOut || cap===0;
+    const row=document.createElement('label'); row.className='friend-row';
     const cb=document.createElement('input'); cb.type='checkbox';
-    if(!f.suWhatsApp){ cb.disabled=true; row.style.opacity='.5'; }
-    cb.onchange=()=>{ if(cb.checked) picked.push(nm); else { const i=picked.indexOf(nm); if(i>=0) picked.splice(i,1);} };
-    const sp=document.createElement('span'); sp.innerHTML=esc(f.nome)+(f.suWhatsApp?'':' · <i>non ancora sul canale</i>'); row.appendChild(cb); row.appendChild(sp); fl.appendChild(row); });
+    if(disabled){ cb.disabled=true; row.style.opacity='.5'; }
+    cb.onchange=()=>{
+      if(cb.checked){
+        if(picked.length>=cap){ cb.checked=false; toast(cap===1?'C\'è solo 1 posto libero da invitare.':'Puoi invitarne al massimo '+cap+' per i posti liberi.'); return; }
+        picked.push(nm);
+      } else { const i=picked.indexOf(nm); if(i>=0) picked.splice(i,1); }
+      counter.innerHTML='Selezionati: <b>'+picked.length+'</b> / '+cap;
+    };
+    // note = motivo del "non invitabile": non sul canale, oppure opt-out (igiene Meta)
+    const note = !f.suWhatsApp ? ' · <i>non ancora sul canale</i>' : (f.optOut ? ' · <i>🔕 non riceve inviti</i>' : '');
+    const sp=document.createElement('span'); sp.innerHTML=esc(f.nome)+note; row.appendChild(cb); row.appendChild(sp); fl.appendChild(row); });
   body.appendChild(fl);
-  const addF=document.createElement('button'); addF.textContent='➕ Aggiungi un amico';
+  if(cap>0){ counter.innerHTML='Selezionati: <b>0</b> / '+cap; body.appendChild(counter); }
+  const addF=document.createElement('button'); addF.type='button'; addF.textContent='➕ Aggiungi un amico';
   addF.style.cssText='display:block;width:100%;margin:8px 0 2px;padding:10px;background:transparent;border:1px dashed #bcd;border-radius:10px;color:#128c4b;font-size:14px;font-weight:600;cursor:pointer';
   addF.onclick=()=>{ closeSheet(); openAddFriendFlow({backTo:r.id}); };
   body.appendChild(addF);
   const b=document.createElement('button'); b.className='flow-submit'; b.textContent='Invita';
   b.onclick=()=>{
-    const invites=picked.slice();
+    const invites=picked.slice();   // già limitato a cap dalla guardia sul checkbox
     if(!invites.length){ toast('Seleziona almeno un amico da invitare.'); return; }
-    const iUse=invites.slice(0,posti);
     closeSheet();
     botSay(()=>{ const rr=S.prenotazioni.find(x=>x.id===r.id); if(!rr){ addInHtml('Prenotazione non più disponibile.'); return; }
-      rr.invitati=(rr.invitati||[]).concat(iUse); save();
-      addInHtml('📨 Invito inviato a <b>'+iUse.join(', ')+'</b>.<br>👥 Sei a <b>'+rosterFilled(rr)+'/'+rosterTarget(rr)+'</b> · in attesa: '+rr.invitati.join(', '),true);
+      rr.invitati=(rr.invitati||[]).concat(invites); save();
+      addInHtml('📨 Invito inviato a <b>'+invites.join(', ')+'</b>.<br>👥 Sei a <b>'+rosterFilled(rr)+'/'+rosterTarget(rr)+'</b> · in attesa: '+rr.invitati.join(', '),true);
       rosterActionButtons(rr);
-      sendInvites(rr, iUse); });
+      sendInvites(rr, invites); });
   };
   body.appendChild(b);
   openSheet('Completa la partita', body, r.giorno+' · '+r.ora);
+}
+/* Revoca un invito in sospeso: lo togliamo da rec.invitati (il guard in sendInvites
+   impedisce che una risposta tardiva lo auto-confermi). Fedele WA: il template è già
+   partito e NON si può "de-inviare" → se l'amico risponde gli diciamo che il posto
+   non è più disponibile. Libera capacità per invitare qualcun altro. */
+function revokeInvite(id, nm){
+  const r=S.prenotazioni.find(x=>x.id===id); if(!r) return;
+  r.invitati=(r.invitati||[]).filter(x=>x!==nm); save();
+  closeSheet();
+  botSay(()=>{ addInHtml('↩️ Invito a <b>'+esc(nm)+'</b> <b>revocato</b>. Se ti risponde, gli diremo che il posto non è più disponibile.',true);
+    const rr=S.prenotazioni.find(x=>x.id===id); if(rr) rosterActionButtons(rr); else addQuick([homeBtn()]); });
 }
 /* Promemoria "completa la partita" — bilanciato: metà + ultima chiamata
    (nella finestra 1h solo l'ultima). Demo: tempi scalati a pochi secondi.
@@ -1186,12 +1235,13 @@ function scheduleRosterReminders(rec, off){
 /* DISATTIVATO nella demo (vedi scheduleRosterReminders): niente "Ultima chiamata"
    / "Promemoria" che interrompono il giro. No-op a prova di tutto. */
 function rosterReminderMsg(r,kind){ /* disattivato in demo */ }
-/* Invito amici — WhatsApp reale: a ciascun amico un TEMPLATE utility con 2 bottoni
-   ✅ Confermo / ❌ Non posso (l'amico è fuori dalla finestra 24h → serve il template;
-   al tap del bottone si apre la SUA finestra 24h). Qui simulato. Modello B: il posto
-   si riempie SOLO quando l'amico CONFERMA. */
+/* Invito amici — WhatsApp reale: a ciascun amico un TEMPLATE utility con 3 bottoni
+   ✅ Confermo / ❌ Non posso / 🔕 Non invitarmi più (l'amico è fuori dalla finestra 24h →
+   serve il template; al tap si apre la SUA finestra 24h). Il 3° bottone = opt-out (igiene
+   Meta: rispettare chi non vuole più inviti evita segnalazioni spam). ≤3 bottoni = ok WA.
+   Qui simulato. Modello B: il posto si riempie SOLO quando l'amico CONFERMA. */
 function sendInvites(rec, names){
-  addSys('📨 Inviato l’invito a '+names.join(', ')+' (messaggio con ✅ Confermo / ❌ Non posso) — ti avviso appena rispondono.');
+  addSys('📨 Inviato l’invito a '+names.join(', ')+' (messaggio con ✅ Confermo / ❌ Non posso / 🔕 Non invitarmi più) — ti avviso appena rispondono.');
   names.forEach((nm,i)=>{
     setTimeout(()=>{ const r=S.prenotazioni.find(x=>x.id===rec.id); if(!r||r.stato!=='opzionato') return;
       if((r.invitati||[]).indexOf(nm)<0) return;   // invito già risolto/annullato
@@ -1199,9 +1249,12 @@ function sendInvites(rec, names){
   });
 }
 function inviteResponse(r,nm){
-  const declina=/Paolo/.test(nm);                  // demo: Paolo rifiuta, per mostrare il ramo
+  const declina=/Paolo/.test(nm);                  // demo: Paolo rifiuta (❌ Non posso)
+  const optOut=/Davide/.test(nm);                  // demo: Davide fa opt-out (🔕 Non invitarmi più)
   r.invitati=(r.invitati||[]).filter(x=>x!==nm);
   if(declina){ save(); addInHtml('❌ <b>'+esc(nm)+'</b> non può per '+esc(r.giorno)+' alle '+r.ora+'. Invita qualcun altro.'); rosterActionButtons(r); return; }
+  if(optOut){ const fr=S.friends.find(f=>f.nome.split(' ')[0]===nm); if(fr) fr.optOut=true; save();
+    addInHtml('🔕 <b>'+esc(nm)+'</b> ha scelto di <b>non ricevere più inviti</b>. Rispettiamo la sua scelta: non gli manderemo altre richieste. Invita pure qualcun altro.'); rosterActionButtons(r); return; }
   r.amici=(r.amici||[]).concat(nm); save();
   if(rosterPosti(r)===0){ confirmBooking(r); return; }
   addInHtml('✅ <b>'+esc(nm)+'</b> ha confermato! Ora siete <b>'+rosterFilled(r)+'/'+rosterTarget(r)+'</b>'+(rosterPending(r)?(' · in attesa: '+r.invitati.join(', ')):' · manca'+(rosterPosti(r)>1?'no':'')+' '+rosterPosti(r))+'.',true);
