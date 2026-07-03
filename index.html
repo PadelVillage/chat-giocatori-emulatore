@@ -184,7 +184,7 @@
 const LS_KEY='pmo_emu_state_v6';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.25 · 03/07';
+const APP_BUILD='v0.26 · 03/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -265,17 +265,6 @@ function addQuick(btns){
     wrap.appendChild(btn); });
   chat.appendChild(wrap); scrollDown();
 }
-function addMenu(rows, opts){
-  const m=el('menu'); let cur=null;
-  if(opts&&opts.body){ const b=el('menu-body'); b.innerHTML=opts.body; m.appendChild(b); }   // corpo del List Message
-  rows.forEach(r=>{
-    if(r.section && r.section!==cur){ cur=r.section; const h=el('menu-head'); h.textContent=r.section; m.appendChild(h); }
-    const row=el('menu-row','<span class="menu-ic">'+(r.ic||'•')+'</span><span class="menu-lb"><span class="menu-lb-t">'+esc(r.label)+'</span>'+(r.desc?'<span class="menu-lb-d">'+esc(r.desc)+'</span>':'')+'</span><span class="menu-ch">›</span>');
-    row.onclick=()=>{ if(r.action) r.action(); else sendUser(r.text!=null?r.text:r.label); };
-    m.appendChild(row);
-  });
-  chat.appendChild(m); scrollDown();
-}
 /* LIST MESSAGE fedele a WhatsApp: in chat = UNA card (testo/corpo) + UN SOLO
    pulsante; le voci (con descrizione) si aprono in una SCHERMATA a comparsa al tap
    del pulsante — NON sono inline (quello sarebbero le reply-buttons, max 3, senza
@@ -297,7 +286,9 @@ function openListSheet(title, rows){
   (rows||[]).forEach(r=>{
     if(r.section && r.section!==cur){ cur=r.section; const h=el('menu-head'); h.textContent=r.section; m.appendChild(h); }
     const row=el('menu-row','<span class="menu-ic">'+(r.ic||'•')+'</span><span class="menu-lb"><span class="menu-lb-t">'+esc(r.label)+'</span>'+(r.desc?'<span class="menu-lb-d">'+esc(r.desc)+'</span>':'')+'</span><span class="menu-ch">›</span>');
-    row.onclick=()=>{ closeSheet(); addOut(r.label); if(r.action) r.action(); };
+    // fedele a WA: selezionare una riga INVIA il suo titolo (addOut); poi si esegue
+    // l'azione o si instrada il payload `text` in modo SILENZIOSO (niente doppio echo).
+    row.onclick=()=>{ closeSheet(); addOut(r.label); if(r.action) r.action(); else sendUser(r.text!=null?r.text:r.label, true); };
     m.appendChild(row);
   });
   body.appendChild(m);
@@ -634,8 +625,8 @@ function sendUser(text,silent){
 }
 function route(intent,t){
   switch(intent){
-    case 'saluto': addInHtml('Ciao '+esc(S.player.nome.split(' ')[0])+', come possiamo aiutarti? Ecco cosa possiamo fare:'); showMenu(); break;
-    case 'altro': addInHtml('Certo, ecco cos\'altro possiamo fare per te:'); showMenuAltro(); break;
+    case 'saluto': showMenu('Ciao '+esc(S.player.nome.split(' ')[0])+', come possiamo aiutarti? 👇'); break;
+    case 'altro': showMenuAltro('Certo, ecco cos\'altro possiamo fare per te 👇'); break;
     case 'profilo': doProfilo(); break;
     case 'amici': doAmici(); break;
     case 'borsellino': doBorsellino(); break;
@@ -646,7 +637,7 @@ function route(intent,t){
     case 'annulla': startCancel(); break;
     case 'modifica': startModify(); break;
     case 'prenota': startBooking(t); break;
-    default: addInHtml('Scusa, non abbiamo capito bene. Ecco cosa possiamo fare:'); showMenu();
+    default: showMenu('Scusa, non abbiamo capito bene 🤔 Ecco cosa possiamo fare 👇');
   }
 }
 /* Bottone "🏠 Menu" da offrire in coda ai flussi foglia: riporta al menu
@@ -654,27 +645,33 @@ function route(intent,t){
    ("🏠 Menu" → intent saluto → showMenu). WhatsApp NON ha barre/bottoni fissi;
    il "torna alla home sempre disponibile" reale = questo + il comando /menu. */
 function homeBtn(){ return {label:'🏠 Menu'}; }
-function showMenu(){
-  addMenu([
-    {section:'Prenotazioni', ic:'🎾', label:'Prenota un campo', text:'Vorrei prenotare un campo'},
-    {section:'Prenotazioni', ic:'🧑‍💼', label:'Fatti organizzare la partita (+5 €)', action:()=>botSay(doConcierge)},
-    {section:'Prenotazioni', ic:'📅', label:'Le mie prenotazioni', text:'Cosa ho prenotato?'},
-    {section:'Account', ic:'👤', label:'Il mio profilo', text:'Il mio profilo'},
-    {section:'Account', ic:'👥', label:'I miei amici', text:'I miei amici'},
-    {section:'Account', ic:'💶', label:'Il mio borsellino', text:'Saldo borsellino'}
-  ]);
+/* Righe "Account" comuni a Menu e Altro. Titoli ≤24 char + descrizione ≤72
+   (limiti riga List Message reale). */
+function accountRows(){
+  return [
+    {section:'Account', ic:'👤', label:'Il mio profilo', desc:'Dati, livello e assenze', text:'Il mio profilo'},
+    {section:'Account', ic:'👥', label:'I miei amici', desc:'La tua rubrica di gioco', text:'I miei amici'},
+    {section:'Account', ic:'💶', label:'Il mio borsellino', desc:'Saldo e ultimo movimento', text:'Saldo borsellino'}
+  ];
+}
+/* Menu principale = List Message fedele: UNA card (corpo=body) + UN pulsante
+   "☰ Menu" → le voci (titolo+descrizione) in una schermata a comparsa. */
+function showMenu(body){
+  addListMessage({ body: body||'Ecco cosa possiamo fare per te 👇', button:'Menu', title:'Cosa possiamo fare', rows:[
+    {section:'Prenotazioni', ic:'🎾', label:'Prenota un campo', desc:'Scegli giorno e orario', text:'Vorrei prenotare un campo'},
+    {section:'Prenotazioni', ic:'🧑‍💼', label:'Organizza la partita', desc:'Ai giocatori pensiamo noi · +5 € sulla tua quota', action:()=>botSay(doConcierge)},
+    {section:'Prenotazioni', ic:'📅', label:'Le mie prenotazioni', desc:'Vedi, modifica o disdici', text:'Cosa ho prenotato?'}
+  ].concat(accountRows()) });
 }
 /* Menu "Altro": le funzioni diverse dall'Ice Breaker già in prima schermata
-   (Prenota). List Message ≤10 righe (fedele a WhatsApp). */
-function showMenuAltro(){
-  addMenu([
-    {section:'Prenotazioni', ic:'🧑‍💼', label:'Fatti organizzare la partita (+5 €)', action:()=>botSay(doConcierge)},
-    {section:'Prenotazioni', ic:'📅', label:'Le mie prenotazioni', text:'Cosa ho prenotato?'},
-    {section:'Account', ic:'👤', label:'Il mio profilo', text:'Il mio profilo'},
-    {section:'Account', ic:'👥', label:'I miei amici', text:'I miei amici'},
-    {section:'Account', ic:'💶', label:'Il mio borsellino', text:'Saldo borsellino'},
-    {section:'Account', ic:'❓', label:'Come funziona / aiuto', action:()=>botSay(()=>doHelp(''))}
-  ]);
+   (Prenota). Stesso List Message fedele. */
+function showMenuAltro(body){
+  addListMessage({ body: body||'Ecco cos\'altro possiamo fare per te 👇', button:'Altro', title:'Altro', rows:[
+    {section:'Prenotazioni', ic:'🧑‍💼', label:'Organizza la partita', desc:'Ai giocatori pensiamo noi · +5 € sulla tua quota', action:()=>botSay(doConcierge)},
+    {section:'Prenotazioni', ic:'📅', label:'Le mie prenotazioni', desc:'Vedi, modifica o disdici', text:'Cosa ho prenotato?'}
+  ].concat(accountRows(), [
+    {section:'Aiuto', ic:'❓', label:'Come funziona', desc:'Domande frequenti e aiuto', action:()=>botSay(()=>doHelp(''))}
+  ]) });
 }
 
 /* ---------- Profilo -------------------------------------------------------- */
@@ -771,8 +768,7 @@ function doHelp(t){
     addInHtml('<b>Prenotare</b> 🎾<br>Scegli giorno, momento e orario; prenoti il campo a tuo nome e completi la partita. Ti mostriamo sempre il prezzo.');
     addQuick([{label:'🎾 Prenota un campo',text:'Vorrei prenotare un campo'}]); return; }
   // guida generale (List Message)
-  addInHtml('Ecco cosa posso fare per te — scrivimi con parole tue oppure tocca una voce 👇');
-  showMenu();
+  showMenu('Ecco cosa possiamo fare per te — scrivimi con parole tue oppure tocca una voce 👇');
 }
 
 /* ---------- Disponibilità (= vista giorni/orari nel modulo) ---------------- */
@@ -799,8 +795,8 @@ function statoPren(p){
 function doMie(){
   const list=S.prenotazioni;
   if(!list.length){ addInHtml('Al momento non hai prenotazioni future. Vuoi prenotare un campo?'); addQuick([{label:'🎾 Prenota un campo',text:'Vorrei prenotare un campo'}]); return; }
-  addInHtml('Le tue prossime prenotazioni — tocca per i dettagli:');
-  addMenu(list.slice(0,10).map(p=>({section:'Prenotazioni', ic:'✅', label:p.giorno+' · '+p.ora+' — Campo '+p.campo, action:()=>botSay(()=>showBookingDetail(p.id))})));
+  addListMessage({ body:'Le tue prossime prenotazioni 👇', button:'Le mie prenotazioni', title:'Le mie prenotazioni',
+    rows:list.slice(0,10).map(p=>({section:'Prenotazioni', ic:'✅', label:p.giorno+' · '+p.ora, desc:'Campo '+p.campo+' · '+p.tipo, action:()=>botSay(()=>showBookingDetail(p.id))})) });
 }
 function showBookingDetail(id){
   const p=S.prenotazioni.find(x=>x.id===id); if(!p){ addInHtml('Quella prenotazione non è più disponibile.'); return; }
