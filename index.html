@@ -178,7 +178,7 @@
 const LS_KEY='pmo_emu_state_v6';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.20 · 03/07';
+const APP_BUILD='v0.21 · 03/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -940,6 +940,7 @@ function openBookingFlow(prefill){
 }
 
 function decideAndPresent(draft){
+  if(blockIfNoShow()) return;                              // prenotazioni sospese (tutela no-show)
   if(blockIfActiveOption()) return;
   // Coerenza con la vista disponibilità: se l'orario chiesto a parole è
   // OCCUPATO, apri il modulo con gli orari disponibili.
@@ -954,19 +955,13 @@ function decideAndPresent(draft){
   const pr=slotPrezzo(draftMeta,draft.players);
   const target=pr.giocatori;
   const names=(draft.amici||[]).map(friendName).filter(Boolean);   // amici scelti = da INVITARE
-  const win=rosterWindow(off||0);
   draft.campo=campo; draft.fine=fine; draft.target=target; draft.names=names;
-  addInHtml('Campo disponibile ✅<br>Te lo <b>opzioniamo</b> a tuo nome'+(names.length?(', invito a '+names.join(', ')):'')+'.');
-  addCard('<b>RIEPILOGO</b>'
-    +'<br>📅 '+esc(draft.giorno)+' · '+draft.ora+'–'+fine
-    +'<br>📍 Campo '+campo+' · '+draft.tipo+' ('+draft.durata+"')"
-    +'<br>💶 <b>'+pr.testa+' € a testa</b> · '+pr.campo+' € a campo'
-    +'<br>👥 1/'+target+' (tu)'+(names.length?(' · ✉️ invito a '+names.join(', ')):'')
-    +'<br>⚠️ Completa entro <b>'+win.lbl.toUpperCase()+'</b>, poi il campo torna libero per altri');
-  addQuick([
-    {label:'Procedi',action:()=>{ addOut('Procedi'); botSay(()=>commitOpzione(draft)); }},   // ≤20 char (limite titolo reply-button WhatsApp); poi le 3 scelte per completare
-    {label:'Cambia',action:()=>botSay(()=>{ addInHtml('Riapriamo il modulo.'); openBookingFlow(draft); })}
-  ]);
+  draft.prezzoTesta=pr.testa; draft.prezzoCampo=pr.campo;
+  // Niente più bottone "Procedi": scegliere giorno/orario nel modulo (o la frase
+  // scritta) È GIÀ la conferma → opzioniamo SUBITO e sotto mostriamo "come
+  // completare la partita". Un passaggio in meno (richiesta utente) e via la copy
+  // contraddittoria ("opzioniamo" al futuro mentre il campo non era ancora preso).
+  commitOpzione(draft);
 }
 /* Crea l'OPZIONE (gratis) col solo organizzatore confermato; gli amici scelti
    ricevono un INVITO (il posto si riempie solo quando accettano). */
@@ -979,9 +974,13 @@ function commitOpzione(draft){
     deadline:optDeadlineMs(off||0,draft.ora), win:rosterWindow(off||0).lbl};
   S.prenotazioni.push(rec); save();
   const posti=target-1;
+  const fine=draft.fine||addMin(rec.ora,rec.durata);
+  const priceLine=(draft.prezzoTesta!=null)?('<br>💶 <b>'+draft.prezzoTesta+' € a testa</b> · '+draft.prezzoCampo+' € a campo'):'';
   addInHtml('🟠 <b>Campo opzionato</b> a tuo nome'
-    +'<br>📅 '+esc(rec.giorno)+' · '+rec.ora+'–'+draft.fine+' · Campo '+rec.campo
+    +'<br>📅 '+esc(rec.giorno)+' · '+rec.ora+'–'+fine+' · Campo '+rec.campo
+    +priceLine
     +'<br>👥 Sei <b>1/'+target+'</b> · '+(posti>1?'mancano '+posti:'manca 1')+' · hai <b>'+rec.win+'</b> per completare'
+    +(invited.length?('<br>✉️ Invito a '+invited.join(', ')):'')
     +'<br><b>Come vuoi completarla?</b> 👇',true);
   rosterActionButtons(rec);
   if(invited.length) sendInvites(rec, invited);
