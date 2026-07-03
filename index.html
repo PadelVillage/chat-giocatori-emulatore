@@ -67,6 +67,9 @@
   @keyframes blink{0%,60%,100%{opacity:.3}30%{opacity:1}}
   /* Nota demo */
   .demo-note{flex:0 0 auto;background:#fff4d6;color:#8a6d00;font-size:11.5px;text-align:center;padding:6px 12px;border-top:1px solid #f0e3b0}
+  /* Controlli DEMO (🎭) — chrome dell'emulatore, distinti dalle bolle WhatsApp */
+  .demorow{display:flex;justify-content:center;margin:5px 0}
+  .demobtn{background:#fff4d6;color:#8a6d00;border:1px dashed #d9c37a;border-radius:14px;font-size:11.5px;padding:5px 12px;cursor:pointer}
   /* Input */
   .bar{display:flex;align-items:center;gap:6px;padding:8px 8px;background:var(--wa-bg);flex:0 0 auto}
   .ic-btn{background:none;border:0;font-size:20px;cursor:pointer;color:#54656f;flex:0 0 auto;padding:4px}
@@ -175,7 +178,7 @@
 const LS_KEY='pmo_emu_state_v6';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.19 · 03/07';
+const APP_BUILD='v0.20 · 03/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -207,6 +210,7 @@ function demoState(){
   return {
     player:{ nome:'Marco Aprea', numero:'+39 333 123 4567', socio:true, livello:'4.0', inRegola:true,
              genere:'M',   // dal dato anagrafica: serve alla domanda concierge "mista o omogenea" (F = donna)
+             strikes:0,    // assenze registrate (no-show / disdette tardive) → tutela no-show (blocco soft al 3°)
              borselloCent:2400, ultimoMov:'ricarica € 20 il 28/06' },
     /* Amici = SOCI del circolo (numero in anagrafica). Niente livello: dopo la
        rimozione delle partite aperte non filtra più nulla. suWhatsApp = ha scritto
@@ -397,6 +401,8 @@ const RUBRICA=[
   {nome:'Marco Esterno', numero:'+39 333 555 0199', socio:false, suWhatsApp:false}   // non socio → ramo iscrizione
 ];
 const LEAD_MIN=30;               // anticipo minimo: non prenotabile se manca <30' all'avvio
+const HRS_DISDETTA=48;           // tutela no-show: disdetta SENZA assenza fino a 48h prima dell'avvio
+const NOSHOW_LIMIT=3;            // al 3° strike (assenza/disdetta tardiva) → blocco soft prenotazioni online
 function nowMin(){ const n=new Date(); return n.getHours()*60+n.getMinutes(); }
 function courtsFor(off,dow,ora){
   const mins=toMin(ora);
@@ -430,6 +436,71 @@ function activeOption(){ return S.prenotazioni.find(p=>p.stato==='opzionato' && 
 function blockIfActiveOption(){ const a=activeOption(); if(!a) return false;
   addInHtml('Hai già un campo in attesa di completamento: <b>'+esc(a.giorno)+' · '+a.ora+'</b>. Completa la partita o lascialo scadere prima di prenotarne un altro.');
   addQuick([{label:'📅 Vedi la mia opzione',action:()=>botSay(doMie)}]); return true; }
+/* --- TUTELA NO-SHOW (strike / blocco soft) --------------------------------
+   Niente caparra e niente pagamento in chat → su un no-show il circolo non ha
+   appiglio economico. Modello scelto con l'utente = STRIKE / BLOCCO SOFT:
+   · disdici entro 48h (HRS_DISDETTA) = ok, il campo si libera in tempo;
+   · no-show o disdetta TARDIVA (<48h) = +1 assenza (strike);
+   · al 3° strike (NOSHOW_LIMIT) le prenotazioni ONLINE si sospendono → si
+     riattivano SOLO in segreteria (nessun auto-reset: le azzera la segreteria).
+   In v1 il pagamento non è in chat: l'app MODELLA la policy e REGISTRA
+   l'accountability (contatore in profilo + banda); l'enforcement vero è lato
+   segreteria/Matchpoint. Il no-show è un evento di BACKEND → nell'emulatore lo
+   simuliamo con controlli DEMO (🎭), che NON sono componenti WhatsApp. */
+function strikeCount(){ return S.player.strikes||0; }
+function isBlocked(){ return strikeCount()>=NOSHOW_LIMIT; }
+/* Disdetta tardiva = mancano meno di 48h all'avvio della partita. */
+function isLateCancel(p){ const off=offsetForGiorno(p.giorno); if(off==null) return false;
+  return (matchStartMs(off,p.ora)-Date.now()) < HRS_DISDETTA*3600*1000; }
+/* Registra un'assenza e comunica la conseguenza (tono non punitivo, voce
+   segreteria). Sotto soglia = avviso; a soglia = blocco soft. */
+function addStrike(motivo){
+  S.player.strikes=strikeCount()+1; save(); refreshBand();
+  const n=strikeCount();
+  if(n>=NOSHOW_LIMIT){
+    addInHtml('⛔ <b>Prenotazioni online sospese</b>'
+      +'<br>Risultano <b>'+n+' assenze</b> sul tuo profilo.'
+      +'<br>Passa in segreteria e le riattiviamo subito. 🎾');
+    demoUnblockControl();
+  } else {
+    addInHtml('⚠️ <b>Assenza registrata</b> ('+n+'/'+NOSHOW_LIMIT+')'
+      +'<br>Un no-show tiene <b>l\'intero campo</b> bloccato per 4 giocatori.'
+      +'<br>Disdici sempre <b>entro 48h</b>: così liberi il campo in tempo.'
+      +'<br>Alla <b>'+NOSHOW_LIMIT+'ª</b> assenza le prenotazioni online si sospendono.');
+    addQuick([homeBtn()]);
+  }
+}
+/* Banda identità: riflette lo stato di blocco (accountability sempre visibile). */
+function refreshBand(){ const b=document.getElementById('band'); if(!b) return;
+  if(isBlocked()){ b.textContent='⛔ Prenotazioni online sospese · passa in segreteria'; b.style.background='#f7d6d6'; b.style.color='#8a2b2b'; }
+  else{ b.textContent='✓ Numero riconosciuto: '+S.player.nome+' · '+(S.player.socio?'socio':'non socio'); b.style.background=''; b.style.color=''; }
+}
+/* Guardia (come blockIfActiveOption): se le prenotazioni online sono sospese,
+   ferma il flusso di prenotazione. Blocco SOFT → si riattiva in segreteria. */
+function blockIfNoShow(){ if(!isBlocked()) return false;
+  addInHtml('⛔ <b>Le prenotazioni online sono sospese</b>'
+    +'<br>Risultano <b>'+strikeCount()+' assenze</b> sul tuo profilo.'
+    +'<br>Passa in segreteria e le riattiviamo subito. 🎾');
+  demoUnblockControl(); return true; }
+/* 🎭 Controlli DEMO (emulatore chrome, NON WhatsApp): il no-show è un evento di
+   backend e lo sblocco lo fa la segreteria fuori chat. Qui li rendiamo
+   pilotabili per il walkthrough, con stile "demo" distinto dalle bolle WA. */
+function addDemoRow(label,onClick){ const w=el('demorow'); const b=document.createElement('button');
+  b.className='demobtn'; b.textContent=label; b.onclick=()=>{ w.remove(); onClick(); }; w.appendChild(b);
+  chat.appendChild(w); scrollDown(); }
+function demoUnblockControl(){ addDemoRow('🎭 Demo · Segreteria: riattiva',()=>botSay(()=>{
+  S.player.strikes=0; save(); refreshBand();
+  addInHtml('✅ <b>Prenotazioni riattivate</b>'
+    +'<br>La segreteria ha <b>azzerato le assenze</b>. Buon gioco! 🎾');
+  addQuick([homeBtn()]); })); }
+/* Simula un NO-SHOW su una prenotazione (evento backend, in demo 🎭): la partita
+   salta, il campo era rimasto bloccato per 4 → +1 assenza. */
+function demoNoShow(p){ botSay(()=>{
+  S.prenotazioni=S.prenotazioni.filter(x=>x.id!==p.id); save();
+  addInHtml('🚫 <b>Non ti sei presentato</b>'
+    +'<br>📅 '+esc(p.giorno)+' · '+p.ora+' · Campo '+p.campo
+    +'<br>Il campo è rimasto bloccato per 4 giocatori.');
+  addStrike('no-show'); }); }
 /* Conteggio orari DISPONIBILI (liberi) del giorno, per l'indicatore. */
 function availSlots(off,dow){ let c=0; daySlotGroups(off,dow,90).forEach(g=>g.slots.forEach(s=>{ if(s.status!=='busy') c++; })); return c; }
 const GIORNI=['domenica','lunedì','martedì','mercoledì','giovedì','venerdì','sabato'];
@@ -576,7 +647,8 @@ function showMenuAltro(){
 function doProfilo(){
   addInHtml('Ecco il tuo profilo:');
   addCard('<b>'+esc(S.player.nome)+'</b> <span style="background:#d6e7d2;color:#3a5a40;font-size:10.5px;padding:1px 7px;border-radius:8px">socio</span>'
-    +'<br>📱 '+esc(S.player.numero)+'<br>🎾 Livello '+esc(S.player.livello)+'<br>💶 Borsellino '+euro(S.player.borselloCent));
+    +'<br>📱 '+esc(S.player.numero)+'<br>🎾 Livello '+esc(S.player.livello)+'<br>💶 Borsellino '+euro(S.player.borselloCent)
+    +(strikeCount()?('<br>⚠️ Assenze: <b>'+strikeCount()+'/'+NOSHOW_LIMIT+'</b>'+(isBlocked()?' · <b>prenotazioni online sospese</b>':'')):''));
   addQuick([{label:'I miei amici',text:'I miei amici'},{label:'Il mio borsellino',text:'Saldo borsellino'},homeBtn()]);
 }
 
@@ -709,6 +781,9 @@ function showBookingDetail(id){
     btns.push({label:'🗑️ Annulla',action:()=>startCancelOne(p),danger:true});
   }
   addQuick(btns.slice(0,3));
+  // 🎭 Demo: il no-show è un evento di backend (il giocatore non si presenta) →
+  // qui lo simuliamo per mostrare la tutela (strike/blocco). Chrome, non WhatsApp.
+  addDemoRow('🎭 Demo · Simula: non mi presento',()=>demoNoShow(p));
 }
 /* Supplemento concierge in caso di disdetta: dovuto SOLO se la segreteria ha
    già organizzato la partita (stato 'prenotato' = completata). Finché è ancora
@@ -721,11 +796,17 @@ function conciergeCancelNote(p){
 }
 /* Annulla/Modifica su una prenotazione specifica (riusa cancelStep/modifyStep). */
 function startCancelOne(p){
-  convo={mode:'cancel',step:'confirm',draft:{target:p}};
+  const late=isLateCancel(p);
+  convo={mode:'cancel',step:'confirm',draft:{target:p,late:late}};
   const warn = conciergeCancelNote(p);
-  addInHtml('Vuoi annullare: '+esc(p.giorno)+' · '+p.ora+' — Campo '+p.campo+'? L’azione è definitiva: non perdi nulla, il campo torna disponibile per altri.'+warn);
+  addInHtml('Vuoi annullare: '+esc(p.giorno)+' · '+p.ora+' — Campo '+p.campo+'?'+cancelWarn(late)+warn);
   addQuick([{label:'Sì, annulla',text:'sì',danger:true},{label:'No',text:'no'}]);
 }
+/* Nota di conferma annullo: entro 48h non perdi nulla; oltre (tardiva) conta
+   come un'assenza (tutela no-show). */
+function cancelWarn(late){ return late
+  ? '<br>⚠️ <b>Disdetta tardiva</b>: mancano meno di <b>48h</b> all\'avvio → conta come un\'assenza.'
+  : '<br>L’azione è definitiva: non perdi nulla, il campo torna disponibile per altri.'; }
 function startModifyOne(p){
   convo={mode:'modify',step:'newtime',draft:{target:p}};
   addInHtml('A che nuovo orario sposto '+esc(p.giorno)+' · '+p.ora+'? (es. “alle 20:30”)');
@@ -733,6 +814,7 @@ function startModifyOne(p){
 
 /* ---------- Prenotazione: WhatsApp Flow (modulo) --------------------------- */
 function startBooking(text){
+  if(blockIfNoShow()) return;                              // prenotazioni sospese (tutela no-show)
   const w=parseWhen(text);
   if(w.date && w.ora){ return decideAndPresent({giorno:w.giorno,dow:w.dow,ora:w.ora,tipo:'Partita',durata:90,amici:[]}); }
   addInHtml('Ti apriamo il modulo — scegli un giorno e tocca un orario libero. 👇');
@@ -740,12 +822,14 @@ function startBooking(text){
 }
 /* Concierge: la segreteria organizza la partita per te (+5 € sulla quota di chi prenota per primo, in segreteria). */
 function doConcierge(){
+  if(blockIfNoShow()) return;                              // prenotazioni sospese (tutela no-show)
   if(blockIfActiveOption()) return;
   addInHtml('Ci pensiamo noi 🧑‍💼<br>Scegli quando vuoi giocare, ai giocatori pensiamo noi.<br>'+FEE_LINE+' 👇');
   openBookingFlow({concierge:true});
 }
 function openBookingFlow(prefill){
   prefill=prefill||{};
+  if(blockIfNoShow()) return;                              // prenotazioni sospese (tutela no-show)
   if(blockIfActiveOption()) return;                        // 1 sola opzione attiva per volta
   const concierge=!!prefill.concierge;
   const days=[]; for(let o=0;o<=MAX_GIORNI;o++) days.push(dayInfo(o));
@@ -1104,13 +1188,14 @@ function startCancel(){
 function cancelStep(t){
   const d=convo.draft;
   if(convo.step==='pick'){ const p=matchPren(t); if(!p){ addInHtml('Non ho individuato la prenotazione. Riprova indicando il giorno.'); return; }
-    d.target=p; convo.step='confirm';
+    d.target=p; d.late=isLateCancel(p); convo.step='confirm';
     const warn = conciergeCancelNote(p);
-    addInHtml('Vuoi annullare: '+esc(p.giorno)+' · '+p.ora+' — Campo '+p.campo+' · '+p.tipo+'? L’azione è definitiva: non perdi nulla, il campo torna disponibile per altri.'+warn);
+    addInHtml('Vuoi annullare: '+esc(p.giorno)+' · '+p.ora+' — Campo '+p.campo+' · '+p.tipo+'?'+cancelWarn(d.late)+warn);
     addQuick([{label:'Sì, annulla',text:'sì',danger:true},{label:'No',text:'no'}]); return; }
   if(convo.step==='confirm'){
     if(/^s[iì]|conferm|annulla/.test(t.toLowerCase())){ const p=d.target; S.prenotazioni=S.prenotazioni.filter(x=>x.id!==p.id); save();
-      addInHtml('Fatto. Campo '+p.campo+' di '+esc(p.giorno)+' alle '+p.ora+' liberato. Non hai perso nulla.',true); maybeHint(); addQuick([homeBtn()]); }
+      if(d.late){ addInHtml('Campo '+p.campo+' di '+esc(p.giorno)+' alle '+p.ora+' liberato.',true); addStrike('disdetta tardiva'); }
+      else{ addInHtml('Fatto. Campo '+p.campo+' di '+esc(p.giorno)+' alle '+p.ora+' liberato. Non hai perso nulla.',true); maybeHint(); addQuick([homeBtn()]); } }
     else addInHtml('Ok, non annullo nulla.');
     resetConvo();
   }
@@ -1152,7 +1237,7 @@ function matchPren(t){
 /* ============================ BOOTSTRAP =================================== */
 function boot(){
   chat.innerHTML=''; closeSheet(); resetConvo();
-  document.getElementById('band').textContent='✓ Numero riconosciuto: '+S.player.nome+' · '+(S.player.socio?'socio':'non socio');
+  refreshBand();   // banda identità + eventuale stato "prenotazioni sospese" (tutela no-show)
   { const bt=document.getElementById('buildTag'); if(bt) bt.textContent=APP_BUILD; }
   try{ console.log('Emulatore Padel Village — build', APP_BUILD); }catch(e){}
   hideCmdPop(); _hintN=0;
