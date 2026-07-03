@@ -184,7 +184,7 @@
 const LS_KEY='pmo_emu_state_v7';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.27 · 03/07';
+const APP_BUILD='v0.28 · 03/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -1060,7 +1060,7 @@ function rosterActionButtons(rec, opts){
     +(rosterPending(rec)?('<br>✉️ In attesa: '+rec.invitati.join(', ')):'')
     +'<br>👥 Sei <b>'+rosterFilled(rec)+'/'+rosterTarget(rec)+'</b> · '
       +(posti>1?'mancano <b>'+posti+'</b> giocatori':'manca <b>1</b> giocatore')
-      +' · hai <b>'+rec.win+'</b> per completare';
+      +' · hai <b>'+rec.win+'</b> per completare la partita';
   // Le voci (con descrizione) vivono NELLA SCHERMATA che apre il pulsante (fedele a WA).
   const rows=[
     {section:'Completa la partita', ic:'👥', label:'Invito i miei amici', desc:rosterPending(rec)?('Invita o revoca · '+rosterPending(rec)+' in attesa'):'Scegli tu con chi giocare', action:()=>openAddPlayersFlow(rec)},
@@ -1337,7 +1337,7 @@ function modifyStep(t){
       const noff=offsetForGiorno(rec.giorno)||0;
       rec.gen=(rec.gen||0)+1; rec.deadline=optDeadlineMs(noff,rec.ora); rec.win=rosterWindow(noff).lbl;
       save(); scheduleRosterReminders(rec, noff);
-      reshow=true;   // ancora da completare → riproponiamo le scelte (il corpo lista ridice "hai X per completare")
+      reshow=true;   // ancora da completare → riproponiamo le scelte (il corpo lista ridice "hai X per completare la partita")
     } else save();
     addInHtml('✅ Aggiornata: '+esc(rec.giorno)+' · '+w.ora+' — Campo '+rec.campo+' (prima '+old+').',true);
     resetConvo();
