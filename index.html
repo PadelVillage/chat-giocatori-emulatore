@@ -193,7 +193,7 @@
 const LS_KEY='pmo_emu_state_v7';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.36 · 03/07';
+const APP_BUILD='v0.37 · 04/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -292,6 +292,20 @@ function addListMessage(opts){
   const btn=document.createElement('button'); btn.type='button'; btn.className='lm-btn';
   btn.innerHTML='<span class="lm-ic">☰</span> '+esc(opts.button);
   btn.onclick=()=>openListSheet(opts.title||opts.button, opts.rows);   // il tap sul pulsante NON invia nulla: apre la schermata
+  m.appendChild(btn);
+  chat.appendChild(m); scrollDown();
+}
+/* LANCIO di un WhatsApp FLOW fedele: un Flow reale NON si auto-apre — arriva un
+   messaggio con un CTA che l'utente TOCCA per aprire il modulo (identico al pulsante
+   di un List Message). body = corpo del messaggio, onOpen = apertura del Flow
+   (openBookingFlow), button = etichetta CTA (default "Apri"). Ri-tappabile (riapre il
+   Flow) come il pulsante di una List. */
+function addFlowLaunch(body, onOpen, button){
+  const m=el('menu');
+  const b=el('menu-body'); b.innerHTML=body; m.appendChild(b);
+  const btn=document.createElement('button'); btn.type='button'; btn.className='lm-btn';
+  btn.innerHTML='<span class="lm-ic">↗</span> '+esc(button||'Apri');
+  btn.onclick=()=>{ btn.blur(); onOpen(); };
   m.appendChild(btn);
   chat.appendChild(m); scrollDown();
 }
@@ -706,7 +720,7 @@ function doProfilo(){
 function doAmici(){
   addInHtml('I tuoi amici con cui giochi:');
   addCard(S.friends.length ? S.friends.map(f=>'👤 '+esc(f.nome)).join('<br>') : 'Ancora nessun amico in lista.');
-  addQuick([{label:'➕ Aggiungi amico',action:openAddFriendFlow},{label:'🎾 Prenota con un amico',action:()=>botSay(()=>{ addInHtml('Apriamo il modulo — trovi gli amici in fondo, spunta chi gioca con te.'); openBookingFlow({}); })}]);
+  addQuick([{label:'➕ Aggiungi amico',action:openAddFriendFlow},{label:'🎾 Prenota con un amico',action:()=>botSay(()=>{ addFlowLaunch('Apriamo il modulo — trovi gli amici in fondo, spunta chi gioca con te. 👇', ()=>openBookingFlow({})); })}]);
 }
 /* Aggiungi amico = il giocatore CONDIVIDE un contatto (📎 → Contatto). Su WhatsApp
    reale il business non legge la rubrica: riceve nome+numero solo se il giocatore
@@ -793,8 +807,7 @@ function doHelp(t){
 /* ---------- Disponibilità (= vista giorni/orari nel modulo) ---------------- */
 function doDisponibilita(t){
   const w=parseWhen(t);
-  addInHtml('Ecco la disponibilità'+(w.giorno?' di '+esc(w.giorno):' dei prossimi giorni')+' — tocca un orario libero per prenotare. 👇');
-  openBookingFlow({giorno:w.giorno});
+  addFlowLaunch('Ecco la disponibilità'+(w.giorno?' di '+esc(w.giorno):' dei prossimi giorni')+' — tocca un orario libero per prenotare. 👇', ()=>openBookingFlow({giorno:w.giorno}));
 }
 
 /* ---------- Le mie prenotazioni -------------------------------------------- */
@@ -829,7 +842,7 @@ function showBookingDetail(id){
     if(!p.concierge) btns.push({label:'🧑‍💼 Ci pensa la segreteria',action:()=>{ addOut('Ci pensa la segreteria'); botSay(()=>delegateConcierge(p)); }});
     btns.push({label:'🗑️ Annulla',action:()=>startCancelOne(p),danger:true});
   } else {
-    btns.push({label:'✏️ Modifica orario',action:()=>botSay(()=>{ addInHtml('Riapriamo il modulo — scegli di nuovo giorno e orario. 👇'); openBookingFlow({editId:p.id, giorno:p.giorno, ora:p.ora}); })});
+    btns.push({label:'✏️ Modifica orario',action:()=>botSay(()=>{ addFlowLaunch('Riapriamo il modulo — scegli di nuovo giorno e orario. 👇', ()=>openBookingFlow({editId:p.id, giorno:p.giorno, ora:p.ora})); })});
     btns.push({label:'🗑️ Annulla',action:()=>startCancelOne(p),danger:true});
   }
   addQuick(btns.slice(0,3));
@@ -866,8 +879,7 @@ function startBooking(text){
   if(blockIfNoShow()) return;                              // prenotazioni sospese (tutela no-show)
   const w=parseWhen(text);
   if(w.date && w.ora){ return decideAndPresent({giorno:w.giorno,dow:w.dow,ora:w.ora,tipo:'Partita',durata:90,amici:[]}); }
-  addInHtml('Ti apriamo il modulo — scegli un giorno e tocca un orario libero. 👇');
-  openBookingFlow({giorno:w.giorno,ora:w.ora});
+  addFlowLaunch('Ti apriamo il modulo — scegli un giorno e tocca un orario libero. 👇', ()=>openBookingFlow({giorno:w.giorno,ora:w.ora}));
 }
 /* ⚠️ CONCIERGE STANDALONE — NON più cablato (opzione A, scelta utente 03/07): nessun
    comando/intent/menu lo raggiunge. Il concierge esiste SOLO come completamento
@@ -1037,8 +1049,7 @@ function decideAndPresent(draft){
   const off=offsetForGiorno(draft.giorno);
   const draftMeta = off!=null ? slotMetaFor(off,draft.dow,draft.ora,draft.durata,draft.players) : null;
   if(draftMeta && draftMeta.status==='busy'){
-    addInHtml('A quell\'ora è tutto occupato. Ti apriamo il modulo con gli orari disponibili. 👇');
-    openBookingFlow({giorno:draft.giorno,durata:draft.durata,amici:draft.amici});
+    addFlowLaunch('A quell\'ora è tutto occupato. Ti apriamo il modulo con gli orari disponibili. 👇', ()=>openBookingFlow({giorno:draft.giorno,durata:draft.durata,amici:draft.amici}));
     return;
   }
   const campo=campoLibero(draft.dow,draft.ora); const fine=addMin(draft.ora,draft.durata);
@@ -1092,7 +1103,7 @@ function rosterActionButtons(rec, opts){
   const rows=[
     {section:'Completa la partita', ic:'👥', label:'Invito i miei amici', desc:rosterPending(rec)?('Invita o revoca · '+rosterPending(rec)+' in attesa'):'Scegli tu con chi giocare', action:()=>openAddPlayersFlow(rec)},
     {ic:'🧑‍💼', label:'Ci pensa la segreteria', desc:'Troviamo noi i giocatori · +'+CONCIERGE_FEE+' € solo sulla tua quota', action:()=>botSay(()=>delegateConcierge(rec))},
-    {section:'Oppure', ic:'✏️', label:'Modifica la prenotazione', desc:'Cambia giorno o orario', action:()=>botSay(()=>{ addInHtml('Riapriamo il modulo — scegli di nuovo giorno e orario. 👇'); openBookingFlow({editId:rec.id, giorno:rec.giorno, ora:rec.ora}); })}
+    {section:'Oppure', ic:'✏️', label:'Modifica la prenotazione', desc:'Cambia giorno o orario', action:()=>botSay(()=>{ addFlowLaunch('Riapriamo il modulo — scegli di nuovo giorno e orario. 👇', ()=>openBookingFlow({editId:rec.id, giorno:rec.giorno, ora:rec.ora})); })}
   ];
   addListMessage({body:body, button:'Completa la partita', title:'Completa la partita', rows:rows.slice(0,10)});
 }
@@ -1337,7 +1348,7 @@ function startModify(){
   addInHtml('Quale prenotazione vuoi modificare?');
   // Ogni scelta riapre il MODULO in edit-mode (come showBookingDetail / le opzioni):
   // niente più prompt a testo per il nuovo orario.
-  addQuick(S.prenotazioni.map(p=>({label:p.giorno+' · '+p.ora+' — Campo '+p.campo, action:()=>botSay(()=>{ addInHtml('Riapriamo il modulo — scegli di nuovo giorno e orario. 👇'); openBookingFlow({editId:p.id, giorno:p.giorno, ora:p.ora}); })})));
+  addQuick(S.prenotazioni.map(p=>({label:p.giorno+' · '+p.ora+' — Campo '+p.campo, action:()=>botSay(()=>{ addFlowLaunch('Riapriamo il modulo — scegli di nuovo giorno e orario. 👇', ()=>openBookingFlow({editId:p.id, giorno:p.giorno, ora:p.ora})); })})));
 }
 function matchPren(t){
   t=t.toLowerCase(); const byId=t.match(/\b(\d{1,4})\b/); if(byId){ const p=S.prenotazioni.find(x=>x.id===parseInt(byId[1],10)); if(p) return p; }
