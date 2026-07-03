@@ -193,7 +193,7 @@
 const LS_KEY='pmo_emu_state_v7';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.32 · 03/07';
+const APP_BUILD='v0.33 · 03/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -509,7 +509,7 @@ function addStrike(motivo){
       +'<br>Un no-show tiene <b>l\'intero campo</b> bloccato per 4 giocatori.'
       +'<br>Disdici sempre <b>entro 48h</b>: così liberi il campo in tempo.'
       +'<br>Alla <b>'+NOSHOW_LIMIT+'ª</b> assenza le prenotazioni online si sospendono.');
-    addQuick([homeBtn()]);
+    homeMenu();
   }
 }
 /* Banda identità: riflette lo stato di blocco (accountability sempre visibile). */
@@ -534,7 +534,7 @@ function demoUnblockControl(){ addDemoRow('🎭 Demo · Segreteria: riattiva',()
   S.player.strikes=0; save(); refreshBand();
   addInHtml('✅ <b>Prenotazioni riattivate</b>'
     +'<br>La segreteria ha <b>azzerato le assenze</b>. Buon gioco! 🎾');
-  addQuick([homeBtn()]); })); }
+  homeMenu(); })); }
 /* Simula un NO-SHOW su una prenotazione (evento backend, in demo 🎭): la partita
    salta, il campo era rimasto bloccato per 4 → +1 assenza. */
 function demoNoShow(p){ botSay(()=>{
@@ -657,11 +657,12 @@ function route(intent,t){
     default: showMenu('Scusa, non abbiamo capito bene 🤔 Ecco cosa possiamo fare 👇');
   }
 }
-/* Bottone "🏠 Menu" da offrire in coda ai flussi foglia: riporta al menu
-   principale. Fedele a WhatsApp = reply-button il cui tap invia il titolo
-   ("🏠 Menu" → intent saluto → showMenu). WhatsApp NON ha barre/bottoni fissi;
-   il "torna alla home sempre disponibile" reale = questo + il comando /menu. */
-function homeBtn(){ return {label:'🏠 Menu'}; }
+/* Menu "home" in coda ai flussi foglia = direttamente il List Message del menu
+   (una bolla "Posso fare altro? · ☰ Menu"): UN solo tap su "☰ Menu" apre le voci.
+   Fedele a WhatsApp: l'elenco sta dietro il pulsante di UN List Message (prima c'era
+   un reply-button "🏠 Menu" che generava un SECONDO List Message → doppio "Menu" e due
+   tap). WhatsApp NON ha barre/bottoni fissi; la home reale = questo + il comando /menu. */
+function homeMenu(){ showMenu('Posso fare altro per te? 👇'); }
 /* Righe "Account" comuni a Menu e Altro. Titoli ≤24 char + descrizione ≤72
    (limiti riga List Message reale). */
 function accountRows(){
@@ -697,14 +698,14 @@ function doProfilo(){
   addCard('<b>'+esc(S.player.nome)+'</b> <span style="background:#d6e7d2;color:#3a5a40;font-size:10.5px;padding:1px 7px;border-radius:8px">socio</span>'
     +'<br>📱 '+esc(S.player.numero)+'<br>🎾 Livello '+esc(S.player.livello)+'<br>💶 Borsellino '+euro(S.player.borselloCent)
     +(strikeCount()?('<br>⚠️ Assenze: <b>'+strikeCount()+'/'+NOSHOW_LIMIT+'</b>'+(isBlocked()?' · <b>prenotazioni online sospese</b>':'')):''));
-  addQuick([{label:'I miei amici',text:'I miei amici'},{label:'Il mio borsellino',text:'Saldo borsellino'},homeBtn()]);
+  homeMenu();   // i "shortcut" (amici, borsellino) sono già voci del menu → un solo List Message
 }
 
 /* ---------- Amici ---------------------------------------------------------- */
 function doAmici(){
   addInHtml('I tuoi amici con cui giochi:');
   addCard(S.friends.length ? S.friends.map(f=>'👤 '+esc(f.nome)).join('<br>') : 'Ancora nessun amico in lista.');
-  addQuick([{label:'➕ Aggiungi amico',action:openAddFriendFlow},{label:'🎾 Prenota con un amico',action:()=>botSay(()=>{ addInHtml('Apriamo il modulo — trovi gli amici in fondo, spunta chi gioca con te.'); openBookingFlow({}); })},homeBtn()]);
+  addQuick([{label:'➕ Aggiungi amico',action:openAddFriendFlow},{label:'🎾 Prenota con un amico',action:()=>botSay(()=>{ addInHtml('Apriamo il modulo — trovi gli amici in fondo, spunta chi gioca con te.'); openBookingFlow({}); })}]);
 }
 /* Aggiungi amico = il giocatore CONDIVIDE un contatto (📎 → Contatto). Su WhatsApp
    reale il business non legge la rubrica: riceve nome+numero solo se il giocatore
@@ -729,19 +730,19 @@ function openContactPicker(ctx){
 function normNum(n){ return (n||'').replace(/\D/g,''); }
 function isGiaAmico(entry){ return S.friends.some(f=>normNum(f.numero)===normNum(entry.numero)); }
 /* Ritorno al modulo "Completa la partita" dopo un'aggiunta al volo (se ctx.backTo). */
-function backToRoster(ctx){ if(!ctx||!ctx.backTo) return null; return ()=>{ const rr=S.prenotazioni.find(x=>x.id===ctx.backTo); if(rr) openAddPlayersFlow(rr); else addQuick([homeBtn()]); }; }
+function backToRoster(ctx){ if(!ctx||!ctx.backTo) return null; return ()=>{ const rr=S.prenotazioni.find(x=>x.id===ctx.backTo); if(rr) openAddPlayersFlow(rr); else homeMenu(); }; }
 /* Il giocatore ha condiviso un contatto → 3 rami secondo l'anagrafica. */
 function shareContact(entry, ctx){
   const back=backToRoster(ctx);
   addOut('📇 '+entry.nome);                                    // il giocatore "invia" il contatto
   botSay(()=>{
     if(!entry.socio){ inviteToJoin(entry, back); return; }      // non in anagrafica → invito a iscriversi
-    if(isGiaAmico(entry)){ addInHtml('👍 <b>'+esc(entry.nome)+'</b> è già tra i tuoi amici.'); if(back) addQuick([{label:'↩︎ Torna a completare',action:back},homeBtn()]); else addQuick([{label:'👥 I miei amici',text:'I miei amici'},homeBtn()]); return; }
+    if(isGiaAmico(entry)){ addInHtml('👍 <b>'+esc(entry.nome)+'</b> è già tra i tuoi amici.'); if(back) addQuick([{label:'↩︎ Torna a completare',action:back}]); else homeMenu(); return; }
     S.friends.push({id:++S.seq, nome:entry.nome, numero:entry.numero, suWhatsApp:entry.suWhatsApp}); save();
     addInHtml('✅ Ho aggiunto <b>'+esc(entry.nome)+'</b> ai tuoi amici.'
       +(entry.suWhatsApp?'':'<br>ℹ️ Non è ancora sul nostro canale: sarà invitabile a giocare appena ci avrà scritto.'),true);
     if(back) addQuick([{label:'↩︎ Torna a completare',action:back}]);
-    else addQuick([{label:'🎾 Prenota',text:'Vorrei prenotare un campo'},{label:'👥 I miei amici',text:'I miei amici'},homeBtn()]);
+    else addQuick([{label:'🎾 Prenota',text:'Vorrei prenotare un campo'},{label:'👥 I miei amici',text:'I miei amici'}]);
   });
 }
 /* Ramo non-socio: NON possiamo scrivergli noi (niente opt-in → policy Meta). Diamo
@@ -761,11 +762,11 @@ function showJoinInvite(entry, back){
     +'<br>Un amico ti ha invitato a giocare una partita con lui!'
     +'<br>Per partecipare, iscriviti: scrivici su WhatsApp e ti inseriamo nella partita 👇'
     +'<br>https://wa.me/'+CLUB_WA+'?text=Ciao!%20Un%20amico%20mi%20ha%20invitato%20a%20giocare%2C%20vorrei%20iscrivermi');
-  addQuick(back ? [{label:'↩︎ Torna a completare',action:back}] : [homeBtn()]);
+  if(back) addQuick([{label:'↩︎ Torna a completare',action:back}]); else homeMenu();
 }
 
 /* ---------- Borsellino ----------------------------------------------------- */
-function doBorsellino(){ addInHtml('Il tuo borsellino: <b>'+euro(S.player.borselloCent)+'</b>.<br>Ultimo movimento: '+esc(S.player.ultimoMov)+'.'); addQuick([homeBtn()]); }
+function doBorsellino(){ addInHtml('Il tuo borsellino: <b>'+euro(S.player.borselloCent)+'</b>.<br>Ultimo movimento: '+esc(S.player.ultimoMov)+'.'); homeMenu(); }
 
 /* ---------- Aiuto / come si usa (contestuale + guida) ---------------------- */
 function doHelp(t){
@@ -774,7 +775,7 @@ function doHelp(t){
     addInHtml('<b>Invitare gli amici</b> 👥<br>Da “Completa la partita” selezioni i tuoi amici (soci): ricevono un messaggio con <b>✅ Confermo / ❌ Non posso</b> e, <b>appena confermano, entrano in partita</b>. Puoi invitarne solo quanti sono i posti liberi, e <b>revocare</b> un invito ancora in attesa. Chi non è sul nostro canale, o ha scelto <b>🔕 Non invitarmi più</b>, non è invitabile. In partita solo giocatori iscritti — niente ospiti.');
     addQuick([{label:'🎾 Prenota un campo',text:'Vorrei prenotare un campo'}]); return; }
   if(/opzion|complet|scad/.test(t)){
-    addInHtml('<b>Come funziona</b> 🎾<br>Quando prenoti, il campo è <b>tenuto a tuo nome</b> (gratis): hai un po’ di tempo per <b>completare la partita</b> (inviti gli amici o ci pensa la segreteria). Appena siete al completo è <b>confermata</b>. Se non completi in tempo, il campo torna disponibile per altri giocatori.'); addQuick([homeBtn()]); return; }
+    addInHtml('<b>Come funziona</b> 🎾<br>Quando prenoti, il campo è <b>tenuto a tuo nome</b> (gratis): hai un po’ di tempo per <b>completare la partita</b> (inviti gli amici o ci pensa la segreteria). Appena siete al completo è <b>confermata</b>. Se non completi in tempo, il campo torna disponibile per altri giocatori.'); homeMenu(); return; }
   if(/cost|prezz|tariff|paga|anticip|accont|depos/.test(t)){
     addInHtml('<b>Prezzi</b> 💶<br>Ti diamo sempre il prezzo <b>a testa</b> prima di confermare. In questa versione <b>non si paga in chat</b>: prenoti senza versare nulla in anticipo e saldi in circolo.');
     addQuick([{label:'🎾 Prenota un campo',text:'Vorrei prenotare un campo'}]); return; }
@@ -998,7 +999,7 @@ function openBookingFlow(prefill){
    una nuova prenotazione (a differenza di decideAndPresent). */
 function applyEdit(editId,d,ora,meta){
   const rec=S.prenotazioni.find(x=>x.id===editId);
-  if(!rec){ addInHtml('Quella prenotazione non è più disponibile.'); addQuick([homeBtn()]); return; }
+  if(!rec){ addInHtml('Quella prenotazione non è più disponibile.'); homeMenu(); return; }
   rec.giorno=d.giorno; rec.ora=ora; rec.campo=campoLibero(d.dow,ora); rec.durata=90;
   rec.prezzoTesta=slotPrezzo(meta,4).testa;
   if(rec.stato==='opzionato' && !rec.concierge){
@@ -1009,7 +1010,7 @@ function applyEdit(editId,d,ora,meta){
   save();
   // Card UNICA aggiornata (stesso List Message, header "aggiornata").
   if(rec.stato==='opzionato' && !rec.concierge) rosterActionButtons(rec, {header:'✅ <b>Prenotazione aggiornata</b>'});
-  else addQuick([homeBtn()]);
+  else homeMenu();
 }
 
 function decideAndPresent(draft){
@@ -1141,7 +1142,7 @@ function confirmBooking(rec,extra){
     +'<br>📍 Campo '+rec.campo+' · in '+rosterTarget(rec)
     +(rec.amici&&rec.amici.length?('<br>👥 '+rec.amici.join(', ')):'')
     +(extra?('<br>'+extra):''),true);
-  maybeHint(); addQuick([homeBtn()]);
+  maybeHint(); homeMenu();
 }
 /* DISATTIVATO nella demo (vedi scheduleRosterReminders): niente auto-rilascio
    né messaggio "Tempo scaduto" durante il walkthrough. No-op a prova di tutto. */
@@ -1310,7 +1311,7 @@ function cancelStep(t){
   if(convo.step==='confirm'){
     if(/^s[iì]|conferm|annulla/.test(t.toLowerCase())){ const p=d.target; S.prenotazioni=S.prenotazioni.filter(x=>x.id!==p.id); save();
       if(d.late){ addInHtml('Campo '+p.campo+' di '+esc(p.giorno)+' alle '+p.ora+' liberato.',true); addStrike('disdetta tardiva'); }
-      else{ addInHtml('Fatto. Campo '+p.campo+' di '+esc(p.giorno)+' alle '+p.ora+' liberato. Non hai perso nulla.',true); maybeHint(); addQuick([homeBtn()]); } }
+      else{ addInHtml('Fatto. Campo '+p.campo+' di '+esc(p.giorno)+' alle '+p.ora+' liberato. Non hai perso nulla.',true); maybeHint(); homeMenu(); } }
     else addInHtml('Ok, non annullo nulla.');
     resetConvo();
   }
@@ -1340,7 +1341,7 @@ function modifyStep(t){
     addInHtml('✅ Aggiornata: '+esc(rec.giorno)+' · '+w.ora+' — Campo '+rec.campo+' (prima '+old+').',true);
     resetConvo();
     if(reshow){ botSay(()=>rosterActionButtons(rec)); }
-    else { maybeHint(); addQuick([homeBtn()]); }
+    else { maybeHint(); homeMenu(); }
   }
 }
 function matchPren(t){
