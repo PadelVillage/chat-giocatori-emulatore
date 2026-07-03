@@ -169,7 +169,7 @@
 const LS_KEY='pmo_emu_state_v6';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.14 · 03/07';
+const APP_BUILD='v0.15 · 03/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -627,9 +627,9 @@ function showJoinInvite(entry){
   const nome1=entry.nome.split(' ')[0];
   addSys('Inoltra questo messaggio a '+nome1+' 👇');
   addInHtml('🎾 <b>Padel Village</b>'
-    +'<br>Un amico ti invita a giocare con noi!'
-    +'<br>Scrivici su WhatsApp per iscriverti e prenotare un campo 👇'
-    +'<br>https://wa.me/'+CLUB_WA+'?text=Ciao!%20Vorrei%20iscrivermi%20a%20Padel%20Village');
+    +'<br>Un amico ti ha invitato a giocare una partita con lui!'
+    +'<br>Per partecipare, iscriviti: scrivici su WhatsApp e ti inseriamo nella partita 👇'
+    +'<br>https://wa.me/'+CLUB_WA+'?text=Ciao!%20Un%20amico%20mi%20ha%20invitato%20a%20giocare%2C%20vorrei%20iscrivermi');
   addQuick([homeBtn()]);
 }
 
