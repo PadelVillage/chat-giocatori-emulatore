@@ -205,7 +205,7 @@
 const LS_KEY='pmo_emu_state_v9';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.50 · 04/07';
+const APP_BUILD='v0.51 · 04/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -532,14 +532,14 @@ function addStrike(motivo){
   const n=strikeCount();
   if(n>=NOSHOW_LIMIT){
     addInHtml('⛔ <b>Prenotazioni online sospese</b>'
-      +'<br>Risultano <b>'+n+' assenze</b> sul tuo profilo.'
+      +'<br>Risultano <b>'+n+' disdette di gioco</b> sul tuo profilo.'
       +'<br>Passa in segreteria e le riattiviamo subito. 🎾');
     demoUnblockControl();
   } else {
-    addInHtml('⚠️ <b>Assenza registrata</b> ('+n+'/'+NOSHOW_LIMIT+')'
-      +'<br>Un no-show tiene <b>l\'intero campo</b> bloccato per 4 giocatori.'
+    addInHtml('⚠️ <b>Disdetta di gioco registrata</b> ('+n+'/'+NOSHOW_LIMIT+')'
+      +'<br>Saltare una partita (non presentarti o disdire a meno di <b>48h</b>) tiene <b>l\'intero campo</b> bloccato per 4.'
       +'<br>Disdici sempre <b>entro 48h</b>: così liberi il campo in tempo.'
-      +'<br>Alla <b>'+NOSHOW_LIMIT+'ª</b> assenza le prenotazioni online si sospendono.');
+      +'<br>Alla <b>'+NOSHOW_LIMIT+'ª</b> le prenotazioni online si sospendono.');
     homeMenu();
   }
 }
@@ -551,7 +551,7 @@ function refreshBand(){}
    ferma il flusso di prenotazione. Blocco SOFT → si riattiva in segreteria. */
 function blockIfNoShow(){ if(!isBlocked()) return false;
   addInHtml('⛔ <b>Le prenotazioni online sono sospese</b>'
-    +'<br>Risultano <b>'+strikeCount()+' assenze</b> sul tuo profilo.'
+    +'<br>Risultano <b>'+strikeCount()+' disdette di gioco</b> sul tuo profilo.'
     +'<br>Passa in segreteria e le riattiviamo subito. 🎾');
   demoUnblockControl(); return true; }
 /* 🎭 Controlli DEMO (emulatore chrome, NON WhatsApp): il no-show è un evento di
@@ -563,7 +563,7 @@ function addDemoRow(label,onClick){ const w=el('demorow'); const b=document.crea
 function demoUnblockControl(){ addDemoRow('🎭 Demo · Segreteria: riattiva',()=>botSay(()=>{
   S.player.strikes=0; save(); refreshBand();
   addInHtml('✅ <b>Prenotazioni riattivate</b>'
-    +'<br>La segreteria ha <b>azzerato le assenze</b>. Buon gioco! 🎾');
+    +'<br>La segreteria ha <b>azzerato le disdette di gioco</b>. Buon gioco! 🎾');
   homeMenu(); })); }
 /* Simula un NO-SHOW su una prenotazione (evento backend, in demo 🎭): la partita
    salta, il campo era rimasto bloccato per 4 → +1 assenza. */
@@ -752,7 +752,7 @@ function doProfilo(){
     +(S.player.email?('<br>✉️ '+esc(S.player.email)):'')
     +'<br>🎾 Livello '+esc(S.player.livello)+levelSuffix()
     +'<br>💶 Borsellino '+euro(S.player.borselloCent)
-    +(strikeCount()?('<br>⚠️ Assenze: <b>'+strikeCount()+'/'+NOSHOW_LIMIT+'</b>'+(isBlocked()?' · <b>prenotazioni online sospese</b>':'')):''));
+    +(strikeCount()?('<br>⚠️ Disdette di gioco: <b>'+strikeCount()+'/'+NOSHOW_LIMIT+'</b>'+(isBlocked()?' · <b>prenotazioni online sospese</b>':'')):''));
   // GESTISCI IL PROFILO = List Message (le azioni hanno descrizioni → non stanno in 3 reply-button),
   // stesso pattern di "Gestisci la prenotazione". I Flow (autovalutazione/notifiche) si aprono col "↗ Apri".
   addListMessage({ body:'Cosa vuoi fare? 👇', button:'Apri', title:'Gestisci il profilo', rows:[
@@ -1171,7 +1171,7 @@ function startCancelOne(p){
 /* Nota di conferma annullo: entro 48h non perdi nulla; oltre (tardiva) conta
    come un'assenza (tutela no-show). */
 function cancelWarn(late){ return late
-  ? '<br>⚠️ <b>Disdetta tardiva</b>: mancano meno di <b>48h</b> all\'avvio → conta come un\'assenza.'
+  ? '<br>⚠️ <b>Sei a meno di 48h</b> dall\'avvio → conta come una <b>disdetta di gioco</b>.'
   : '<br>L’azione è definitiva: non perdi nulla, il campo torna disponibile per altri.'; }
 
 /* ---------- Prenotazione: WhatsApp Flow (modulo) --------------------------- */
@@ -1701,7 +1701,7 @@ function boot(){
     // un MESSAGGIO all'avvio (fedele: è un'informazione azionabile, non una barra).
     if(isBlocked()){
       addInHtml('⛔ <b>Le tue prenotazioni online sono sospese</b>'
-        +'<br>Risultano <b>'+strikeCount()+' assenze</b> sul tuo profilo.'
+        +'<br>Risultano <b>'+strikeCount()+' disdette di gioco</b> sul tuo profilo.'
         +'<br>Passa in segreteria e le riattiviamo subito. 🎾');
     }
     showIceBreakers();
