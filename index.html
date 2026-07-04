@@ -49,7 +49,7 @@
     box-shadow:0 1px 1px rgba(0,0,0,.06);display:flex;flex-direction:column;flex:0 0 auto}
   .qbtn{display:flex;align-items:center;justify-content:center;gap:6px;padding:11px;font-size:14px;color:#027eb5;
     border-top:1px solid #eff2f3;cursor:pointer;background:none;border-left:0;border-right:0;border-bottom:0;width:100%;font-family:inherit;
-    outline:none;-webkit-tap-highlight-color:transparent}
+    outline:none;-webkit-tap-highlight-color:transparent;text-transform:uppercase}   /* MAIUSCOLO = enfasi ammessa WA (etichetta inviata in maiuscolo, len invariata) */
   .qbtn:focus,.qbtn:focus-visible{outline:none}
   .qr .qbtn:first-child{border-top:0}
   .qbtn.danger{color:#c0392b}
@@ -71,7 +71,7 @@
   .menu-ch{color:#c3cbcf;font-size:18px}
   /* Pulsante del List Message (WA reale: 1 solo pulsante che apre le voci in una schermata) */
   .lm-btn{display:flex;align-items:center;justify-content:center;gap:7px;width:100%;padding:11px;font-size:14px;font-weight:500;
-    color:#027eb5;background:none;border:0;border-top:1px solid #eff2f3;cursor:pointer;font-family:inherit}
+    color:#027eb5;background:none;border:0;border-top:1px solid #eff2f3;cursor:pointer;font-family:inherit;text-transform:uppercase}   /* MAIUSCOLO = enfasi ammessa WA */
   .lm-btn:active{background:#f2f5f6}
   .lm-ic{font-size:15px}
   /* Typing */
@@ -154,7 +154,7 @@
   .flow-sum{margin:12px 14px 0;padding:10px 12px;background:#f3f6f7;border-radius:10px;font-size:13px;color:var(--muted)}
   .flow-sum.on{background:#f3f6f7;color:var(--ink)}
   .flow-sum .warn{font-weight:600}
-  .flow-submit{margin:16px 14px 4px;width:calc(100% - 28px);background:var(--wa-green);color:#fff;border:0;border-radius:22px;padding:13px;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit}
+  .flow-submit{margin:16px 14px 4px;width:calc(100% - 28px);background:var(--wa-green);color:#fff;border:0;border-radius:22px;padding:13px;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit;text-transform:uppercase}   /* MAIUSCOLO = enfasi ammessa WA (footer Flow ≤35 char, len invariata) */
   .toast{position:absolute;bottom:82px;left:50%;transform:translateX(-50%);background:#111b21;color:#fff;font-size:13px;padding:9px 15px;border-radius:20px;z-index:30;max-width:80%;text-align:center}
   /* Ice Breakers (bottoni primo contatto — Meta: niente emoji, max 4) */
   .ice{align-self:center;display:flex;flex-wrap:wrap;gap:8px;justify-content:center;padding:2px 8px 4px;max-width:96%}
@@ -205,7 +205,7 @@
 const LS_KEY='pmo_emu_state_v9';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.58 · 04/07';
+const APP_BUILD='v0.59 · 04/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
