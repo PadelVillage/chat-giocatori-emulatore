@@ -205,7 +205,7 @@
 const LS_KEY='pmo_emu_state_v9';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.52 · 04/07';
+const APP_BUILD='v0.53 · 04/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -755,7 +755,7 @@ function doProfilo(){
     +(strikeCount()?('<br>⚠️ Assenze ingiustificate: <b>'+strikeCount()+'/'+NOSHOW_LIMIT+'</b>'+(isBlocked()?' · <b>prenotazioni online sospese</b>':'')):''));
   // GESTISCI IL PROFILO = List Message (le azioni hanno descrizioni → non stanno in 3 reply-button),
   // stesso pattern di "Gestisci la prenotazione". I Flow (autovalutazione/notifiche) si aprono col "↗ Apri".
-  addListMessage({ body:'Cosa vuoi fare? 👇', button:'Apri', title:'Gestisci il profilo', rows:[
+  addListMessage({ body:'Da qui gestisci il tuo profilo 👇<br>Autovalutazione del livello, notifiche e dati.', button:'Apri', title:'Gestisci il profilo', rows:[
     {section:'Profilo', ic:'📊', label:'Valuta il tuo livello', desc:'Autovalutazione del livello di gioco', action:()=>botSay(()=>addFlowLaunch('Apriamo il questionario livello — 8 domande a risposta chiusa. 👇', openAssessmentFlow))},
     {ic:'ℹ️', label:'Il mio livello', desc:'Cosa significa la scala da 1.0 a 7.0', action:()=>botSay(explainLevel)},
     {ic:'🔔', label:'Preferenze notifiche', desc:'Scegli i messaggi che vuoi ricevere', action:()=>botSay(()=>addFlowLaunch('Apriamo le preferenze notifiche. 👇', openNotifPrefs))},
