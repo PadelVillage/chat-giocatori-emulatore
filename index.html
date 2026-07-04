@@ -202,10 +202,10 @@
    fedelmente su WhatsApp reale (componenti/limiti Flows + policy Meta).
    Verificare sui doc Meta PRIMA di aggiungere grafica/layout/interazioni.
    ========================================================================== */
-const LS_KEY='pmo_emu_state_v9';
+const LS_KEY='pmo_emu_state_v10';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.60 · 04/07';
+const APP_BUILD='v0.61 · 04/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -241,7 +241,6 @@ function demoState(){
              email:'',                    // contatto FACOLTATIVO, self-editable dal giocatore (nome/telefono restano gestiti dalla segreteria)
              prefs:{ promemoria:true, novita:false },   // preferenze notifiche proattive (opt-out marketing = igiene Meta)
              genere:'M',   // dal dato anagrafica: serve alla domanda concierge "mista o omogenea" (F = donna)
-             strikes:0,    // assenze registrate (no-show / disdette tardive) → tutela no-show (blocco soft al 3°)
              borselloCent:2400, ultimoMov:'ricarica € 20 il 28/06' },
     /* Amici = SOCI del circolo (numero in anagrafica). Niente livello: dopo la
        rimozione delle partite aperte non filtra più nulla. suWhatsApp = ha scritto
@@ -257,13 +256,12 @@ function demoState(){
       {id:14,nome:'Paolo Neri',    numero:'+39 333 555 0105', suWhatsApp:true},
       {id:15,nome:'Davide Gallo',  numero:'+39 333 555 0107', suWhatsApp:true}
     ],
-    /* Demo pulita: una prenotazione confermata come esempio, NESSUNA opzione
-       attiva (altrimenti la guardia "1 opzione per volta" bloccherebbe subito
-       una nuova prenotazione). Lo stato 🟠 Opzionato lo si vede prenotando. */
+    /* Demo pulita: una prenotazione già al completo come esempio. Lo stato
+       "da completare" (confermato) lo si vede prenotando un nuovo campo. */
     prenotazioni:(function(){ var dd=dayInfo(2); var gs=daySlotGroups(dd.off,dd.dow,90);
       var fissi=(gs.filter(function(g){return g.kind==='fisso';})[0]||{slots:[]}).slots;
       var pick=fissi[Math.min(1,fissi.length-1)]||{ora:'19:30',prezzo:12};   // slot REALE del listino (mai orfano) → l'edit lo può pre-selezionare
-      return [{ id:1, giorno:dd.giorno, ora:pick.ora, campo:3, tipo:'Partita', durata:90, stato:'prenotato', target:4, amici:['Luca','Sara','Paolo'], prezzoTesta:pick.prezzo }]; })(),
+      return [{ id:1, giorno:dd.giorno, ora:pick.ora, campo:3, tipo:'Partita', durata:90, stato:'completo', target:4, amici:['Luca','Sara','Paolo'], prezzoTesta:pick.prezzo }]; })(),
     seq:100
   };
 }
@@ -443,26 +441,26 @@ function dayInfo(off){ const d=new Date(); d.setDate(d.getDate()+off);
     w: off===0?'oggi':(off===1?'domani':['dom','lun','mar','mer','gio','ven','sab'][d.getDay()]),
     n: String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0') }; }
 function offsetForGiorno(g){ for(let o=0;o<=MAX_GIORNI;o++){ if(dayInfo(o).giorno===g) return o; } return null; }
-/* --- OPZIONE → PRENOTAZIONE (modello a opzione gratuita) ------------------
-   Prenotare = OPZIONARE il campo (a tuo nome, GRATIS, senza anticipi). Hai una
-   finestra legata alla distanza per COMPLETARE LA PARTITA (gli altri giocatori):
-     5–10 gg → 24h · 1–4 gg → 12h.
-   · IN GIORNATA (oggi, off===0) → campo CONFERMATO subito (rec.sameDay), NESSUN obbligo
-     di completare: niente finestra/auto-rilascio; invito amici/segreteria FACOLTATIVO.
-   · partita al completo (4 giocatori) → ✅ PRENOTATO (auto).
-   · finestra scaduta e partita incompleta → il campo si LIBERA (solo prenotazioni future).
+/* --- PRENOTAZIONE (modello a RESPONSABILITÀ) ------------------------------
+   Prenotare = il campo è CONFERMATO subito, a tuo nome, GRATIS (nessun anticipo).
+   NESSUNA scadenza, NESSUN auto-rilascio: lo slot è tuo finché non lo annulli.
+   In cambio, chi prenota è RESPONSABILE del buon fine: se non completa la partita,
+   l'INTERO campo (prezzo a testa × 4) resta a suo carico. Chi non vuole il rischio
+   può delegare alla SEGRETERIA (+5 €). Stati:
+   · squadra incompleta → 'confermato' (campo tuo, da completare, responsabilità attiva);
+   · squadra al completo (4 giocatori) → 'completo' (auto).
    La partita è sempre PRIVATA (la riempie l'organizzatore invitando amici SOCI o
    la delega alla segreteria); niente "partite aperte" ad altri soci, niente ospiti.
    4 CAMPI dietro le quinte: ogni orario ha 4 campi. Vista giocatore (uno stato
    per orario, campi nascosti):
      ≥1 libero → 'free' (verde) · tutti pieni → 'busy' (occupato, nascosto).
-   Disdetta = campo liberato, nulla perso (nessun anticipo). Tutto SIMULATO. */
+   Disdetta = campo liberato. Tutto SIMULATO. */
 const MAX_GIORNI=10;             // non si prenota oltre 10 giorni in avanti
-const CONCIERGE_FEE=5;           // € servizio "organizza la partita": addebitato SOLO sulla quota di chi ha prenotato per primo (l'organizzatore), in segreteria
+const CONCIERGE_FEE=5;           // € servizio "organizza la partita": maggiorazione flat sul TOTALE della partita, da pagare in segreteria
 /* Nota supplemento — riga unica, riusata ovunque (DRY + copy coerente). WhatsApp:
-   testo semplice, enfasi solo con emoji/grassetto. Niente più parentesi "(di chi
-   ha prenotato per primo)": ridondante e prolissa (l'utente l'ha chiesto). */
-const FEE_LINE='💶 +'+CONCIERGE_FEE+' € solo sulla tua quota, da pagare in segreteria.';
+   testo semplice, enfasi solo con emoji/grassetto. Framing "sul totale" (non "sulla
+   tua quota"): coerente col fatto che chi prenota è responsabile dell'intero campo. */
+const FEE_LINE='💶 +'+CONCIERGE_FEE+' € sul totale della partita, da pagare in segreteria.';
 /* Numero WhatsApp Business del circolo (demo) — usato nei link wa.me d'invito. */
 const CLUB_WA='393510001234';
 /* Rubrica finta del giocatore: simula il selettore contatti nativo di WhatsApp
@@ -476,8 +474,6 @@ const RUBRICA=[
   {nome:'Marco Esterno', numero:'+39 333 555 0199', socio:false, suWhatsApp:false}   // non socio → ramo iscrizione
 ];
 const LEAD_MIN=30;               // anticipo minimo: non prenotabile se manca <30' all'avvio
-const HRS_DISDETTA=48;           // tutela no-show: disdetta SENZA assenza fino a 48h prima dell'avvio
-const NOSHOW_LIMIT=3;            // al 3° strike (assenza/disdetta tardiva) → blocco soft prenotazioni online
 function nowMin(){ const n=new Date(); return n.getHours()*60+n.getMinutes(); }
 function courtsFor(off,dow,ora){
   const mins=toMin(ora);
@@ -490,91 +486,31 @@ function courtsFor(off,dow,ora){
 }
 function slotStatus(off,dow,ora){ const c=courtsFor(off,dow,ora);
   return c.free>0 ? 'free' : 'busy'; }
-/* Finestra per completare la partita, per distanza (giorni) dall'inizio. */
-function rosterWindow(off){
-  if(off===0) return {tier:'last minute', h:1,  lbl:'1 ora'};
-  if(off<=4)  return {tier:'via di mezzo', h:12, lbl:'12 ore'};
-  return {tier:'programmata', h:24, lbl:'24 ore'};
-}
-function matchStartMs(off,ora){ const d=new Date(); d.setDate(d.getDate()+off); const [h,m]=ora.split(':').map(Number); d.setHours(h,m,0,0); return d.getTime(); }
-/* Scadenza assoluta dell'opzione (ms): adesso + finestra, mai oltre l'inizio partita. */
-function optDeadlineMs(off,ora){ const win=rosterWindow(off); let dl=Date.now()+win.h*3600*1000;
-  if(off===0) dl=Math.min(dl,matchStartMs(off,ora)); return dl; }
-function fmtRemaining(ms){ if(ms<=0) return 'scaduta'; const m=Math.floor(ms/60000); if(m<60) return m+' min'; return Math.floor(m/60)+'h '+(m%60)+'m'; }
+/* (Rimosso il modello a scadenza/finestra: niente più rosterWindow/optDeadlineMs/
+   fmtRemaining. Il campo è confermato subito, nessun auto-rilascio — vedi il blocco
+   "PRENOTAZIONE (modello a RESPONSABILITÀ)" sopra.) */
 /* Roster: l'organizzatore conta come 1; amici[] = gli altri giocatori. */
 function rosterTarget(rec){ return rec.target||4; }
 function rosterFilled(rec){ return 1+((rec.amici&&rec.amici.length)||0); }   // confermati (organizzatore + amici che hanno confermato)
 function rosterPosti(rec){ return Math.max(0, rosterTarget(rec)-rosterFilled(rec)); }
 function rosterPending(rec){ return (rec.invitati&&rec.invitati.length)||0; } // inviti in attesa di risposta
-/* Anti-abuso: 1 sola opzione attiva (non confermata, non scaduta) per volta. */
-function activeOption(){ return S.prenotazioni.find(p=>p.stato==='opzionato' && (p.deadline||0)>Date.now()); }
-function blockIfActiveOption(){ const a=activeOption(); if(!a) return false;
-  addInHtml('Hai già un campo in attesa di completamento: <b>'+esc(a.giorno)+' · '+a.ora+'</b>. Completa la partita o lascialo scadere prima di prenotarne un altro.');
-  addQuick([{label:'📅 Le prenotazioni',action:()=>botSay(doMie)}]); return true; }   /* ≤20 char (reply-button) */
-/* --- TUTELA NO-SHOW (strike / blocco soft) --------------------------------
-   Niente caparra e niente pagamento in chat → su un no-show il circolo non ha
-   appiglio economico. Modello scelto con l'utente = STRIKE / BLOCCO SOFT:
-   · disdici entro 48h (HRS_DISDETTA) = ok, il campo si libera in tempo;
-   · no-show o disdetta TARDIVA (<48h) = +1 assenza (strike);
-   · al 3° strike (NOSHOW_LIMIT) le prenotazioni ONLINE si sospendono → si
-     riattivano SOLO in segreteria (nessun auto-reset: le azzera la segreteria).
-   In v1 il pagamento non è in chat: l'app MODELLA la policy e REGISTRA
-   l'accountability (contatore in profilo + banda); l'enforcement vero è lato
-   segreteria/Matchpoint. Il no-show è un evento di BACKEND → nell'emulatore lo
-   simuliamo con controlli DEMO (🎭), che NON sono componenti WhatsApp. */
-function strikeCount(){ return S.player.strikes||0; }
-function isBlocked(){ return strikeCount()>=NOSHOW_LIMIT; }
-/* Disdetta tardiva = mancano meno di 48h all'avvio della partita. */
-function isLateCancel(p){ const off=offsetForGiorno(p.giorno); if(off==null) return false;
-  return (matchStartMs(off,p.ora)-Date.now()) < HRS_DISDETTA*3600*1000; }
-/* Registra un'assenza e comunica la conseguenza (tono non punitivo, voce
-   segreteria). Sotto soglia = avviso; a soglia = blocco soft. */
-function addStrike(motivo){
-  S.player.strikes=strikeCount()+1; save(); refreshBand();
-  const n=strikeCount();
-  if(n>=NOSHOW_LIMIT){
-    addInHtml('⛔ <b>Prenotazioni online sospese</b>'
-      +'<br>Risultano <b>'+n+' assenze ingiustificate</b> sul tuo profilo.'
-      +'<br>Passa in segreteria e le riattiviamo subito. 🎾');
-    demoUnblockControl();
-  } else {
-    addInHtml('⚠️ <b>Assenza ingiustificata registrata</b> ('+n+'/'+NOSHOW_LIMIT+')'
-      +'<br>Saltare una partita (non presentarti o disdire a meno di <b>48h</b>) tiene <b>l\'intero campo</b> bloccato per 4.'
-      +'<br>Disdici sempre <b>entro 48h</b>: così liberi il campo in tempo.'
-      +'<br>Alla <b>'+NOSHOW_LIMIT+'ª</b> le prenotazioni online si sospendono.');
-    homeMenu();
-  }
+/* Costo dell'INTERO campo (prezzo a testa × 4): la posta in gioco della
+   responsabilità di chi prenota. */
+function campoPrezzo(rec){ return (rec.prezzoTesta||0)*4; }
+/* Disclaimer di responsabilità (con cifra intero campo se disponibile). Fedele WA:
+   segmentato, emoji-àncora, enfasi solo grassetto — niente colore del testo. */
+function disclaimerLines(rec){
+  const c=campoPrezzo(rec);
+  return '🙋 La partita è sotto la <b>tua responsabilità</b>.'
+    + (c ? '<br>💶 Se non la completi, l\'intero campo — <b>'+c+'€</b> — resta a tuo carico.'
+         : '<br>💶 Se non la completi, l\'intero campo resta a tuo carico.');
 }
-/* No-op (banda rimossa per fedeltà WA): lo stato di blocco viene comunicato come
-   MESSAGGIO — a boot (vedi boot()), al momento del 3° strike (addStrike) e quando
-   si prova a prenotare (blockIfNoShow). Funzione tenuta perché ancora chiamata. */
-function refreshBand(){}
-/* Guardia (come blockIfActiveOption): se le prenotazioni online sono sospese,
-   ferma il flusso di prenotazione. Blocco SOFT → si riattiva in segreteria. */
-function blockIfNoShow(){ if(!isBlocked()) return false;
-  addInHtml('⛔ <b>Le prenotazioni online sono sospese</b>'
-    +'<br>Risultano <b>'+strikeCount()+' assenze ingiustificate</b> sul tuo profilo.'
-    +'<br>Passa in segreteria e le riattiviamo subito. 🎾');
-  demoUnblockControl(); return true; }
-/* 🎭 Controlli DEMO (emulatore chrome, NON WhatsApp): il no-show è un evento di
-   backend e lo sblocco lo fa la segreteria fuori chat. Qui li rendiamo
-   pilotabili per il walkthrough, con stile "demo" distinto dalle bolle WA. */
-function addDemoRow(label,onClick){ const w=el('demorow'); const b=document.createElement('button');
-  b.className='demobtn'; b.textContent=label; b.onclick=()=>{ w.remove(); onClick(); }; w.appendChild(b);
-  chat.appendChild(w); scrollDown(); }
-function demoUnblockControl(){ addDemoRow('🎭 Demo · Segreteria: riattiva',()=>botSay(()=>{
-  S.player.strikes=0; save(); refreshBand();
-  addInHtml('✅ <b>Prenotazioni riattivate</b>'
-    +'<br>La segreteria ha <b>azzerato le assenze ingiustificate</b>. Buon gioco! 🎾');
-  homeMenu(); })); }
-/* Simula un NO-SHOW su una prenotazione (evento backend, in demo 🎭): la partita
-   salta, il campo era rimasto bloccato per 4 → +1 assenza. */
-function demoNoShow(p){ botSay(()=>{
-  S.prenotazioni=S.prenotazioni.filter(x=>x.id!==p.id); save();
-  addInHtml('🚫 <b>Non ti sei presentato</b>'
-    +'<br>📅 '+esc(p.giorno)+' · '+p.ora+' · Campo '+p.campo
-    +'<br>Il campo è rimasto bloccato per 4 giocatori.');
-  addStrike('no-show'); }); }
+/* --- RESPONSABILITÀ DI CHI PRENOTA (modello economico) --------------------
+   Niente più strike/blocco soft/"assenze ingiustificate": la conseguenza del
+   non-completamento è UNICA ed economica → chi prenota è responsabile dell'intero
+   campo (vedi disclaimerLines). Chi non vuole il rischio delega alla segreteria
+   (+5 €). Il no-show/la disdetta non accumulano più "assenze": l'accountability è
+   la responsabilità sul costo del campo, ricordata dai promemoria "check-in aereo". */
 /* Conteggio orari DISPONIBILI (liberi) del giorno, per l'indicatore. */
 function availSlots(off,dow){ let c=0; daySlotGroups(off,dow,90).forEach(g=>g.slots.forEach(s=>{ if(s.status!=='busy') c++; })); return c; }
 const GIORNI=['domenica','lunedì','martedì','mercoledì','giovedì','venerdì','sabato'];
@@ -753,8 +689,7 @@ function doProfilo(){
     +'<br>📱 '+esc(S.player.numero)
     +(S.player.email?('<br>✉️ '+esc(S.player.email)):'')
     +'<br>🎾 Livello '+esc(S.player.livello)+levelSuffix()
-    +'<br>💶 Borsellino '+euro(S.player.borselloCent)
-    +(strikeCount()?('<br>⚠️ Assenze ingiustificate: <b>'+strikeCount()+'/'+NOSHOW_LIMIT+'</b>'+(isBlocked()?' · <b>prenotazioni online sospese</b>':'')):''));
+    +'<br>💶 Borsellino '+euro(S.player.borselloCent));
   // GESTISCI IL PROFILO = List Message (le azioni hanno descrizioni → non stanno in 3 reply-button),
   // stesso pattern di "Gestisci la prenotazione". I Flow (autovalutazione/notifiche) si aprono col "↗ Apri".
   addListMessage({ body:'Da qui gestisci il tuo profilo 👇<br>Autovalutazione del livello, notifiche e dati.', button:'Apri', title:'Gestisci il profilo', rows:[
@@ -1077,8 +1012,8 @@ function doHelp(t){
   if(/invit|amic/.test(t)){
     addInHtml('<b>Invitare gli amici</b> 👥<br>Da “Completa la partita” selezioni i tuoi amici (soci): ricevono un messaggio con <b>✅ Confermo / ❌ Non posso</b> e, <b>appena confermano, entrano in partita</b>. Puoi invitarne solo quanti sono i posti liberi, e <b>revocare</b> un invito ancora in attesa. Chi non è sul nostro canale, o ha scelto <b>🔕 Non invitarmi più</b>, non è invitabile. In partita solo giocatori iscritti — niente ospiti.');
     addQuick([{label:'🎾 Prenota un campo',text:'Vorrei prenotare un campo'}]); return; }
-  if(/opzion|complet|scad/.test(t)){
-    addInHtml('<b>Come funziona</b> 🎾<br>Quando prenoti, il campo è <b>tenuto a tuo nome</b> (gratis): hai un po’ di tempo per <b>completare la partita</b> (inviti gli amici o ci pensa la segreteria). Appena siete al completo è <b>confermata</b>. Se non completi in tempo, il campo torna disponibile per altri giocatori.'); homeMenu(); return; }
+  if(/opzion|complet|scad|responsab/.test(t)){
+    addInHtml('<b>Come funziona</b> 🎾<br>Quando prenoti, il campo è <b>confermato subito</b> a tuo nome (gratis, nessuna scadenza). Sei tu il <b>responsabile</b> della partita: la completi invitando gli amici, oppure <b>ci pensa la segreteria</b> (+'+CONCIERGE_FEE+' €). Se non la completi, l’<b>intero campo</b> resta a tuo carico.'); homeMenu(); return; }
   if(/cost|prezz|tariff|paga|anticip|accont|depos/.test(t)){
     addInHtml('<b>Prezzi</b> 💶<br>Ti diamo sempre il prezzo <b>a testa</b> prima di confermare. In questa versione <b>non si paga in chat</b>: prenoti senza versare nulla in anticipo e saldi in circolo.');
     addQuick([{label:'🎾 Prenota un campo',text:'Vorrei prenotare un campo'}]); return; }
@@ -1100,23 +1035,18 @@ function doDisponibilita(t){
 
 /* ---------- Le mie prenotazioni -------------------------------------------- */
 function statoPren(p){
-  // Terminologia utente: SEMPRE "prenotato" (mai "opzionato" — gergo). Lo stato
-  // interno resta 'opzionato' (incompleto) vs 'prenotato' (al completo): sono due
-  // valori distinti in codice, ma all'utente diciamo "prenotato · da completare".
-  if(p.sameDay) return '✅ Prenotato · campo confermato (in giornata)';   // in giornata: confermato, nessun obbligo di completare
-  if(p.stato==='prenotato') return '✅ Prenotato · partita al completo';
-  if(p.concierge) return '🧑‍💼 In organizzazione dalla segreteria (+'+CONCIERGE_FEE+' €)'+(p.mix?(' · partita '+mixPhrase(p.mix)):'');   // esente da rilascio automatico
-  const rem=(p.deadline||0)-Date.now();
-  if(rem<=0) return '⚪️ Prenotazione scaduta · campo liberato';
-  const win=p.win||rosterWindow(offsetForGiorno(p.giorno)||0).lbl;
-  return '✅ Prenotato · da completare '+rosterFilled(p)+'/'+rosterTarget(p)+(rosterPending(p)?(' · in attesa: '+p.invitati.join(', ')):'')+' · entro '+win;
+  // Stato interno: 'confermato' (incompleto, campo tuo) vs 'completo' (al completo).
+  // All'utente: sempre "Prenotato"; se incompleto ricordiamo che è da completare e
+  // che il campo è sotto la sua responsabilità.
+  if(p.stato==='completo') return '✅ Prenotato · partita al completo';
+  if(p.concierge) return '🧑‍💼 In organizzazione dalla segreteria (+'+CONCIERGE_FEE+' €)'+(p.mix?(' · partita '+mixPhrase(p.mix)):'');
+  return '✅ Prenotato · da completare '+rosterFilled(p)+'/'+rosterTarget(p)+(rosterPending(p)?(' · in attesa: '+p.invitati.join(', ')):'')+' · sei responsabile del campo';
 }
 /* Descrizione della riga "Giocatori" nel dettaglio (≤72 char): riflette lo stato
    del roster e cosa puoi farci (invita/aggiungi/togli, o togli/sostituisci se completa). */
 function playersDesc(p){
   const filled=rosterFilled(p), tgt=rosterTarget(p), pend=rosterPending(p);
-  if(p.sameDay) return 'Facoltativo · invita, aggiungi o togli';   // in giornata: nessun obbligo
-  if(p.stato==='prenotato') return 'Al completo '+filled+'/'+tgt+' · togli o sostituisci';
+  if(p.stato==='completo') return 'Al completo '+filled+'/'+tgt+' · togli o sostituisci';
   return filled+'/'+tgt+(pend?(' · '+pend+' in attesa'):'')+' · invita, aggiungi o togli';
 }
 /* Le mie prenotazioni: LISTA (List Message ≤10) → tocca → DETTAGLIO = List
@@ -1136,14 +1066,14 @@ function showBookingDetail(id){
   // GESTISCI la prenotazione = List Message (le 3 azioni non stanno in 3 reply-button:
   // servono descrizioni). Voci ADATTIVE allo stato: concierge → niente "Giocatori"
   // (li trova la segreteria); "Ci pensa la segreteria" solo se ancora incompleta.
-  const incomplete = p.stato==='opzionato' && (p.deadline||0)-Date.now()>0;
+  const incomplete = p.stato!=='completo';
   const rows=[];
   if(!p.concierge){
     rows.push({section:'Gestisci', ic:'👥', label:'Giocatori', desc:playersDesc(p),
       action:()=>botSay(()=>addFlowLaunch('Apriamo il modulo — aggiungi, togli o invita i giocatori. 👇', ()=>openAddPlayersFlow(p)))});
   }
-  if((incomplete || p.sameDay) && !p.concierge){   // segreteria = facoltativa anche per le prenotazioni in giornata
-    rows.push({section:'Gestisci', ic:'🧑‍💼', label:'Ci pensa la segreteria', desc:'Troviamo noi i giocatori · +'+CONCIERGE_FEE+' € solo sulla tua quota',
+  if(incomplete && !p.concierge){   // segreteria = facoltativa finché la partita non è al completo
+    rows.push({section:'Gestisci', ic:'🧑‍💼', label:'Ci pensa la segreteria', desc:'Troviamo noi i giocatori · +'+CONCIERGE_FEE+' € sul totale',
       action:()=>botSay(()=>delegateConcierge(p))});
   }
   rows.push({section:'Gestisci', ic:'✏️', label:'Data e orario', desc:'Sposta a un altro giorno o orario',
@@ -1152,37 +1082,30 @@ function showBookingDetail(id){
     action:()=>botSay(()=>startCancelOne(p))});
   rows.push(menuBackRow('Oppure'));
   addListMessage({body:'Gestisci questa prenotazione 👇<br>'+(p.concierge?'Data e orario o annulla.':'Giocatori, data e orario o annulla.'), button:'Apri', title:'Gestisci la prenotazione', rows:rows.slice(0,10)});
-  // 🎭 Demo: il no-show è un evento di backend (il giocatore non si presenta) →
-  // qui lo simuliamo per mostrare la tutela (strike/blocco). Chrome, non WhatsApp.
-  addDemoRow('🎭 Demo · Simula: non mi presento',()=>demoNoShow(p));
 }
 /* Supplemento concierge in caso di disdetta: dovuto SOLO se la segreteria ha
-   già organizzato la partita (stato 'prenotato' = completata). Finché è ancora
-   'in organizzazione' (opzionato) non è dovuto nulla. Fedeltà WA: niente colore
-   del testo → enfasi con emoji 💶 + grassetto. */
+   già organizzato la partita (stato 'completo'). Finché è ancora 'in organizzazione'
+   (confermato) non è dovuto nulla. Fedeltà WA: niente colore del testo → enfasi
+   con emoji 💶 + grassetto. */
 function conciergeCancelNote(p){
-  if(p && p.concierge && p.stato==='prenotato')
+  if(p && p.concierge && p.stato==='completo')
     return '<br>💶 La segreteria ha <b>già completato</b> la partita: il supplemento di <b>'+CONCIERGE_FEE+' €</b> resta dovuto, da pagare in segreteria.';
   return '';
 }
 /* Annulla su una prenotazione specifica (riusa cancelStep). La modifica riapre
    invece il modulo in edit-mode → openBookingFlow({editId})/applyEdit. */
 function startCancelOne(p){
-  const late=isLateCancel(p);
-  convo={mode:'cancel',step:'confirm',draft:{target:p,late:late}};
+  convo={mode:'cancel',step:'confirm',draft:{target:p}};
   const warn = conciergeCancelNote(p);
-  addInHtml('Vuoi annullare: '+esc(p.giorno)+' · '+p.ora+' — Campo '+p.campo+'?'+cancelWarn(late)+warn);
+  addInHtml('Vuoi annullare: '+esc(p.giorno)+' · '+p.ora+' — Campo '+p.campo+'?'+cancelWarn()+warn);
   addQuick([{label:'Sì, annulla',text:'sì',danger:true},{label:'No',text:'no'}]);
 }
-/* Nota di conferma annullo: entro 48h non perdi nulla; oltre (tardiva) conta
-   come un'assenza (tutela no-show). */
-function cancelWarn(late){ return late
-  ? '<br>⚠️ <b>Sei a meno di 48h</b> dall\'avvio → conta come un\'<b>assenza ingiustificata</b>.'
-  : '<br>L’azione è definitiva: non perdi nulla, il campo torna disponibile per altri.'; }
+/* Nota di conferma annullo: liberando il campo non resta nulla in sospeso (nessun
+   anticipo). Con la responsabilità sul campo, annullare in tempo è la scelta giusta. */
+function cancelWarn(){ return '<br>L’azione è definitiva: il campo torna disponibile per altri.'; }
 
 /* ---------- Prenotazione: WhatsApp Flow (modulo) --------------------------- */
 function startBooking(text){
-  if(blockIfNoShow()) return;                              // prenotazioni sospese (tutela no-show)
   const w=parseWhen(text);
   if(w.date && w.ora){ return decideAndPresent({giorno:w.giorno,dow:w.dow,ora:w.ora,tipo:'Partita',durata:90,amici:[]}); }
   addFlowLaunch('Ti apriamo il modulo — scegli un giorno e tocca un orario libero. 👇', ()=>openBookingFlow({giorno:w.giorno,ora:w.ora}));
@@ -1192,18 +1115,12 @@ function startBooking(text){
    DOPO la prenotazione (delegateConcierge, schermata "Completa la partita"). Funzione
    e ramo `openBookingFlow({concierge:true})` tenuti per riferimento, non invocati. */
 function doConcierge(){
-  if(blockIfNoShow()) return;                              // prenotazioni sospese (tutela no-show)
-  if(blockIfActiveOption()) return;
   addInHtml('Ci pensiamo noi 🧑‍💼<br>Scegli quando vuoi giocare, ai giocatori pensiamo noi.<br>'+FEE_LINE+' 👇');
   openBookingFlow({concierge:true});
 }
 function openBookingFlow(prefill){
   prefill=prefill||{};
   const editId=prefill.editId||null;                       // MODIFICA: rifai il giro sul modulo e AGGIORNA la prenotazione esistente
-  if(!editId){                                             // in modifica NON blocchiamo: l'opzione attiva è proprio quella che stiamo cambiando
-    if(blockIfNoShow()) return;                            // prenotazioni sospese (tutela no-show)
-    if(blockIfActiveOption()) return;                      // 1 sola opzione attiva per volta
-  }
   const concierge=!!prefill.concierge;
   const days=[]; for(let o=0;o<=MAX_GIORNI;o++) days.push(dayInfo(o));
   const st={ off:0, ora:null, momento:null, tipo:'Partita', players:4, durata:90, amici:(prefill.amici||[]).slice(), concierge:concierge };
@@ -1307,13 +1224,12 @@ function openBookingFlow(prefill){
     // roster non cambia spostando l'orario → niente riga "1/4 · completa entro"
     // (sarebbe fuorviante), solo data + prezzo (+ nota concierge se delegata).
     const editRec=editId?S.prenotazioni.find(x=>x.id===editId):null;
-    if(editRec && (editRec.stato==='prenotato' || editRec.concierge)){
+    if(editRec && (editRec.stato==='completo' || editRec.concierge)){
       sum.innerHTML='📅 <b>'+esc(d.giorno)+' · '+st.ora+'–'+addMin(st.ora,dur)+'</b>'
         +'<br>💶 <b>'+pr.testa+' € a testa</b>'
         +(editRec.concierge?('<br>🧑‍💼 '+FEE_LINE):'');
       return;
     }
-    const win=rosterWindow(d.off);
     const target=pr.giocatori, inviti=st.amici.length;
     sum.innerHTML='📅 <b>'+esc(d.giorno)+' · '+st.ora+'–'+addMin(st.ora,dur)+'</b>'
       +(st.concierge
@@ -1321,7 +1237,7 @@ function openBookingFlow(prefill){
           +'<br>🧑‍💼 '+FEE_LINE)
         : ('<br>💶 <b>'+pr.testa+' € a testa</b>'
           +'<br>👥 1/'+target+' (tu)'+(inviti?(' · ✉️ '+inviti+' invit'+(inviti>1?'i':'o')):'')
-          +'<br>⚠️ Completa entro <b>'+win.lbl.toUpperCase()+'</b>, poi torna libero per altri'));
+          +'<br>🙋 Sei <b>responsabile</b> del campo — se non completi, è tuo l\'intero costo (<b>'+pr.campo+'€</b>)'));
   }
   openSheet(editId?'Modifica la prenotazione':'Prenota un campo', body, 'Scegli giorno, momento e orario');
   renderDays(); renderMomenti(); renderSlots();
@@ -1340,13 +1256,13 @@ function applyEdit(editId,d,ora,meta){
   rec.giorno=d.giorno; rec.ora=ora; rec.campo=campoLibero(d.dow,ora); rec.durata=90;
   rec.prezzoTesta=slotPrezzo(meta,4).testa;
   if(!rec.concierge){
-    rec.gen=(rec.gen||0)+1;               // invalida i vecchi timer prima di ricalcolare
-    recomputeCompletion(rec);             // a OGGI → confermata (no obbligo); a un giorno FUTURO → opzione con finestra
-    if(rec.stato==='opzionato') scheduleRosterReminders(rec, offsetForGiorno(rec.giorno)||0);
+    rec._nudgeStop=false;                 // spostando la data riparte la catena promemoria
+    recomputeCompletion(rec);             // ricalcola solo completo vs confermato (niente scadenza)
+    if(rec.stato==='confermato') scheduleNudge(rec.id, nudgeChainLen(offsetForGiorno(rec.giorno)||0));
   }
   save();
-  // Card UNICA aggiornata: opzione-da-completare O in-giornata-facoltativa → ripropone le scelte; già completa/concierge → conferma secca.
-  if(!rec.concierge && (rec.stato==='opzionato' || rec.sameDay)) rosterActionButtons(rec, {receipt:true, header:'✅ <b>Prenotazione aggiornata</b>'});
+  // Card UNICA aggiornata: da-completare → ripropone le scelte; già completa/concierge → conferma secca.
+  if(!rec.concierge && rec.stato==='confermato') rosterActionButtons(rec, {receipt:true, header:'✅ <b>Prenotazione aggiornata</b>'});
   else {
     // Prenotazione GIÀ completa (o delegata alla segreteria): nessuna fase di
     // completamento da riproporre → conferma segmentata + ritorno al menu.
@@ -1356,8 +1272,6 @@ function applyEdit(editId,d,ora,meta){
 }
 
 function decideAndPresent(draft){
-  if(blockIfNoShow()) return;                              // prenotazioni sospese (tutela no-show)
-  if(blockIfActiveOption()) return;
   // Coerenza con la vista disponibilità: se l'orario chiesto a parole è
   // OCCUPATO, apri il modulo con gli orari disponibili.
   const off=offsetForGiorno(draft.giorno);
@@ -1380,18 +1294,12 @@ function decideAndPresent(draft){
 }
 /* Crea l'OPZIONE (gratis) col solo organizzatore confermato; gli amici scelti
    ricevono un INVITO (il posto si riempie solo quando accettano). */
-/* Ricalcola stato e OBBLIGO di completamento in base al GIORNO (regola prodotto):
-   • IN GIORNATA (oggi → off===0) = campo CONFERMATO subito (rec.sameDay), NESSUN obbligo
-     di completare la squadra: niente finestra/scadenza/auto-rilascio, niente "mancano N".
-     Invito amici/segreteria resta possibile ma FACOLTATIVO.
-   • giorno FUTURO = opzione con finestra di completamento (o già 'prenotato' se al completo). */
+/* Ricalcola SOLO lo stato squadra (niente scadenza): al completo = 'completo',
+   altrimenti 'confermato' (campo tuo, da completare, sotto la tua responsabilità).
+   Nessun 'sameDay'/deadline/win: il modello a responsabilità vale per tutte. */
 function recomputeCompletion(rec){
   if(rec.concierge) return;
-  const off=offsetForGiorno(rec.giorno)||0;
-  if(off===0){ rec.sameDay=true; rec.stato='prenotato'; delete rec.deadline; delete rec.win; return; }
-  delete rec.sameDay;
-  if(rosterPosti(rec)<=0){ rec.stato='prenotato'; delete rec.deadline; delete rec.win; }
-  else { rec.stato='opzionato'; rec.deadline=optDeadlineMs(off,rec.ora); rec.win=rosterWindow(off).lbl; }
+  rec.stato = rosterPosti(rec)<=0 ? 'completo' : 'confermato';
 }
 function commitOpzione(draft){
   const off=offsetForGiorno(draft.giorno);
@@ -1400,11 +1308,11 @@ function commitOpzione(draft){
   const rec={id:++S.seq,giorno:draft.giorno,ora:draft.ora,campo:draft.campo,tipo:draft.tipo,durata:draft.durata,
     target:target, amici:[], invitati:invited.slice(),
     prezzoTesta:(draft.prezzoTesta!=null?draft.prezzoTesta:null)};
-  recomputeCompletion(rec);                 // in giornata = confermato (no obbligo); futuro = opzione con finestra
+  recomputeCompletion(rec);                 // completo (4/4) oppure confermato (da completare)
   S.prenotazioni.push(rec); save();
-  rosterActionButtons(rec, {receipt:true}); // MSG 1 ricevuta ✅ + MSG 2 (card azione, o invito FACOLTATIVO se in giornata)
+  rosterActionButtons(rec, {receipt:true}); // MSG 1 ricevuta ✅ + MSG 2 (card azione con disclaimer responsabilità)
   if(invited.length) sendInvites(rec, invited);
-  if(!rec.sameDay) scheduleRosterReminders(rec, off||0);
+  if(rec.stato==='confermato') scheduleNudge(rec.id, nudgeChainLen(off||0));   // catena promemoria "check-in aereo"
 }
 /* FASE 2 — come completare la partita (dopo l'opzione). LIST MESSAGE WhatsApp:
    il CORPO della lista porta lo stato roster + la domanda (così la ricevuta — card
@@ -1426,41 +1334,21 @@ function bookingReceipt(rec, header){
 function rosterActionButtons(rec, opts){
   if(rec.concierge){ addQuick([{label:'📅 Le prenotazioni',action:()=>botSay(doMie)}]); return; }
   const posti=rosterPosti(rec);
-  const fine=addMin(rec.ora,rec.durata||90);
   if(opts && opts.receipt) bookingReceipt(rec, opts.header);   // MSG 1 (ricevuta) prima della card d'azione
-  if(rec.sameDay){
-    // IN GIORNATA: campo CONFERMATO, nessun obbligo di completare → invito FACOLTATIVO
-    // (no "mancano N", no scadenza). Il pulsante dice l'azione (invito), non "completa".
-    const bodySd='📅 '+esc(rec.giorno)+' · '+rec.ora+'–'+fine+' · Campo '+rec.campo
-      +(rosterPending(rec)?('<br>✉️ In attesa: '+rec.invitati.join(', ')):'')
-      +(rec.amici&&rec.amici.length?('<br>👥 Con te: '+rec.amici.join(', ')):'')
-      +'<br>🎾 Il campo è <b>tuo, confermato</b> — nessun obbligo di completare la squadra.'
-      +'<br>👇 Vuoi giocare in compagnia? Tocca «Invita giocatori» — è <b>facoltativo</b>.';
-    const rowsSd=[
-      {section:'Facoltativo', ic:'👥', label:'Invito i miei amici', desc:'Scegli tu con chi giocare', action:()=>botSay(()=>addFlowLaunch('Apriamo il modulo — spunta gli amici che vuoi invitare. 👇', ()=>openAddPlayersFlow(rec)))},
-      {ic:'🧑‍💼', label:'Ci pensa la segreteria', desc:'Troviamo noi i giocatori · +'+CONCIERGE_FEE+' € solo sulla tua quota', action:()=>botSay(()=>delegateConcierge(rec))},
-      {section:'Oppure', ic:'✏️', label:'Modifica la prenotazione', desc:'Cambia giorno o orario', action:()=>botSay(()=>{ addFlowLaunch('Riapriamo il modulo — scegli di nuovo giorno e orario. 👇', ()=>openBookingFlow({editId:rec.id, giorno:rec.giorno, ora:rec.ora})); })},
-      menuBackRow('Oppure')
-    ];
-    addListMessage({body:bodySd, button:'Invita giocatori', title:'Invita giocatori', rows:rowsSd.slice(0,10)});
-    return;
-  }
-  // MSG 2 = card d'AZIONE (List): stato squadra + scadenza + CTA. Il pulsante DICE
-  // l'azione — "Completa la partita" invece di "☰ Apri": eccezione VOLUTA alla
-  // convenzione (è la card dove la gente non capiva di dover ancora agire).
-  // Corpo SEGMENTATO (una riga = un fatto, emoji-àncora, amo in MAIUSCOLO): la gente
-  // non legge i blocchi fitti e l'occhio non "estrae" dalle righe dense. Data NON ripetuta
-  // (è già nella ricevuta sopra → meno testo, le 2 card non si confondono) e nessuna riga
-  // "Tocca…" (lo dice già il pulsante COMPLETA LA PARTITA). Pattern per tutte le card dense.
-  const gioc=posti>1?('MANCANO <b>'+posti+'</b> GIOCATORI'):'MANCA <b>1</b> GIOCATORE';
-  const body='🎾 '+gioc
+  // MSG 2 = card d'AZIONE (List) UNICA per ogni prenotazione da completare (oggi o
+  // futura: stesso modello a responsabilità). Corpo SEGMENTATO (una riga = un fatto,
+  // emoji-àncora, amo in MAIUSCOLO): amo "MANCANO N GIOCATORI" + roster + DISCLAIMER
+  // con la cifra dell'intero campo. Data NON ripetuta (è nella ricevuta). Il pulsante
+  // DICE l'azione ("Completa la partita") — eccezione voluta a "☰ Apri".
+  const amo = posti>1 ? ('MANCANO <b>'+posti+'</b> GIOCATORI') : (posti===1 ? 'MANCA <b>1</b> GIOCATORE' : 'PARTITA AL COMPLETO');
+  const body='🎾 '+amo
     +'<br>👥 Sei in <b>'+rosterFilled(rec)+'/'+rosterTarget(rec)+'</b>'
-    +'<br>⏳ Hai <b>'+rec.win+'</b> per completare'
-    +(rosterPending(rec)?('<br>✉️ In attesa: '+rec.invitati.join(', ')):'');
+    +(rosterPending(rec)?('<br>✉️ In attesa: '+rec.invitati.join(', ')):'')
+    +(posti>0 ? '<br>'+disclaimerLines(rec) : '');
   // Le voci (con descrizione) vivono NELLA SCHERMATA che apre il pulsante (fedele a WA).
   const rows=[
     {section:'Completa la partita', ic:'👥', label:'Invito i miei amici', desc:rosterPending(rec)?('Invita o revoca · '+rosterPending(rec)+' in attesa'):'Scegli tu con chi giocare', action:()=>botSay(()=>addFlowLaunch('Apriamo il modulo — spunta gli amici che giocano con te. 👇', ()=>openAddPlayersFlow(rec)))},
-    {ic:'🧑‍💼', label:'Ci pensa la segreteria', desc:'Troviamo noi i giocatori · +'+CONCIERGE_FEE+' € solo sulla tua quota', action:()=>botSay(()=>delegateConcierge(rec))},
+    {ic:'🧑‍💼', label:'Ci pensa la segreteria', desc:'Troviamo noi i giocatori · +'+CONCIERGE_FEE+' € sul totale', action:()=>botSay(()=>delegateConcierge(rec))},
     {section:'Oppure', ic:'✏️', label:'Modifica la prenotazione', desc:'Cambia giorno o orario', action:()=>botSay(()=>{ addFlowLaunch('Riapriamo il modulo — scegli di nuovo giorno e orario. 👇', ()=>openBookingFlow({editId:rec.id, giorno:rec.giorno, ora:rec.ora})); })},
     menuBackRow('Oppure')
   ];
@@ -1491,7 +1379,7 @@ function askMatchMix(done){
 }
 function delegateConcierge(rec){
   const r=S.prenotazioni.find(x=>x.id===rec.id)||rec;
-  if(r.stato==='prenotato'){ addInHtml('Questa partita è già al completo 🎾 — non serve la segreteria.'); homeMenu(); return; }
+  if(r.stato==='completo'){ addInHtml('Questa partita è già al completo 🎾 — non serve la segreteria.'); homeMenu(); return; }
   if(r.concierge){ addInHtml('Ci stiamo già pensando noi 🧑‍💼 — ti avvisiamo qui appena la partita è al completo.'); homeMenu(); return; }
   addInHtml('Ci pensiamo noi 🧑‍💼<br>Completiamo la partita di <b>'+esc(r.giorno)+' · '+r.ora+'</b> cercando altri giocatori.<br>'+FEE_LINE+'<br><b>Confermi?</b>');
   addQuick([
@@ -1501,14 +1389,12 @@ function delegateConcierge(rec){
 }
 function commitDelegate(r,mix){
   let rr=S.prenotazioni.find(x=>x.id===r.id);
-  if(rr && rr.stato==='prenotato'){ addInHtml('Questa partita è già al completo 🎾 — non serve la segreteria.'); return; }
-  // Se nel frattempo l'opzione è scaduta (nella demo il timer di rilascio è
-  // accelerato), la RI-OPZIONIAMO: delegare = garanzia della segreteria, il
-  // campo va ri-tenuto. Nel prodotto reale la finestra è di ore → non capita.
+  if(rr && rr.stato==='completo'){ addInHtml('Questa partita è già al completo 🎾 — non serve la segreteria.'); return; }
+  // Difensivo: il campo non si auto-rilascia più → rr esiste sempre. Se per qualche
+  // motivo mancasse, lo ricreiamo confermato (senza scadenza).
   if(!rr){
-    const off=offsetForGiorno(r.giorno);
     rr={id:++S.seq,giorno:r.giorno,ora:r.ora,campo:r.campo,tipo:r.tipo||'Partita',durata:r.durata||90,
-      target:r.target||4, amici:[], stato:'opzionato', deadline:optDeadlineMs(off||0,r.ora), win:rosterWindow(off||0).lbl};
+      target:r.target||4, amici:[], stato:'confermato'};
     S.prenotazioni.push(rr);
   }
   rr.concierge=true; rr.mix=mix; save();
@@ -1516,13 +1402,13 @@ function commitDelegate(r,mix){
     +'<br>📅 '+esc(rr.giorno)+' · '+rr.ora+' · partita '+mixPhrase(mix)
     +'<br>Cerchiamo i giocatori e <b>ti avvisiamo appena è al completo</b>.'
     +'<br>'+FEE_LINE,true);
-  setTimeout(()=>{ const x=S.prenotazioni.find(p=>p.id===rr.id); if(!x||x.stato!=='opzionato') return;
+  setTimeout(()=>{ const x=S.prenotazioni.find(p=>p.id===rr.id); if(!x||x.stato==='completo') return;
     botSay(()=>{ const nomi=fillerNames(x.mix, rosterPosti(x)); x.amici=(x.amici||[]).concat(nomi); save();
       confirmBooking(x,'🧑‍💼 Partita completata dalla segreteria · +'+CONCIERGE_FEE+' € da pagare in segreteria'); }); }, 6000);
 }
 /* Partita al completo → prenotazione confermata. */
 function confirmBooking(rec,extra){
-  rec.stato='prenotato'; delete rec.deadline; save();
+  rec.stato='completo'; save();
   addInHtml('✅ <b>Prenotazione confermata!</b>'
     +'<br>📅 '+esc(rec.giorno)+' · '+rec.ora
     +'<br>📍 Campo '+rec.campo+' · in '+rosterTarget(rec)
@@ -1530,9 +1416,39 @@ function confirmBooking(rec,extra){
     +(extra?('<br>'+extra):''),true);
   maybeHint(); homeMenu();
 }
-/* DISATTIVATO nella demo (vedi scheduleRosterReminders): niente auto-rilascio
-   né messaggio "Tempo scaduto" durante il walkthrough. No-op a prova di tutto. */
-function expireOption(rec){ /* disattivato in demo */ }
+/* ---------- Promemoria "check-in aereo" (catena a costo Meta zero) ---------
+   Dopo la prenotazione, dentro la finestra 24h di servizio (GRATIS), mandiamo un
+   promemoria che ricorda la RESPONSABILITÀ e chiede una decisione con 2 reply-button:
+   · 🔔 "Ricordamelo ancora" → il tap è un messaggio in entrata che RIAPRE la finestra
+     24h → il prossimo nudge resta gratis (catena). Riprogramma il nudge successivo.
+   · 🙅 "Me ne occupo io" → stop promemoria + presa di responsabilità piena.
+   Cadenza scalata sulla distanza (nudgeChainLen): più la partita è lontana, più
+   anelli; in giornata uno solo. Nell'emulatore i delay sono brevi (~8s); nel prodotto
+   reale sono ore. La catena si ferma se la partita diventa completa/delegata o se
+   l'utente sceglie "me ne occupo io" (rec._nudgeStop). */
+function nudgeChainLen(off){ if(off===0) return 1; if(off<=2) return 2; return 3; }
+function scheduleNudge(recId, n){
+  if(n<=0) return;
+  setTimeout(()=>{
+    const r=S.prenotazioni.find(x=>x.id===recId);
+    if(!r || r.stato==='completo' || r.concierge || r._nudgeStop || rosterPosti(r)<=0) return;
+    botSay(()=>rosterNudge(r, n));
+  }, 8000);
+}
+function rosterNudge(r, n){
+  addInHtml('🔔 <b>Promemoria partita</b>'
+    +'<br>📅 '+esc(r.giorno)+' · '+r.ora
+    +'<br>'+disclaimerLines(r));
+  addQuick([
+    {label:'🔔 Ricordamelo ancora', action:()=>{ addOut('Ricordamelo ancora');
+      botSay(()=>{ addInHtml('👍 Ti ricorderò ancora di completare la partita.'); scheduleNudge(r.id, n-1); }); }},
+    {label:'🙅 Me ne occupo io', action:()=>{ addOut('Me ne occupo io');
+      const rr=S.prenotazioni.find(x=>x.id===r.id); if(rr){ rr._nudgeStop=true; save(); }
+      botSay(()=>addInHtml('✅ <b>Ci pensi tu</b>'
+        +'<br>Non ti mando altri promemoria.'
+        +'<br>'+disclaimerLines(r))); }}
+  ]);
+}
 /* Modulo "gestisci i giocatori" = WhatsApp FLOW nativo: UN solo CheckboxGroup + UN
    footer. Tre tipi di riga, tutte nello stesso gruppo (max-selected = target−1 = 3 altri):
    · CONFERMATI ✅ (pre-spuntati) → deseleziona = TOGLI dal roster (se la partita era
@@ -1609,9 +1525,10 @@ function openAddPlayersFlow(rec){
     botSay(()=>{ const rr=S.prenotazioni.find(x=>x.id===r.id); if(!rr){ addInHtml('Prenotazione non più disponibile.'); return; }
       rr.amici=(rr.amici||[]).filter(nm=>removed.indexOf(nm)<0);
       rr.invitati=(rr.invitati||[]).filter(nm=>revoked.indexOf(nm)<0).concat(newInv);
-      // Ho tolto un giocatore da una partita GIÀ completa → torna da completare (ri-opziono).
-      if(rr.stato==='prenotato' && !rr.sameDay && rosterPosti(rr)>0){ const off=offsetForGiorno(rr.giorno)||0;   // in giornata NON si ri-opziona: resta confermata
-        rr.stato='opzionato'; rr.deadline=optDeadlineMs(off,rr.ora); rr.win=rosterWindow(off).lbl; }
+      // Ho tolto un giocatore da una partita GIÀ completa → torna "da completare"
+      // (confermata, campo tuo, responsabilità riattivata) e riparte la catena promemoria.
+      if(rr.stato==='completo' && rosterPosti(rr)>0){ rr.stato='confermato'; rr._nudgeStop=false;
+        scheduleNudge(rr.id, nudgeChainLen(offsetForGiorno(rr.giorno)||0)); }
       save();
       const lines=[];
       if(newInv.length) lines.push('📨 Invito inviato a <b>'+newInv.join(', ')+'</b>.');
@@ -1625,20 +1542,8 @@ function openAddPlayersFlow(rec){
   body.appendChild(b);
   openSheet('Gestisci i giocatori', body, r.giorno+' · '+r.ora);
 }
-/* Promemoria "completa la partita" — bilanciato: metà + ultima chiamata
-   (nella finestra 1h solo l'ultima). Demo: tempi scalati a pochi secondi.
-   Su WhatsApp vero sono GRATIS perché dentro la finestra 24h. */
-function scheduleRosterReminders(rec, off){
-  /* DISATTIVATO nella demo: la raffica di promemoria + "tempo scaduto"
-     interrompeva il walkthrough (l'opzione scadeva mentre navighi). Il concetto
-     "se non completi la partita il campo torna disponibile" resta nella copy del
-     RIEPILOGO e in statoPren; l'auto-rilascio è una regola del prodotto (finestra
-     di ore reali), qui NON simulata a tempo. expireOption/rosterReminderMsg
-     restano definite ma non più chiamate automaticamente. */
-}
-/* DISATTIVATO nella demo (vedi scheduleRosterReminders): niente "Ultima chiamata"
-   / "Promemoria" che interrompono il giro. No-op a prova di tutto. */
-function rosterReminderMsg(r,kind){ /* disattivato in demo */ }
+/* (Vecchio cluster promemoria a scadenza rimosso: ora la catena "check-in aereo"
+   vive in scheduleNudge/rosterNudge sopra, senza auto-rilascio.) */
 /* Invito amici — WhatsApp reale: a ciascun amico un TEMPLATE utility con 3 bottoni
    ✅ Confermo / ❌ Non posso / 🔕 Non invitarmi più (l'amico è fuori dalla finestra 24h →
    serve il template; al tap si apre la SUA finestra 24h). Il 3° bottone = opt-out (igiene
@@ -1647,7 +1552,7 @@ function rosterReminderMsg(r,kind){ /* disattivato in demo */ }
 function sendInvites(rec, names){
   addSys('📨 Inviato l’invito a '+names.join(', ')+' (messaggio con ✅ Confermo / ❌ Non posso / 🔕 Non invitarmi più) — ti avviso appena rispondono.');
   names.forEach((nm,i)=>{
-    setTimeout(()=>{ const r=S.prenotazioni.find(x=>x.id===rec.id); if(!r || (r.stato!=='opzionato' && !r.sameDay)) return;   // in giornata: inviti facoltativi, ma le risposte demo arrivano lo stesso
+    setTimeout(()=>{ const r=S.prenotazioni.find(x=>x.id===rec.id); if(!r || r.stato==='completo') return;   // le risposte arrivano finché la partita non è al completo
       if((r.invitati||[]).indexOf(nm)<0) return;   // invito già risolto/annullato
       botSay(()=>inviteResponse(r,nm)); }, 4000+i*3000);
   });
@@ -1661,13 +1566,12 @@ function inviteResponse(r,nm){
     addInHtml('🔕 <b>'+esc(nm)+'</b> ha scelto di <b>non ricevere più inviti</b>. Rispettiamo la sua scelta: non gli manderemo altre richieste. Invita pure qualcun altro.'); rosterActionButtons(r); return; }
   r.amici=(r.amici||[]).concat(nm); save();
   if(rosterPosti(r)===0){ confirmBooking(r); return; }
-  const tail=rosterPending(r)?(' · in attesa: '+r.invitati.join(', ')):(r.sameDay?'':(' · manca'+(rosterPosti(r)>1?'no':'')+' '+rosterPosti(r)));   // in giornata: nessun "manca N" (no obbligo)
+  const tail=rosterPending(r)?(' · in attesa: '+r.invitati.join(', ')):(' · manca'+(rosterPosti(r)>1?'no':'')+' '+rosterPosti(r));
   addInHtml('✅ <b>'+esc(nm)+'</b> ha confermato! Ora siete <b>'+rosterFilled(r)+'/'+rosterTarget(r)+'</b>'+tail+'.',true);
   rosterActionButtons(r);
 }
 /* Concierge: la segreteria organizza la partita (+5 € sulla quota di chi prenota per primo, in segreteria). */
 function decideConcierge(draft){
-  if(blockIfActiveOption()) return;
   const off=offsetForGiorno(draft.giorno); const fine=addMin(draft.ora,draft.durata);
   const meta=off!=null?slotMetaFor(off,draft.dow,draft.ora,draft.durata,draft.players):null;
   if(meta && meta.status==='busy'){ addInHtml('A quell\'ora è tutto occupato. Scegli un altro orario. 👇'); openBookingFlow({concierge:true,giorno:draft.giorno}); return; }
@@ -1686,15 +1590,14 @@ function decideConcierge(draft){
   ]);
 }
 function commitConcierge(draft,mix){
-  const off=offsetForGiorno(draft.giorno);
   const rec={id:++S.seq,giorno:draft.giorno,ora:draft.ora,campo:draft.campo,tipo:draft.tipo,durata:draft.durata,
-    target:draft.target||4, amici:[], concierge:true, mix:mix, stato:'opzionato', deadline:optDeadlineMs(off||0,draft.ora), win:rosterWindow(off||0).lbl};
+    target:draft.target||4, amici:[], concierge:true, mix:mix, stato:'confermato'};
   S.prenotazioni.push(rec); save();
   addInHtml('🧑‍💼 <b>Richiesta ricevuta!</b>'
     +'<br>📅 '+esc(rec.giorno)+' · '+rec.ora+' · partita '+mixPhrase(mix)
     +'<br>Campo prenotato a tuo nome. Cerchiamo i giocatori e <b>ti avvisiamo appena è al completo</b>.'
     +'<br>'+FEE_LINE,true);
-  setTimeout(()=>{ const r=S.prenotazioni.find(x=>x.id===rec.id); if(!r||r.stato!=='opzionato') return;
+  setTimeout(()=>{ const r=S.prenotazioni.find(x=>x.id===rec.id); if(!r||r.stato==='completo') return;
     botSay(()=>{ const nomi=fillerNames(r.mix, rosterPosti(r)); r.amici=(r.amici||[]).concat(nomi); save();
       confirmBooking(r,'🧑‍💼 Partita completata dalla segreteria · +'+CONCIERGE_FEE+' € da pagare in segreteria'); });
   }, 6000);
@@ -1711,14 +1614,13 @@ function startCancel(){
 function cancelStep(t){
   const d=convo.draft;
   if(convo.step==='pick'){ const p=matchPren(t); if(!p){ addInHtml('Non ho individuato la prenotazione. Riprova indicando il giorno.'); return; }
-    d.target=p; d.late=isLateCancel(p); convo.step='confirm';
+    d.target=p; convo.step='confirm';
     const warn = conciergeCancelNote(p);
-    addInHtml('Vuoi annullare: '+esc(p.giorno)+' · '+p.ora+' — Campo '+p.campo+' · '+p.tipo+'?'+cancelWarn(d.late)+warn);
+    addInHtml('Vuoi annullare: '+esc(p.giorno)+' · '+p.ora+' — Campo '+p.campo+' · '+p.tipo+'?'+cancelWarn()+warn);
     addQuick([{label:'Sì, annulla',text:'sì',danger:true},{label:'No',text:'no'}]); return; }
   if(convo.step==='confirm'){
     if(/^s[iì]|conferm|annulla/.test(t.toLowerCase())){ const p=d.target; S.prenotazioni=S.prenotazioni.filter(x=>x.id!==p.id); save();
-      if(d.late){ addInHtml('Campo '+p.campo+' di '+esc(p.giorno)+' alle '+p.ora+' liberato.',true); addStrike('disdetta tardiva'); }
-      else{ addInHtml('Fatto. Campo '+p.campo+' di '+esc(p.giorno)+' alle '+p.ora+' liberato. Non hai perso nulla.',true); maybeHint(); homeMenu(); } }
+      addInHtml('Fatto. Campo '+p.campo+' di '+esc(p.giorno)+' alle '+p.ora+' liberato. Non hai perso nulla.',true); maybeHint(); homeMenu(); }
     else { addInHtml('Ok, non annullo nulla.'); homeMenu(); }
     resetConvo();
   }
@@ -1748,13 +1650,6 @@ function boot(){
     // Riconoscimento del numero = IMPLICITO nel saluto per nome (su WhatsApp il
     // business non mostra una banda: sa già chi gli scrive). Niente più banda fissa.
     addInHtml('Ciao '+esc(S.player.nome.split(' ')[0])+', hai contattato la segreteria di Padel Village. Come possiamo aiutarti? Tocca una voce qui sotto o scrivici pure.');
-    // Stato "prenotazioni sospese" (tutela no-show): prima era la banda rossa, ora
-    // un MESSAGGIO all'avvio (fedele: è un'informazione azionabile, non una barra).
-    if(isBlocked()){
-      addInHtml('⛔ <b>Le tue prenotazioni online sono sospese</b>'
-        +'<br>Risultano <b>'+strikeCount()+' assenze ingiustificate</b> sul tuo profilo.'
-        +'<br>Passa in segreteria e le riattiviamo subito. 🎾');
-    }
     showIceBreakers();
   },500);
 }
