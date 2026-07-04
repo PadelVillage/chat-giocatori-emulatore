@@ -193,7 +193,7 @@
 const LS_KEY='pmo_emu_state_v7';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.38 · 04/07';
+const APP_BUILD='v0.39 · 04/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -605,7 +605,7 @@ function showIceBreakers(){
   /* 2 Ice Breakers (Meta: max 4, no emoji, solo 1° contatto): il flusso
      principale + "Vedi il menu". Su WhatsApp reale l'Ice Breaker invia un testo
      predefinito → "Vedi il menu" invia "Vedi il menu" e il routing risponde con
-     un List Message ("Ecco il menu 👇" + pulsante ☰ Menu → le voci nello sheet). */
+     un List Message ("Ecco il menu 👇" + pulsante ☰ Apri → le voci nello sheet). */
   [['Prenota un campo','Vorrei prenotare un campo'],
    ['Vedi il menu','Vedi il menu']].forEach(x=>{
     const b=document.createElement('button'); b.className='ice-b'; b.textContent=x[0];
@@ -697,14 +697,14 @@ function menuRows(){
 /* Menu principale = List Message fedele: UNA card (corpo=body) + UN pulsante
    "☰ Menu" → le voci (titolo+descrizione) in una schermata a comparsa. */
 function showMenu(body){
-  addListMessage({ body: body||'Ecco cosa possiamo fare per te 👇', button:'Menu', title:'Cosa possiamo fare', rows: menuRows() });
+  addListMessage({ body: body||'Ecco cosa possiamo fare per te 👇', button:'Apri', title:'Cosa possiamo fare', rows: menuRows() });
 }
 /* Menu "Altro" = STESSE voci del menu principale (scelta utente); niente "Come funziona".
    Il pulsante della List dice "Menu" (non "Altro"): così, dopo l'Ice Breaker "Altro",
    compare "☰ Menu" da aprire — non la stessa parola due volte. Titolo sheet = come il
    menu principale (il contenuto è identico). Fedeltà WA: la List si apre col suo pulsante. */
 function showMenuAltro(body){
-  addListMessage({ body: body||'Ecco cos\'altro possiamo fare per te 👇', button:'Menu', title:'Cosa possiamo fare', rows: menuRows() });
+  addListMessage({ body: body||'Ecco cos\'altro possiamo fare per te 👇', button:'Apri', title:'Cosa possiamo fare', rows: menuRows() });
 }
 
 /* ---------- Profilo -------------------------------------------------------- */
