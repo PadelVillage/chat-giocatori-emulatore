@@ -205,7 +205,7 @@
 const LS_KEY='pmo_emu_state_v9';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.54 · 04/07';
+const APP_BUILD='v0.55 · 04/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -769,9 +769,11 @@ function explainLevel(){
   addInHtml('🎾 <b>Il tuo livello di gioco</b>'
     +'<br>Usiamo la scala padel da <b>1.0 a 7.0</b> (a passi di 0.5):'
     +'<br>• <b>1.0–2.0</b> principiante'
-    +'<br>• <b>2.5–3.5</b> intermedio'
+    +'<br>• <b>2.0–3.0</b> base'
+    +'<br>• <b>3.0–4.0</b> intermedio'
     +'<br>• <b>4.0–5.0</b> avanzato'
-    +'<br>• <b>5.5+</b> agonista'
+    +'<br>• <b>5.0–6.0</b> agonista'
+    +'<br>• <b>6.0+</b> professionista'
     +'<br>Serve a formare partite <b>equilibrate</b>. Puoi aggiornarlo con l\'autovalutazione del livello di gioco.');
   addQuick([{label:'📊 Valuta il livello',action:()=>botSay(()=>addFlowLaunch('Apriamo il questionario livello — 8 domande a risposta chiusa. 👇', openAssessmentFlow))},menuBtn()]);   /* ≤20 char (reply-button) */
 }
