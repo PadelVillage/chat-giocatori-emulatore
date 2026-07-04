@@ -205,7 +205,7 @@
 const LS_KEY='pmo_emu_state_v10';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.63 · 04/07';
+const APP_BUILD='v0.64 · 04/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -1424,17 +1424,19 @@ function confirmBooking(rec,extra){
      24h → il prossimo nudge resta gratis (catena). Riprogramma il nudge successivo.
    · 🙅 "Me ne occupo io" → stop promemoria + presa di responsabilità piena.
    Cadenza scalata sulla distanza (nudgeChainLen): più la partita è lontana, più
-   anelli; in giornata uno solo. Nell'emulatore i delay sono brevi (~8s); nel prodotto
-   reale sono ore. La catena si ferma se la partita diventa completa/delegata o se
-   l'utente sceglie "me ne occupo io" (rec._nudgeStop). */
+   anelli; in giornata uno solo. Nell'emulatore il delay è ~15 min (NON subito dopo la
+   prenotazione: vederlo appena prenotato confondeva); nel prodotto reale sono ore. La
+   catena si ferma se la partita diventa completa/delegata o se l'utente sceglie "me ne
+   occupo io" (rec._nudgeStop). */
 function nudgeChainLen(off){ if(off===0) return 1; if(off<=2) return 2; return 3; }
+const NUDGE_DELAY_MS=15*60*1000;   // ~15 min: il promemoria non compare subito dopo la prenotazione (nel reale = ore)
 function scheduleNudge(recId, n){
   if(n<=0) return;
   setTimeout(()=>{
     const r=S.prenotazioni.find(x=>x.id===recId);
     if(!r || r.stato==='completo' || r.concierge || r._nudgeStop || rosterPosti(r)<=0) return;
     botSay(()=>rosterNudge(r, n));
-  }, 8000);
+  }, NUDGE_DELAY_MS);
 }
 function rosterNudge(r, n){
   addInHtml('🔔 <b>Promemoria partita</b>'
