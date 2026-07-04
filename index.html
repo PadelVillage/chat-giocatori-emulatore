@@ -193,7 +193,7 @@
 const LS_KEY='pmo_emu_state_v7';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.39 · 04/07';
+const APP_BUILD='v0.40 · 04/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -827,7 +827,7 @@ function statoPren(p){
 function doMie(){
   const list=S.prenotazioni;
   if(!list.length){ addInHtml('Al momento non hai prenotazioni future. Vuoi prenotare un campo?'); addQuick([{label:'🎾 Prenota un campo',text:'Vorrei prenotare un campo'}]); return; }
-  addListMessage({ body:'Le tue prossime prenotazioni 👇', button:'Le mie prenotazioni', title:'Le mie prenotazioni',
+  addListMessage({ body:'Le tue prossime prenotazioni 👇', button:'Apri', title:'Le mie prenotazioni',
     rows:list.slice(0,10).map(p=>({section:'Prenotazioni', ic:'✅', label:p.giorno+' · '+p.ora, desc:'Campo '+p.campo+' · '+p.tipo, action:()=>botSay(()=>showBookingDetail(p.id))})) });
 }
 function showBookingDetail(id){
@@ -1105,7 +1105,7 @@ function rosterActionButtons(rec, opts){
     {ic:'🧑‍💼', label:'Ci pensa la segreteria', desc:'Troviamo noi i giocatori · +'+CONCIERGE_FEE+' € solo sulla tua quota', action:()=>botSay(()=>delegateConcierge(rec))},
     {section:'Oppure', ic:'✏️', label:'Modifica la prenotazione', desc:'Cambia giorno o orario', action:()=>botSay(()=>{ addFlowLaunch('Riapriamo il modulo — scegli di nuovo giorno e orario. 👇', ()=>openBookingFlow({editId:rec.id, giorno:rec.giorno, ora:rec.ora})); })}
   ];
-  addListMessage({body:body, button:'Completa la partita', title:'Completa la partita', rows:rows.slice(0,10)});
+  addListMessage({body:body, button:'Apri', title:'Completa la partita', rows:rows.slice(0,10)});
 }
 /* Ramo "Ci pensate voi": delega alla segreteria un'opzione già presa (+5 € sulla quota di chi prenota per primo). */
 /* ---------- Preferenza partita: MISTA o OMOGENEA (solo concierge) -----------
