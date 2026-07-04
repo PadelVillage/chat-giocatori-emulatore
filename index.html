@@ -207,7 +207,7 @@
 const LS_KEY='pmo_emu_state_v10';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.72 · 04/07';
+const APP_BUILD='v0.73 · 04/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -635,7 +635,10 @@ function route(intent,t){
    Fedele a WhatsApp: l'elenco sta dietro il pulsante di UN List Message (prima c'era
    un reply-button "🏠 Menu" che generava un SECONDO List Message → doppio "Menu" e due
    tap). WhatsApp NON ha barre/bottoni fissi; la home reale = questo + il comando /menu. */
-function homeMenu(){ showMenu('Posso fare altro per te? 👇'); }
+/* Ritorno al menu (dopo ogni foglia): body ridotto al minimo (solo 👇, la bolla List
+   NON può essere vuota — WhatsApp esige un body). Il significato sta nel bottone
+   "☰ Apri il menu". Via la frase "Posso fare altro per te?" (ricorreva ovunque = filler). */
+function homeMenu(){ showMenu('👇'); }
 /* Riga "🏠 Torna al menu" per le List OPERATIVE: rientro in UN tap se apri una lista
    e non vuoi nessuna voce (senza chiudere con la ✕ e riscrivere). Fedele WA: è una
    normale riga di List Message. NON si mette nel menu stesso (sarebbe una voce-menu
@@ -667,14 +670,14 @@ function menuRows(){
 /* Menu principale = List Message fedele: UNA card (corpo=body) + UN pulsante
    "☰ Menu" → le voci (titolo+descrizione) in una schermata a comparsa. */
 function showMenu(body){
-  addListMessage({ body: body||'Ecco cosa possiamo fare per te 👇', button:'Apri', title:'Cosa possiamo fare', rows: menuRows() });
+  addListMessage({ body: body||'Ecco cosa possiamo fare per te 👇', button:'Apri il menu', title:'Cosa possiamo fare', rows: menuRows() });   /* bottone auto-esplicativo (≤20 char): dice COSA apre */
 }
 /* Menu "Altro" = STESSE voci del menu principale (scelta utente); niente "Come funziona".
    Il pulsante della List dice "Menu" (non "Altro"): così, dopo l'Ice Breaker "Altro",
    compare "☰ Menu" da aprire — non la stessa parola due volte. Titolo sheet = come il
    menu principale (il contenuto è identico). Fedeltà WA: la List si apre col suo pulsante. */
 function showMenuAltro(body){
-  addListMessage({ body: body||'Ecco cos\'altro possiamo fare per te 👇', button:'Apri', title:'Cosa possiamo fare', rows: menuRows() });
+  addListMessage({ body: body||'Ecco cos\'altro possiamo fare per te 👇', button:'Apri il menu', title:'Cosa possiamo fare', rows: menuRows() });
 }
 
 /* ---------- Profilo -------------------------------------------------------- */
