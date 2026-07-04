@@ -202,7 +202,7 @@
 const LS_KEY='pmo_emu_state_v10';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.69 · 04/07';
+const APP_BUILD='v0.70 · 04/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -1145,7 +1145,7 @@ function openBookingFlow(prefill){
   // poi decidi come completare la partita (vedi rosterActionButtons).
   const sum=el('flow-sum');   // riepilogo selezione
   body.appendChild(sum);
-  const foot=document.createElement('button'); foot.className='flow-submit'; foot.textContent=editId?'Salva':(concierge?'Richiedi organizzazione':'Continua');
+  const foot=document.createElement('button'); foot.className='flow-submit'; foot.textContent=editId?'Salva':(concierge?'Richiedi organizzazione':'Prenota');
   foot.onclick=()=>{
     if(!st.ora){ toast('Tocca prima un orario libero.'); return; }
     const d=days[st.off];
