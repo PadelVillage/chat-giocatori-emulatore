@@ -205,7 +205,7 @@
 const LS_KEY='pmo_emu_state_v10';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.61 · 04/07';
+const APP_BUILD='v0.62 · 04/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -501,9 +501,9 @@ function campoPrezzo(rec){ return (rec.prezzoTesta||0)*4; }
    segmentato, emoji-àncora, enfasi solo grassetto — niente colore del testo. */
 function disclaimerLines(rec){
   const c=campoPrezzo(rec);
-  return '🙋 La partita è sotto la <b>tua responsabilità</b>.'
-    + (c ? '<br>💶 Se non la completi, l\'intero campo — <b>'+c+'€</b> — resta a tuo carico.'
-         : '<br>💶 Se non la completi, l\'intero campo resta a tuo carico.');
+  return '🙋 Da qui la partita è <b>tua</b>: sei tu a completarla.'
+    + (c ? '<br>💶 Se resta incompleta, l\'intero campo (<b>'+c+'€</b>) è a tuo carico.'
+         : '<br>💶 Se resta incompleta, l\'intero campo è a tuo carico.');
 }
 /* --- RESPONSABILITÀ DI CHI PRENOTA (modello economico) --------------------
    Niente più strike/blocco soft/"assenze ingiustificate": la conseguenza del
@@ -1237,7 +1237,7 @@ function openBookingFlow(prefill){
           +'<br>🧑‍💼 '+FEE_LINE)
         : ('<br>💶 <b>'+pr.testa+' € a testa</b>'
           +'<br>👥 1/'+target+' (tu)'+(inviti?(' · ✉️ '+inviti+' invit'+(inviti>1?'i':'o')):'')
-          +'<br>🙋 Sei <b>responsabile</b> del campo — se non completi, è tuo l\'intero costo (<b>'+pr.campo+'€</b>)'));
+          +'<br>🙋 La partita è <b>tua</b> — se resta incompleta, l\'intero campo (<b>'+pr.campo+'€</b>) è a tuo carico'));
   }
   openSheet(editId?'Modifica la prenotazione':'Prenota un campo', body, 'Scegli giorno, momento e orario');
   renderDays(); renderMomenti(); renderSlots();
@@ -1262,7 +1262,7 @@ function applyEdit(editId,d,ora,meta){
   }
   save();
   // Card UNICA aggiornata: da-completare → ripropone le scelte; già completa/concierge → conferma secca.
-  if(!rec.concierge && rec.stato==='confermato') rosterActionButtons(rec, {receipt:true, header:'✅ <b>Prenotazione aggiornata</b>'});
+  if(!rec.concierge && rec.stato==='confermato') rosterActionButtons(rec, {receipt:true, header:'📌 <b>Prenotazione aggiornata</b>'});
   else {
     // Prenotazione GIÀ completa (o delegata alla segreteria): nessuna fase di
     // completamento da riproporre → conferma segmentata + ritorno al menu.
@@ -1327,7 +1327,7 @@ function commitOpzione(draft){
 function bookingReceipt(rec, header){
   const fine=addMin(rec.ora,rec.durata||90);
   const priceLine=(rec.prezzoTesta!=null)?('<br>💶 <b>'+rec.prezzoTesta+' € a testa</b>'):'';   // solo a testa
-  addInHtml((header||'✅ <b>Campo prenotato</b> a tuo nome')
+  addInHtml((header||'📌 <b>Campo prenotato</b> a tuo nome')
     +'<br>📅 '+esc(rec.giorno)+' · '+rec.ora+'–'+fine+' · Campo '+rec.campo
     +priceLine);
 }
@@ -1342,6 +1342,7 @@ function rosterActionButtons(rec, opts){
   // DICE l'azione ("Completa la partita") — eccezione voluta a "☰ Apri".
   const amo = posti>1 ? ('MANCANO <b>'+posti+'</b> GIOCATORI') : (posti===1 ? 'MANCA <b>1</b> GIOCATORE' : 'PARTITA AL COMPLETO');
   const body='🎾 '+amo
+    +'<br>🕒 Si gioca '+esc(rec.giorno)+' alle '+rec.ora
     +'<br>👥 Sei in <b>'+rosterFilled(rec)+'/'+rosterTarget(rec)+'</b>'
     +(rosterPending(rec)?('<br>✉️ In attesa: '+rec.invitati.join(', ')):'')
     +(posti>0 ? '<br>'+disclaimerLines(rec) : '');
@@ -1444,7 +1445,7 @@ function rosterNudge(r, n){
       botSay(()=>{ addInHtml('👍 Ti ricorderò ancora di completare la partita.'); scheduleNudge(r.id, n-1); }); }},
     {label:'🙅 Me ne occupo io', action:()=>{ addOut('Me ne occupo io');
       const rr=S.prenotazioni.find(x=>x.id===r.id); if(rr){ rr._nudgeStop=true; save(); }
-      botSay(()=>addInHtml('✅ <b>Ci pensi tu</b>'
+      botSay(()=>addInHtml('👍 <b>Ci pensi tu</b>'
         +'<br>Non ti mando altri promemoria.'
         +'<br>'+disclaimerLines(r))); }}
   ]);
