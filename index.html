@@ -190,7 +190,7 @@
    fedelmente su WhatsApp reale (componenti/limiti Flows + policy Meta).
    Verificare sui doc Meta PRIMA di aggiungere grafica/layout/interazioni.
    ========================================================================== */
-const LS_KEY='pmo_emu_state_v7';
+const LS_KEY='pmo_emu_state_v8';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
 const APP_BUILD='v0.45 · 04/07';
@@ -244,13 +244,14 @@ function demoState(){
     /* Demo pulita: una prenotazione confermata come esempio, NESSUNA opzione
        attiva (altrimenti la guardia "1 opzione per volta" bloccherebbe subito
        una nuova prenotazione). Lo stato 🟠 Opzionato lo si vede prenotando. */
-    prenotazioni:[
-      { id:1, giorno:dayInfo(2).giorno, ora:'19:00', campo:3, tipo:'Partita', durata:90, stato:'prenotato', target:4, amici:['Luca','Sara','Paolo'] }
-    ],
+    prenotazioni:(function(){ var dd=dayInfo(2); var gs=daySlotGroups(dd.off,dd.dow,90);
+      var fissi=(gs.filter(function(g){return g.kind==='fisso';})[0]||{slots:[]}).slots;
+      var pick=fissi[Math.min(1,fissi.length-1)]||{ora:'19:30',prezzo:12};   // slot REALE del listino (mai orfano) → l'edit lo può pre-selezionare
+      return [{ id:1, giorno:dd.giorno, ora:pick.ora, campo:3, tipo:'Partita', durata:90, stato:'prenotato', target:4, amici:['Luca','Sara','Paolo'], prezzoTesta:pick.prezzo }]; })(),
     seq:100
   };
 }
-let S=load();
+let S;   // inizializzato più sotto (S=load()) DOPO la def di LISTINO: demoState() calcola lo slot demo dal listino → evita il TDZ "Cannot access 'LISTINO' before initialization"
 function load(){ try{const r=localStorage.getItem(LS_KEY);return r?JSON.parse(r):demoState();}catch(e){return demoState();} }
 function save(){ try{localStorage.setItem(LS_KEY,JSON.stringify(S));}catch(e){} }
 function resetDemo(){ S=demoState(); save(); }
@@ -575,6 +576,10 @@ function inRegola(){ return S.player.socio && S.player.inRegola && S.player.bors
 function isCritica(dow,ora){ if(dow===0){ const h=parseInt((ora||'12').split(':')[0],10); if(h<13) return true; } return false; }
 function campoLibero(dow,ora){ const pool=[3,2,4,1]; return pool[(parseInt((ora||'0').replace(':',''),10))%pool.length]; }
 function friendName(id){ const f=S.friends.find(x=>x.id===id); return f?f.nome.split(' ')[0]:''; }
+/* Stato demo inizializzato QUI (non a inizio file): demoState() ora calcola lo
+   slot della prenotazione demo dal LISTINO (const definita sopra) → inizializzare
+   prima darebbe TDZ. Nessuna funzione usa S a tempo di parse (solo a boot/interazione). */
+S=load();
 
 /* --- Comandi "/" (Commands nativi WhatsApp) e Ice Breakers ----------------- */
 const COMMANDS=[
@@ -931,6 +936,14 @@ function openBookingFlow(prefill){
   const st={ off:0, ora:null, momento:null, tipo:'Partita', players:4, durata:90, amici:(prefill.amici||[]).slice(), concierge:concierge };
   if(prefill.giorno){ const m=days.filter(d=>d.giorno===prefill.giorno)[0]; if(m) st.off=m.off; }
   else{ for(let i=0;i<days.length;i++){ if(availSlots(days[i].off,days[i].dow)>0){ st.off=days[i].off; break; } } }
+  // MODIFICA: la prenotazione che stai cambiando "possiede" già il suo slot →
+  // in edit-mode lo mostriamo SEMPRE come libero e pre-selezionato (anche se la
+  // disponibilità pseudo-casuale lo darebbe occupato: quel campo è il tuo).
+  const ownOff = editId ? st.off : null;
+  const ownOra = editId ? (prefill.ora||null) : null;
+  function flatDay(off,dow){ const arr=daySlotsFlat(off,dow,st.durata,st.players);
+    if(editId && off===ownOff && ownOra){ const s=arr.filter(function(x){return x.ora===ownOra;})[0]; if(s) s.status='free'; }
+    return arr; }
   const body=el('flow');
   if(concierge){ body.appendChild(el('luce-hint','🧑‍💼 <b>Organizza la partita</b><br>Scegli quando vuoi giocare, ai giocatori pensiamo noi.<br>'+FEE_LINE)); }
   // Passo 1: quando (prossimi 7 giorni con conteggio slot disponibili)
@@ -978,7 +991,7 @@ function openBookingFlow(prefill){
   }
   function renderMomenti(){
     momBox.innerHTML='';
-    const flat=daySlotsFlat(days[st.off].off,days[st.off].dow,st.durata,st.players).filter(s=>s.status!=='busy');
+    const flat=flatDay(days[st.off].off,days[st.off].dow).filter(s=>s.status!=='busy');
     const avail=MOMENTI.filter(mm=>flat.some(s=>momentoKey(s.ora)===mm.key));
     if(!avail.some(m=>m.key===st.momento)) st.momento=avail.length?avail[0].key:null;
     momLabel.style.display=avail.length?'':'none';
@@ -995,7 +1008,7 @@ function openBookingFlow(prefill){
     slotBox.innerHTML='';
     const d=days[st.off];
     if(!st.momento){ slotBox.appendChild(el('slot-empty','Nessun orario disponibile in questo giorno.')); return; }
-    const flat=daySlotsFlat(d.off,d.dow,st.durata,st.players).filter(s=>s.status!=='busy'&&momentoKey(s.ora)===st.momento);
+    const flat=flatDay(d.off,d.dow).filter(s=>s.status!=='busy'&&momentoKey(s.ora)===st.momento);
     if(!flat.length){ slotBox.appendChild(el('slot-empty','Nessun orario in questa fascia.')); return; }
     const uniform=flat.length && flat.every(s=>s.prezzo===flat[0].prezzo), first=flat[0];
     if(uniform){ const hdr=el('slot-fascia'); hdr.textContent=first.prezzo+'€ a testa'; slotBox.appendChild(hdr); }
@@ -1041,7 +1054,7 @@ function openBookingFlow(prefill){
   renderDays(); renderMomenti(); renderSlots();
   if(prefill.ora){
     const d=days[st.off]; const meta=slotMetaFor(d.off,d.dow,prefill.ora,st.durata,st.players);
-    if(meta && meta.status!=='busy'){ st.momento=momentoKey(prefill.ora); st.ora=prefill.ora; renderMomenti(); renderSlots(); }
+    if(meta && (editId || meta.status!=='busy')){ st.momento=momentoKey(prefill.ora); st.ora=prefill.ora; renderMomenti(); renderSlots(); }
   }
   updSum();
 }
