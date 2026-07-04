@@ -202,7 +202,7 @@
 const LS_KEY='pmo_emu_state_v10';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.70 · 04/07';
+const APP_BUILD='v0.71 · 04/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -557,10 +557,13 @@ function showIceBreakers(){
   const wrap=el('ice');
   /* 2 Ice Breakers (Meta: max 4, no emoji, solo 1° contatto): il flusso
      principale + "Vedi il menu". Su WhatsApp reale l'Ice Breaker invia un testo
-     predefinito → "Vedi il menu" invia "Vedi il menu" e il routing risponde con
-     un List Message ("Ecco il menu 👇" + pulsante ☰ Apri → le voci nello sheet). */
-  [['Prenota un campo','Vorrei prenotare un campo'],
-   ['Vedi il menu','Vedi il menu']].forEach(x=>{
+     predefinito → "VEDI IL MENU" invia "Vedi il menu" e il routing risponde con
+     un List Message ("Ecco il menu 👇" + pulsante ☰ Apri → le voci nello sheet).
+     Label in MAIUSCOLO (enfasi consentita, no colore): amo di primo contatto —
+     la gente non legge, il maiuscolo è la call-to-action. Il testo INVIATO resta
+     minuscolo (bolla utente naturale). */
+  [['PRENOTA UN CAMPO','Vorrei prenotare un campo'],
+   ['VEDI IL MENU','Vedi il menu']].forEach(x=>{
     const b=document.createElement('button'); b.className='ice-b'; b.textContent=x[0];
     b.onclick=()=>{ wrap.remove(); sendUser(x[1]); };
     wrap.appendChild(b);
