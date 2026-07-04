@@ -193,7 +193,7 @@
 const LS_KEY='pmo_emu_state_v7';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.40 · 04/07';
+const APP_BUILD='v0.41 · 04/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -717,10 +717,33 @@ function doProfilo(){
 }
 
 /* ---------- Amici ---------------------------------------------------------- */
+/* Badge di invitabilità = emoji + testo (NIENTE colore del testo = fedele WA). */
+function friendBadge(f){ return (f.suWhatsApp && !f.optOut) ? '✅ invitabile' : (!f.suWhatsApp ? '⏳ non ancora sul canale' : '🔕 non riceve inviti'); }
 function doAmici(){
-  addInHtml('I tuoi amici con cui giochi:');
-  addCard(S.friends.length ? S.friends.map(f=>'👤 '+esc(f.nome)).join('<br>') : 'Ancora nessun amico in lista.');
-  addQuick([{label:'➕ Aggiungi amico',action:openAddFriendFlow},{label:'🎾 Prenota con un amico',action:()=>botSay(()=>{ addFlowLaunch('Apriamo il modulo — trovi gli amici in fondo, spunta chi gioca con te. 👇', ()=>openBookingFlow({})); })}]);
+  // EMPTY-STATE (nuovo utente): spiega a cosa serve la rubrica + come si aggiunge.
+  if(!S.friends.length){
+    addInHtml('👥 <b>I miei amici</b>');
+    addCard('Qui tieni la tua <b>rubrica di gioco</b>: aggiungi i soci con cui giochi e li <b>inviti in un tap</b> quando prenoti.<br><br>Ancora nessun amico. Per aggiungerne uno ti basta <b>condividere il suo contatto</b> (📎 → Contatto).');
+    addQuick([{label:'➕ Aggiungi amico',action:openAddFriendFlow},{label:'🎾 Prenota un campo',text:'Vorrei prenotare un campo'}]);
+    return;
+  }
+  addInHtml('I tuoi amici con cui giochi 👇');
+  addCard(S.friends.map(f=>'👤 '+esc(f.nome)+' · '+friendBadge(f)).join('<br>'));
+  addQuick([{label:'➕ Aggiungi amico',action:openAddFriendFlow},{label:'🗑️ Rimuovi amico',action:()=>botSay(()=>doRemoveFriend())},{label:'🎾 Prenota un campo',text:'Vorrei prenotare un campo'}]);
+}
+/* Rimuovi un amico dalla rubrica (List Message → scegli → conferma). */
+function doRemoveFriend(){
+  if(!S.friends.length){ addInHtml('Non hai ancora amici da rimuovere.'); homeMenu(); return; }
+  addListMessage({ body:'Chi vuoi togliere dalla tua rubrica? 👇', button:'Apri', title:'Rimuovi un amico',
+    rows: S.friends.map(f=>({section:'I tuoi amici', ic:'👤', label:f.nome, desc:'Tocca per rimuoverlo', action:()=>botSay(()=>confirmRemoveFriend(f.id))})) });
+}
+function confirmRemoveFriend(id){
+  const f=S.friends.find(x=>x.id===id); if(!f){ addInHtml('Quell\'amico non è più in lista.'); homeMenu(); return; }
+  addInHtml('Vuoi togliere <b>'+esc(f.nome)+'</b> dai tuoi amici?');
+  addQuick([
+    {label:'🗑️ Sì, rimuovi',danger:true,action:()=>{ S.friends=S.friends.filter(x=>x.id!==id); save(); botSay(()=>{ addInHtml('Fatto: <b>'+esc(f.nome)+'</b> non è più tra i tuoi amici.',true); doAmici(); }); }},
+    {label:'Annulla',action:()=>botSay(()=>doAmici())}
+  ]);
 }
 /* Aggiungi amico = il giocatore CONDIVIDE un contatto (📎 → Contatto). Su WhatsApp
    reale il business non legge la rubrica: riceve nome+numero solo se il giocatore
@@ -1213,7 +1236,7 @@ function openAddPlayersFlow(rec){
     row.appendChild(cb); row.appendChild(sp); fl.appendChild(row);
   });
   // 2) amici invitabili (+ disabilitati con motivo: non sul canale / opt-out 🔕)
-  if(!avail.length && !pending.length){ fl.appendChild(el('luce-hint','Nessun amico da invitare al momento — aggiungine uno qui sotto.')); }
+  if(!avail.length && !pending.length){ fl.appendChild(el('luce-hint','Nessun amico ancora: aggiungine uno qui sotto 👇 — oppure lascia che sia la <b>segreteria</b> a trovare i giocatori.')); }
   avail.forEach(f=>{ const nm=f.nome.split(' ')[0];
     const enabled = f.suWhatsApp && !f.optOut;
     const row=document.createElement('label'); row.className='friend-row';
