@@ -205,7 +205,7 @@
 const LS_KEY='pmo_emu_state_v9';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.53 · 04/07';
+const APP_BUILD='v0.54 · 04/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -1145,7 +1145,7 @@ function showBookingDetail(id){
   rows.push({section:'Oppure', ic:'🗑️', label:'Annulla la prenotazione', desc:'Libera il campo'+(p.concierge?' · +'+CONCIERGE_FEE+' € se già organizzata':''),
     action:()=>botSay(()=>startCancelOne(p))});
   rows.push(menuBackRow('Oppure'));
-  addListMessage({body:'Cosa vuoi fare con questa prenotazione? 👇', button:'Apri', title:'Gestisci la prenotazione', rows:rows.slice(0,10)});
+  addListMessage({body:'Gestisci questa prenotazione 👇<br>'+(p.concierge?'Data e orario o annulla.':'Giocatori, data e orario o annulla.'), button:'Apri', title:'Gestisci la prenotazione', rows:rows.slice(0,10)});
   // 🎭 Demo: il no-show è un evento di backend (il giocatore non si presenta) →
   // qui lo simuliamo per mostrare la tutela (strike/blocco). Chrome, non WhatsApp.
   addDemoRow('🎭 Demo · Simula: non mi presento',()=>demoNoShow(p));
@@ -1406,7 +1406,8 @@ function rosterActionButtons(rec, opts){
     +(rosterPending(rec)?('<br>✉️ In attesa: '+rec.invitati.join(', ')):'')
     +'<br>👥 Sei <b>'+rosterFilled(rec)+'/'+rosterTarget(rec)+'</b> · '
       +(posti>1?'mancano <b>'+posti+'</b> giocatori':'manca <b>1</b> giocatore')
-      +' · hai <b>'+rec.win+'</b> per completare la partita';
+      +' · hai <b>'+rec.win+'</b> per completare la partita'
+    +'<br>👇 Tocca «Apri»: invita gli amici o lascia fare alla segreteria';
   // Le voci (con descrizione) vivono NELLA SCHERMATA che apre il pulsante (fedele a WA).
   const rows=[
     {section:'Completa la partita', ic:'👥', label:'Invito i miei amici', desc:rosterPending(rec)?('Invita o revoca · '+rosterPending(rec)+' in attesa'):'Scegli tu con chi giocare', action:()=>botSay(()=>addFlowLaunch('Apriamo il modulo — spunta gli amici che giocano con te. 👇', ()=>openAddPlayersFlow(rec)))},
