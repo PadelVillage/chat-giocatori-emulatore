@@ -205,7 +205,7 @@
 const LS_KEY='pmo_emu_state_v9';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.55 · 04/07';
+const APP_BUILD='v0.56 · 04/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -1120,7 +1120,7 @@ function playersDesc(p){
 function doMie(){
   const list=S.prenotazioni;
   if(!list.length){ addInHtml('Al momento non hai prenotazioni future. Vuoi prenotare un campo?'); addQuick([{label:'🎾 Prenota un campo',text:'Vorrei prenotare un campo'}]); return; }
-  addListMessage({ body:'Le tue prossime prenotazioni 👇', button:'Apri', title:'Le mie prenotazioni',
+  addListMessage({ body:'Le tue prenotazioni — apri per gestirle 👇', button:'Apri', title:'Le mie prenotazioni',
     rows:list.slice(0,9).map(p=>({section:'Prenotazioni', ic:'✅', label:p.giorno+' · '+p.ora, desc:'Campo '+p.campo+' · '+p.tipo, action:()=>botSay(()=>showBookingDetail(p.id))})).concat([menuBackRow()]) });
 }
 function showBookingDetail(id){
