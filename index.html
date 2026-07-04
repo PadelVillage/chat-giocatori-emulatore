@@ -193,7 +193,7 @@
 const LS_KEY='pmo_emu_state_v8';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.45 · 04/07';
+const APP_BUILD='v0.46 · 04/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -855,8 +855,15 @@ function statoPren(p){
   const win=p.win||rosterWindow(offsetForGiorno(p.giorno)||0).lbl;
   return '✅ Prenotato · da completare '+rosterFilled(p)+'/'+rosterTarget(p)+(rosterPending(p)?(' · in attesa: '+p.invitati.join(', ')):'')+' · entro '+win;
 }
-/* Le mie prenotazioni: LISTA (List Message ≤10) → tocca → DETTAGLIO con ≤3
-   azioni. Pattern fedele a WhatsApp (niente valanga di reply-buttons). */
+/* Descrizione della riga "Giocatori" nel dettaglio (≤72 char): riflette lo stato
+   del roster e cosa puoi farci (invita/aggiungi/togli, o togli/sostituisci se completa). */
+function playersDesc(p){
+  const filled=rosterFilled(p), tgt=rosterTarget(p), pend=rosterPending(p);
+  if(p.stato==='prenotato') return 'Al completo '+filled+'/'+tgt+' · togli o sostituisci';
+  return filled+'/'+tgt+(pend?(' · '+pend+' in attesa'):'')+' · invita, aggiungi o togli';
+}
+/* Le mie prenotazioni: LISTA (List Message ≤10) → tocca → DETTAGLIO = List
+   "Gestisci la prenotazione". Pattern fedele a WhatsApp (niente valanga di reply-buttons). */
 function doMie(){
   const list=S.prenotazioni;
   if(!list.length){ addInHtml('Al momento non hai prenotazioni future. Vuoi prenotare un campo?'); addQuick([{label:'🎾 Prenota un campo',text:'Vorrei prenotare un campo'}]); return; }
@@ -869,16 +876,25 @@ function showBookingDetail(id){
     +(p.amici&&p.amici.length?('<br>Con: '+p.amici.join(', ')):'')
     +(rosterPending(p)?('<br>✉️ In attesa: '+p.invitati.join(', ')):'')
     +'<br>'+statoPren(p));
-  const btns=[];
-  if(p.stato==='opzionato' && (p.deadline||0)-Date.now()>0){
-    btns.push({label:'👥 Invito gli amici',action:()=>{ addOut('Invito gli amici'); botSay(()=>addFlowLaunch('Apriamo il modulo — spunta gli amici che giocano con te. 👇', ()=>openAddPlayersFlow(p))); }});
-    if(!p.concierge) btns.push({label:'🧑‍💼 Ci pensa la segreteria',action:()=>{ addOut('Ci pensa la segreteria'); botSay(()=>delegateConcierge(p)); }});
-    btns.push({label:'🗑️ Annulla',action:()=>startCancelOne(p),danger:true});
-  } else {
-    btns.push({label:'✏️ Modifica',action:()=>botSay(()=>{ addFlowLaunch('Riapriamo il modulo — scegli di nuovo giorno e orario. 👇', ()=>openBookingFlow({editId:p.id, giorno:p.giorno, ora:p.ora})); })});
-    btns.push({label:'🗑️ Annulla',action:()=>startCancelOne(p),danger:true});
+  // GESTISCI la prenotazione = List Message (le 3 azioni non stanno in 3 reply-button:
+  // servono descrizioni). Voci ADATTIVE allo stato: concierge → niente "Giocatori"
+  // (li trova la segreteria); "Ci pensa la segreteria" solo se ancora incompleta.
+  const incomplete = p.stato==='opzionato' && (p.deadline||0)-Date.now()>0;
+  const rows=[];
+  if(!p.concierge){
+    rows.push({section:'Gestisci', ic:'👥', label:'Giocatori', desc:playersDesc(p),
+      action:()=>botSay(()=>addFlowLaunch('Apriamo il modulo — aggiungi, togli o invita i giocatori. 👇', ()=>openAddPlayersFlow(p)))});
   }
-  addQuick(btns.slice(0,3));
+  if(incomplete && !p.concierge){
+    rows.push({section:'Gestisci', ic:'🧑‍💼', label:'Ci pensa la segreteria', desc:'Troviamo noi i giocatori · +'+CONCIERGE_FEE+' € solo sulla tua quota',
+      action:()=>botSay(()=>delegateConcierge(p))});
+  }
+  rows.push({section:'Gestisci', ic:'✏️', label:'Data e orario', desc:'Sposta a un altro giorno o orario',
+    action:()=>botSay(()=>addFlowLaunch('Riapriamo il modulo — scegli di nuovo giorno e orario. 👇', ()=>openBookingFlow({editId:p.id, giorno:p.giorno, ora:p.ora})))});
+  rows.push({section:'Oppure', ic:'🗑️', label:'Annulla la prenotazione', desc:'Libera il campo'+(p.concierge?' · +'+CONCIERGE_FEE+' € se già organizzata':''),
+    action:()=>botSay(()=>startCancelOne(p))});
+  rows.push(menuBackRow('Oppure'));
+  addListMessage({body:'Cosa vuoi fare con questa prenotazione? 👇', button:'Apri', title:'Gestisci la prenotazione', rows:rows.slice(0,10)});
   // 🎭 Demo: il no-show è un evento di backend (il giocatore non si presenta) →
   // qui lo simuliamo per mostrare la tutela (strike/blocco). Chrome, non WhatsApp.
   addDemoRow('🎭 Demo · Simula: non mi presento',()=>demoNoShow(p));
@@ -1216,46 +1232,58 @@ function confirmBooking(rec,extra){
 /* DISATTIVATO nella demo (vedi scheduleRosterReminders): niente auto-rilascio
    né messaggio "Tempo scaduto" durante il walkthrough. No-op a prova di tutto. */
 function expireOption(rec){ /* disattivato in demo */ }
-/* Modulo "completa la partita" = WhatsApp FLOW nativo: UN solo CheckboxGroup + UN
-   footer. Modello B (il posto si riempie SOLO quando l'amico CONFERMA). Gli inviti già
-   in sospeso sono voci PRE-SPUNTATE ("✉️ … in attesa"): deselezionarle = REVOCA; le
-   nuove spunte = invita. Un unico bottone footer "Aggiorna partita" applica entrambi.
-   Cap nativo (max-selected) = posti liberi totali (i pending occupano una spunta).
-   Voci non invitabili = disabilitate (enabled:false): non sul canale (no opt-in) o
-   opt-out 🔕. NIENTE "Ospite" (solo giocatori veri). "Aggiungi un amico" = EmbeddedLink
-   (esce dal Flow per condividere un contatto, poi torni qui). Su WhatsApp l'invito è un
-   TEMPLATE utility con 3 bottoni ✅ Confermo / ❌ Non posso / 🔕 Non invitarmi più. */
+/* Modulo "gestisci i giocatori" = WhatsApp FLOW nativo: UN solo CheckboxGroup + UN
+   footer. Tre tipi di riga, tutte nello stesso gruppo (max-selected = target−1 = 3 altri):
+   · CONFERMATI ✅ (pre-spuntati) → deseleziona = TOGLI dal roster (se la partita era
+     completa torna "da completare");
+   · IN ATTESA ✉️ (pre-spuntati) → deseleziona = REVOCA l'invito;
+   · AMICI invitabili (non spuntati) → spunta = INVITA (modello B: il posto si riempie
+     SOLO quando confermano; template Meta ✅ Confermo / ❌ Non posso / 🔕 Non invitarmi più).
+   Voci non invitabili = disabilitate: non sul canale (no opt-in) o opt-out 🔕. NIENTE
+   "Ospite" (solo giocatori veri). "Aggiungi un amico" = EmbeddedLink (esce dal Flow per
+   condividere un contatto, poi torni qui). Footer unico "Aggiorna partita" applica tutto. */
 function openAddPlayersFlow(rec){
   const r=S.prenotazioni.find(x=>x.id===rec.id)||rec;
+  const target=rosterTarget(r);
+  const maxOthers=target-1;                              // caselle = gli ALTRI giocatori (tu conti sempre come 1)
+  const confirmed=(r.amici||[]).slice();                 // giocatori CONFERMATI (deseleziona = TOGLI)
+  const pending=(r.invitati||[]).slice();                // inviti in ATTESA (deseleziona = REVOCA)
+  const preChecked=confirmed.concat(pending);
+  const avail=S.friends.filter(f=>preChecked.indexOf(f.nome.split(' ')[0])<0);   // invitabili (spunta = INVITA)
   const posti=rosterPosti(r);
-  if(posti===0){ addInHtml('La partita è già al completo. 🎾'); homeMenu(); return; }
-  const pending=(r.invitati||[]).slice();               // pre-spuntati (revocabili deselezionando)
-  const taken=(r.amici||[]).concat(pending);
-  const avail=S.friends.filter(f=>taken.indexOf(f.nome.split(' ')[0])<0);
-  const cap=posti;                                       // max-selected NATIVO: pending inclusi nel conteggio
-  const picked=new Set(pending);
+  const cap=maxOthers;                                   // max-selected NATIVO = posti totali "altri" (3 su 4)
+  const picked=new Set(preChecked);
   const body=el('flow');
-  body.appendChild(el('luce-hint','Manca'+(posti>1?'no':'')+' <b>'+posti+'</b> giocator'+(posti>1?'i':'e')+' per '+esc(r.giorno)+' alle '+r.ora+'. Ogni invito è un messaggio con <b>✅ Confermo / ❌ Non posso</b>: il posto si riempie quando confermano.'));
+  body.appendChild(el('luce-hint', posti>0
+    ? ('Manca'+(posti>1?'no':'')+' <b>'+posti+'</b> giocator'+(posti>1?'i':'e')+' per '+esc(r.giorno)+' alle '+r.ora+'. Spunta un amico per <b>invitarlo</b> (messaggio con <b>✅ Confermo / ❌ Non posso</b>); deseleziona un giocatore per <b>toglierlo</b>.')
+    : ('Partita <b>al completo</b> per '+esc(r.giorno)+' alle '+r.ora+'. Deseleziona un giocatore per <b>toglierlo</b> o sostituirlo (la partita tornerà da completare).')));
   body.appendChild(fieldLabel('Chi gioca con te'));
   const counter=el('luce-hint','');
-  function refresh(){ counter.innerHTML='Selezionati: <b>'+picked.size+'</b> / '+cap+(pending.length?' · deseleziona un invito in attesa per revocarlo':''); }
+  function refresh(){ counter.innerHTML='Selezionati: <b>'+picked.size+'</b> / '+cap+(preChecked.length?' · deseleziona per togliere o revocare':''); }
   function toggle(cb){
     if(cb.checked){
-      if(picked.size>=cap){ cb.checked=false; toast(cap===1?'C\'è solo 1 posto da riempire.':'Puoi arrivare al massimo a '+cap+' giocatori.'); return; }
+      if(picked.size>=cap){ cb.checked=false; toast(cap===1?'C\'è posto per 1 solo giocatore.':'Puoi arrivare al massimo a '+cap+' giocatori (oltre a te). Togline uno prima.'); return; }
       picked.add(cb.dataset.nm);
     } else picked.delete(cb.dataset.nm);
     refresh();
   }
   const fl=el('friend-list');
-  // 1) inviti in sospeso = pre-spuntati (deseleziona = revoca)
+  // 1) giocatori CONFERMATI = pre-spuntati (deseleziona = togli dal roster)
+  confirmed.forEach(nm=>{
+    const row=document.createElement('label'); row.className='friend-row';
+    const cb=document.createElement('input'); cb.type='checkbox'; cb.checked=true; cb.dataset.nm=nm; cb.onchange=()=>toggle(cb);
+    const sp=document.createElement('span'); sp.innerHTML='✅ '+esc(nm)+' · <i>in partita</i>';
+    row.appendChild(cb); row.appendChild(sp); fl.appendChild(row);
+  });
+  // 2) inviti in sospeso = pre-spuntati (deseleziona = revoca)
   pending.forEach(nm=>{
     const row=document.createElement('label'); row.className='friend-row';
     const cb=document.createElement('input'); cb.type='checkbox'; cb.checked=true; cb.dataset.nm=nm; cb.onchange=()=>toggle(cb);
     const sp=document.createElement('span'); sp.innerHTML='✉️ '+esc(nm)+' · <i>in attesa</i>';
     row.appendChild(cb); row.appendChild(sp); fl.appendChild(row);
   });
-  // 2) amici invitabili (+ disabilitati con motivo: non sul canale / opt-out 🔕)
-  if(!avail.length && !pending.length){ fl.appendChild(el('luce-hint','Nessun amico ancora: aggiungine uno qui sotto 👇 — oppure lascia che sia la <b>segreteria</b> a trovare i giocatori.')); }
+  // 3) amici invitabili (+ disabilitati con motivo: non sul canale / opt-out 🔕)
+  if(!avail.length && !preChecked.length){ fl.appendChild(el('luce-hint','Nessun amico ancora: aggiungine uno qui sotto 👇 — oppure lascia che sia la <b>segreteria</b> a trovare i giocatori.')); }
   avail.forEach(f=>{ const nm=f.nome.split(' ')[0];
     const enabled = f.suWhatsApp && !f.optOut;
     const row=document.createElement('label'); row.className='friend-row';
@@ -1269,17 +1297,24 @@ function openAddPlayersFlow(rec){
   const addF=document.createElement('a'); addF.href='#'; addF.className='flow-link'; addF.textContent='➕ Aggiungi un amico';
   addF.onclick=(e)=>{ e.preventDefault(); closeSheet(); openAddFriendFlow({backTo:r.id}); };
   body.appendChild(addF);
-  // Footer UNICO: applica inviti nuovi + revoche in un colpo
+  // Footer UNICO: applica togli (confermati deselez.) + revoche (pending deselez.) + inviti nuovi
   const b=document.createElement('button'); b.className='flow-submit'; b.textContent='Aggiorna partita';
   b.onclick=()=>{
-    const revoked=pending.filter(nm=>!picked.has(nm));
-    const newInv=[...picked].filter(nm=>pending.indexOf(nm)<0);
-    if(!revoked.length && !newInv.length){ closeSheet(); toast('Nessuna modifica.'); return; }
+    const removed=confirmed.filter(nm=>!picked.has(nm));                 // confermati tolti
+    const revoked=pending.filter(nm=>!picked.has(nm));                   // inviti revocati
+    const newInv=[...picked].filter(nm=>preChecked.indexOf(nm)<0);       // nuovi inviti
+    if(!removed.length && !revoked.length && !newInv.length){ closeSheet(); toast('Nessuna modifica.'); return; }
     closeSheet();
     botSay(()=>{ const rr=S.prenotazioni.find(x=>x.id===r.id); if(!rr){ addInHtml('Prenotazione non più disponibile.'); return; }
-      rr.invitati=(rr.invitati||[]).filter(nm=>revoked.indexOf(nm)<0).concat(newInv); save();
+      rr.amici=(rr.amici||[]).filter(nm=>removed.indexOf(nm)<0);
+      rr.invitati=(rr.invitati||[]).filter(nm=>revoked.indexOf(nm)<0).concat(newInv);
+      // Ho tolto un giocatore da una partita GIÀ completa → torna da completare (ri-opziono).
+      if(rr.stato==='prenotato' && rosterPosti(rr)>0){ const off=offsetForGiorno(rr.giorno)||0;
+        rr.stato='opzionato'; rr.deadline=optDeadlineMs(off,rr.ora); rr.win=rosterWindow(off).lbl; }
+      save();
       const lines=[];
       if(newInv.length) lines.push('📨 Invito inviato a <b>'+newInv.join(', ')+'</b>.');
+      if(removed.length) lines.push('➖ <b>'+removed.join(', ')+'</b> '+(removed.length>1?'tolti':'tolto')+' dalla partita.');
       if(revoked.length) lines.push('↩️ Invito <b>revocato</b> a <b>'+revoked.join(', ')+'</b> — se '+(revoked.length>1?'rispondono':'risponde')+', diremo che il posto non è più disponibile.');
       lines.push('👥 Sei a <b>'+rosterFilled(rr)+'/'+rosterTarget(rr)+'</b>'+(rosterPending(rr)?(' · in attesa: '+rr.invitati.join(', ')):''));
       addInHtml(lines.join('<br>'),true);
@@ -1287,7 +1322,7 @@ function openAddPlayersFlow(rec){
       if(newInv.length) sendInvites(rr, newInv); });
   };
   body.appendChild(b);
-  openSheet('Completa la partita', body, r.giorno+' · '+r.ora);
+  openSheet('Gestisci i giocatori', body, r.giorno+' · '+r.ora);
 }
 /* Promemoria "completa la partita" — bilanciato: metà + ultima chiamata
    (nella finestra 1h solo l'ultima). Demo: tempi scalati a pochi secondi.
