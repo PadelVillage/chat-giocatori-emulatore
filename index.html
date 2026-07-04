@@ -205,7 +205,7 @@
 const LS_KEY='pmo_emu_state_v9';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.57 · 04/07';
+const APP_BUILD='v0.58 · 04/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -446,9 +446,11 @@ function offsetForGiorno(g){ for(let o=0;o<=MAX_GIORNI;o++){ if(dayInfo(o).giorn
 /* --- OPZIONE → PRENOTAZIONE (modello a opzione gratuita) ------------------
    Prenotare = OPZIONARE il campo (a tuo nome, GRATIS, senza anticipi). Hai una
    finestra legata alla distanza per COMPLETARE LA PARTITA (gli altri giocatori):
-     5–10 gg → 24h · 1–4 gg → 12h · oggi → 1h (mai oltre l'inizio partita).
+     5–10 gg → 24h · 1–4 gg → 12h.
+   · IN GIORNATA (oggi, off===0) → campo CONFERMATO subito (rec.sameDay), NESSUN obbligo
+     di completare: niente finestra/auto-rilascio; invito amici/segreteria FACOLTATIVO.
    · partita al completo (4 giocatori) → ✅ PRENOTATO (auto).
-   · finestra scaduta e partita incompleta → il campo si LIBERA.
+   · finestra scaduta e partita incompleta → il campo si LIBERA (solo prenotazioni future).
    La partita è sempre PRIVATA (la riempie l'organizzatore invitando amici SOCI o
    la delega alla segreteria); niente "partite aperte" ad altri soci, niente ospiti.
    4 CAMPI dietro le quinte: ogni orario ha 4 campi. Vista giocatore (uno stato
@@ -1101,6 +1103,7 @@ function statoPren(p){
   // Terminologia utente: SEMPRE "prenotato" (mai "opzionato" — gergo). Lo stato
   // interno resta 'opzionato' (incompleto) vs 'prenotato' (al completo): sono due
   // valori distinti in codice, ma all'utente diciamo "prenotato · da completare".
+  if(p.sameDay) return '✅ Prenotato · campo confermato (in giornata)';   // in giornata: confermato, nessun obbligo di completare
   if(p.stato==='prenotato') return '✅ Prenotato · partita al completo';
   if(p.concierge) return '🧑‍💼 In organizzazione dalla segreteria (+'+CONCIERGE_FEE+' €)'+(p.mix?(' · partita '+mixPhrase(p.mix)):'');   // esente da rilascio automatico
   const rem=(p.deadline||0)-Date.now();
@@ -1112,6 +1115,7 @@ function statoPren(p){
    del roster e cosa puoi farci (invita/aggiungi/togli, o togli/sostituisci se completa). */
 function playersDesc(p){
   const filled=rosterFilled(p), tgt=rosterTarget(p), pend=rosterPending(p);
+  if(p.sameDay) return 'Facoltativo · invita, aggiungi o togli';   // in giornata: nessun obbligo
   if(p.stato==='prenotato') return 'Al completo '+filled+'/'+tgt+' · togli o sostituisci';
   return filled+'/'+tgt+(pend?(' · '+pend+' in attesa'):'')+' · invita, aggiungi o togli';
 }
@@ -1138,7 +1142,7 @@ function showBookingDetail(id){
     rows.push({section:'Gestisci', ic:'👥', label:'Giocatori', desc:playersDesc(p),
       action:()=>botSay(()=>addFlowLaunch('Apriamo il modulo — aggiungi, togli o invita i giocatori. 👇', ()=>openAddPlayersFlow(p)))});
   }
-  if(incomplete && !p.concierge){
+  if((incomplete || p.sameDay) && !p.concierge){   // segreteria = facoltativa anche per le prenotazioni in giornata
     rows.push({section:'Gestisci', ic:'🧑‍💼', label:'Ci pensa la segreteria', desc:'Troviamo noi i giocatori · +'+CONCIERGE_FEE+' € solo sulla tua quota',
       action:()=>botSay(()=>delegateConcierge(p))});
   }
@@ -1335,14 +1339,14 @@ function applyEdit(editId,d,ora,meta){
   if(!rec){ addInHtml('Quella prenotazione non è più disponibile.'); homeMenu(); return; }
   rec.giorno=d.giorno; rec.ora=ora; rec.campo=campoLibero(d.dow,ora); rec.durata=90;
   rec.prezzoTesta=slotPrezzo(meta,4).testa;
-  if(rec.stato==='opzionato' && !rec.concierge){
-    const noff=offsetForGiorno(rec.giorno)||0;
-    rec.gen=(rec.gen||0)+1; rec.deadline=optDeadlineMs(noff,ora); rec.win=rosterWindow(noff).lbl;
-    scheduleRosterReminders(rec, noff);
+  if(!rec.concierge){
+    rec.gen=(rec.gen||0)+1;               // invalida i vecchi timer prima di ricalcolare
+    recomputeCompletion(rec);             // a OGGI → confermata (no obbligo); a un giorno FUTURO → opzione con finestra
+    if(rec.stato==='opzionato') scheduleRosterReminders(rec, offsetForGiorno(rec.giorno)||0);
   }
   save();
-  // Card UNICA aggiornata (stesso List Message, header "aggiornata").
-  if(rec.stato==='opzionato' && !rec.concierge) rosterActionButtons(rec, {receipt:true, header:'✅ <b>Prenotazione aggiornata</b>'});
+  // Card UNICA aggiornata: opzione-da-completare O in-giornata-facoltativa → ripropone le scelte; già completa/concierge → conferma secca.
+  if(!rec.concierge && (rec.stato==='opzionato' || rec.sameDay)) rosterActionButtons(rec, {receipt:true, header:'✅ <b>Prenotazione aggiornata</b>'});
   else {
     // Prenotazione GIÀ completa (o delegata alla segreteria): nessuna fase di
     // completamento da riproporre → conferma segmentata + ritorno al menu.
@@ -1376,18 +1380,31 @@ function decideAndPresent(draft){
 }
 /* Crea l'OPZIONE (gratis) col solo organizzatore confermato; gli amici scelti
    ricevono un INVITO (il posto si riempie solo quando accettano). */
+/* Ricalcola stato e OBBLIGO di completamento in base al GIORNO (regola prodotto):
+   • IN GIORNATA (oggi → off===0) = campo CONFERMATO subito (rec.sameDay), NESSUN obbligo
+     di completare la squadra: niente finestra/scadenza/auto-rilascio, niente "mancano N".
+     Invito amici/segreteria resta possibile ma FACOLTATIVO.
+   • giorno FUTURO = opzione con finestra di completamento (o già 'prenotato' se al completo). */
+function recomputeCompletion(rec){
+  if(rec.concierge) return;
+  const off=offsetForGiorno(rec.giorno)||0;
+  if(off===0){ rec.sameDay=true; rec.stato='prenotato'; delete rec.deadline; delete rec.win; return; }
+  delete rec.sameDay;
+  if(rosterPosti(rec)<=0){ rec.stato='prenotato'; delete rec.deadline; delete rec.win; }
+  else { rec.stato='opzionato'; rec.deadline=optDeadlineMs(off,rec.ora); rec.win=rosterWindow(off).lbl; }
+}
 function commitOpzione(draft){
   const off=offsetForGiorno(draft.giorno);
   const target=draft.target||4;
   const invited=(draft.names||(draft.amici||[]).map(friendName).filter(Boolean)).slice(0,target-1);
   const rec={id:++S.seq,giorno:draft.giorno,ora:draft.ora,campo:draft.campo,tipo:draft.tipo,durata:draft.durata,
-    target:target, amici:[], invitati:invited.slice(), stato:'opzionato',
-    prezzoTesta:(draft.prezzoTesta!=null?draft.prezzoTesta:null),
-    deadline:optDeadlineMs(off||0,draft.ora), win:rosterWindow(off||0).lbl};
+    target:target, amici:[], invitati:invited.slice(),
+    prezzoTesta:(draft.prezzoTesta!=null?draft.prezzoTesta:null)};
+  recomputeCompletion(rec);                 // in giornata = confermato (no obbligo); futuro = opzione con finestra
   S.prenotazioni.push(rec); save();
-  rosterActionButtons(rec, {receipt:true}); // MSG 1 ricevuta ✅ + MSG 2 card d'azione "Completa la partita"
+  rosterActionButtons(rec, {receipt:true}); // MSG 1 ricevuta ✅ + MSG 2 (card azione, o invito FACOLTATIVO se in giornata)
   if(invited.length) sendInvites(rec, invited);
-  scheduleRosterReminders(rec, off||0);
+  if(!rec.sameDay) scheduleRosterReminders(rec, off||0);
 }
 /* FASE 2 — come completare la partita (dopo l'opzione). LIST MESSAGE WhatsApp:
    il CORPO della lista porta lo stato roster + la domanda (così la ricevuta — card
@@ -1411,6 +1428,23 @@ function rosterActionButtons(rec, opts){
   const posti=rosterPosti(rec);
   const fine=addMin(rec.ora,rec.durata||90);
   if(opts && opts.receipt) bookingReceipt(rec, opts.header);   // MSG 1 (ricevuta) prima della card d'azione
+  if(rec.sameDay){
+    // IN GIORNATA: campo CONFERMATO, nessun obbligo di completare → invito FACOLTATIVO
+    // (no "mancano N", no scadenza). Il pulsante dice l'azione (invito), non "completa".
+    const bodySd='📅 '+esc(rec.giorno)+' · '+rec.ora+'–'+fine+' · Campo '+rec.campo
+      +(rosterPending(rec)?('<br>✉️ In attesa: '+rec.invitati.join(', ')):'')
+      +(rec.amici&&rec.amici.length?('<br>👥 Con te: '+rec.amici.join(', ')):'')
+      +'<br>🎾 Il campo è <b>tuo, confermato</b> — nessun obbligo di completare la squadra.'
+      +'<br>👇 Vuoi giocare in compagnia? Tocca «Invita giocatori» — è <b>facoltativo</b>.';
+    const rowsSd=[
+      {section:'Facoltativo', ic:'👥', label:'Invito i miei amici', desc:'Scegli tu con chi giocare', action:()=>botSay(()=>addFlowLaunch('Apriamo il modulo — spunta gli amici che vuoi invitare. 👇', ()=>openAddPlayersFlow(rec)))},
+      {ic:'🧑‍💼', label:'Ci pensa la segreteria', desc:'Troviamo noi i giocatori · +'+CONCIERGE_FEE+' € solo sulla tua quota', action:()=>botSay(()=>delegateConcierge(rec))},
+      {section:'Oppure', ic:'✏️', label:'Modifica la prenotazione', desc:'Cambia giorno o orario', action:()=>botSay(()=>{ addFlowLaunch('Riapriamo il modulo — scegli di nuovo giorno e orario. 👇', ()=>openBookingFlow({editId:rec.id, giorno:rec.giorno, ora:rec.ora})); })},
+      menuBackRow('Oppure')
+    ];
+    addListMessage({body:bodySd, button:'Invita giocatori', title:'Invita giocatori', rows:rowsSd.slice(0,10)});
+    return;
+  }
   // MSG 2 = card d'AZIONE (List): stato squadra + scadenza + CTA. Il pulsante DICE
   // l'azione — "Completa la partita" invece di "☰ Apri": eccezione VOLUTA alla
   // convenzione (è la card dove la gente non capiva di dover ancora agire).
@@ -1573,7 +1607,7 @@ function openAddPlayersFlow(rec){
       rr.amici=(rr.amici||[]).filter(nm=>removed.indexOf(nm)<0);
       rr.invitati=(rr.invitati||[]).filter(nm=>revoked.indexOf(nm)<0).concat(newInv);
       // Ho tolto un giocatore da una partita GIÀ completa → torna da completare (ri-opziono).
-      if(rr.stato==='prenotato' && rosterPosti(rr)>0){ const off=offsetForGiorno(rr.giorno)||0;
+      if(rr.stato==='prenotato' && !rr.sameDay && rosterPosti(rr)>0){ const off=offsetForGiorno(rr.giorno)||0;   // in giornata NON si ri-opziona: resta confermata
         rr.stato='opzionato'; rr.deadline=optDeadlineMs(off,rr.ora); rr.win=rosterWindow(off).lbl; }
       save();
       const lines=[];
@@ -1610,7 +1644,7 @@ function rosterReminderMsg(r,kind){ /* disattivato in demo */ }
 function sendInvites(rec, names){
   addSys('📨 Inviato l’invito a '+names.join(', ')+' (messaggio con ✅ Confermo / ❌ Non posso / 🔕 Non invitarmi più) — ti avviso appena rispondono.');
   names.forEach((nm,i)=>{
-    setTimeout(()=>{ const r=S.prenotazioni.find(x=>x.id===rec.id); if(!r||r.stato!=='opzionato') return;
+    setTimeout(()=>{ const r=S.prenotazioni.find(x=>x.id===rec.id); if(!r || (r.stato!=='opzionato' && !r.sameDay)) return;   // in giornata: inviti facoltativi, ma le risposte demo arrivano lo stesso
       if((r.invitati||[]).indexOf(nm)<0) return;   // invito già risolto/annullato
       botSay(()=>inviteResponse(r,nm)); }, 4000+i*3000);
   });
@@ -1624,7 +1658,8 @@ function inviteResponse(r,nm){
     addInHtml('🔕 <b>'+esc(nm)+'</b> ha scelto di <b>non ricevere più inviti</b>. Rispettiamo la sua scelta: non gli manderemo altre richieste. Invita pure qualcun altro.'); rosterActionButtons(r); return; }
   r.amici=(r.amici||[]).concat(nm); save();
   if(rosterPosti(r)===0){ confirmBooking(r); return; }
-  addInHtml('✅ <b>'+esc(nm)+'</b> ha confermato! Ora siete <b>'+rosterFilled(r)+'/'+rosterTarget(r)+'</b>'+(rosterPending(r)?(' · in attesa: '+r.invitati.join(', ')):' · manca'+(rosterPosti(r)>1?'no':'')+' '+rosterPosti(r))+'.',true);
+  const tail=rosterPending(r)?(' · in attesa: '+r.invitati.join(', ')):(r.sameDay?'':(' · manca'+(rosterPosti(r)>1?'no':'')+' '+rosterPosti(r)));   // in giornata: nessun "manca N" (no obbligo)
+  addInHtml('✅ <b>'+esc(nm)+'</b> ha confermato! Ora siete <b>'+rosterFilled(r)+'/'+rosterTarget(r)+'</b>'+tail+'.',true);
   rosterActionButtons(r);
 }
 /* Concierge: la segreteria organizza la partita (+5 € sulla quota di chi prenota per primo, in segreteria). */
