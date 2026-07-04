@@ -145,9 +145,6 @@
   .slot.sel{background:var(--wa-green);color:#fff;border-color:var(--wa-green)}
   .slot-empty{font-size:14.5px;color:var(--muted);padding:12px 16px;text-align:center}
   .luce-hint{font-size:11.5px;color:var(--muted);padding:3px 2px 0}
-  .flow-legend{display:flex;gap:13px;padding:8px 14px 0;font-size:11px;color:var(--muted)}
-  .flow-legend .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:4px;vertical-align:-1px}
-  .dot.free{background:#2ea36b}.dot.conf,.dot.opt{background:#e0a52e}.dot.busy{background:#c3cbcf}
   /* Riepilogo del Flow = testo semplice (TextBody nativo): niente testo colorato
      né sfondo "verde di stato" — il colore lo decide il tema (fedeltà WhatsApp).
      Placeholder muted; selezione valida = testo scuro leggibile, sfondo neutro. */
@@ -205,7 +202,7 @@
 const LS_KEY='pmo_emu_state_v10';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.66 · 04/07';
+const APP_BUILD='v0.67 · 04/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -433,8 +430,6 @@ function slotPrezzo(meta){ if(!meta) return {testa:0,campo:0,giocatori:4};
   return {testa,campo:testa*4,giocatori:4}; }
 /* Momenti (passo 2 del selettore): raggruppano gli orari per parte del giorno,
    così si mostrano pochi slot per volta (fedele a un Flow multi-schermata). */
-const MOMENTI=[{key:'mattina',label:'Mattina'},{key:'pomeriggio',label:'Pomeriggio'},{key:'sera',label:'Sera'}];
-function momentoKey(ora){ const h=toMin(ora)/60; if(h<13) return 'mattina'; if(h<17.5) return 'pomeriggio'; return 'sera'; }
 function daySlotsFlat(off,dow,durata,players){ const out=[]; daySlotGroups(off,dow,durata,players).forEach(g=>g.slots.forEach(s=>out.push(s))); return out; }
 function dayInfo(off){ const d=new Date(); d.setDate(d.getDate()+off);
   return { off, giorno:lbl(d), dow:d.getDay(),
@@ -1021,7 +1016,7 @@ function doHelp(t){
     addInHtml('🧑‍💼 <b>Ci pensa la segreteria</b><br>Prima <b>prenoti un campo</b>, poi — nella schermata <b>Completa la partita</b> — puoi delegarci di trovare i giocatori. Ti chiediamo se la vuoi <b>mista</b> o <b>omogenea</b>.<br>'+FEE_LINE);
     addQuick([{label:'🎾 Prenota un campo',text:'Vorrei prenotare un campo'}]); return; }
   if(/prenot|campo|dispon|gioc/.test(t)){
-    addInHtml('<b>Prenotare</b> 🎾<br>Scegli giorno, momento e orario; prenoti il campo a tuo nome e completi la partita. Ti mostriamo sempre il prezzo.');
+    addInHtml('<b>Prenotare</b> 🎾<br>Scegli giorno e orario; prenoti il campo a tuo nome e completi la partita. Ti mostriamo sempre il prezzo.');
     addQuick([{label:'🎾 Prenota un campo',text:'Vorrei prenotare un campo'}]); return; }
   // guida generale (List Message)
   showMenu('Ecco cosa possiamo fare per te — scrivimi con parole tue oppure tocca una voce 👇');
@@ -1145,7 +1140,7 @@ function openBookingFlow(prefill){
   body.appendChild(fieldLabel('Orari disponibili · 90 min'));
   const slotBox=el('slotbox'); body.appendChild(slotBox);
   // Partita sempre 90' in 4 (niente selettore "in quanti giocate").
-  // FASE 1 = SOLO giorno/momento/orario (una scelta per volta). Invita amici e
+  // FASE 1 = SOLO giorno/orario (una scelta per volta). Invita amici e
   // "ci pensate voi" sono la FASE 2, DOPO l'opzione: prima ti assicuri il campo,
   // poi decidi come completare la partita (vedi rosterActionButtons).
   const sum=el('flow-sum');   // riepilogo selezione
