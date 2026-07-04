@@ -202,7 +202,7 @@
 const LS_KEY='pmo_emu_state_v10';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.68 · 04/07';
+const APP_BUILD='v0.69 · 04/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -1320,8 +1320,8 @@ function rosterActionButtons(rec, opts){
   // emoji-àncora, amo in MAIUSCOLO): amo "MANCANO N GIOCATORI" + roster + DISCLAIMER
   // con la cifra dell'intero campo. Data NON ripetuta (è nella ricevuta). Il pulsante
   // DICE l'azione ("Completa la partita") — eccezione voluta a "☰ Apri".
-  const amo = posti>1 ? ('MANCANO <b>'+posti+'</b> GIOCATORI') : (posti===1 ? 'MANCA <b>1</b> GIOCATORE' : 'PARTITA AL COMPLETO');
-  const body='🎾 '+amo
+  const amo = posti>1 ? ('MANCANO '+posti+' GIOCATORI') : (posti===1 ? 'MANCA 1 GIOCATORE' : 'PARTITA AL COMPLETO');
+  const body='🎾 <b>'+amo+'</b>'
     +'<br>🕒 Si gioca '+esc(rec.giorno)+' alle '+rec.ora
     +'<br>👥 Sei in <b>'+rosterFilled(rec)+'/'+rosterTarget(rec)+'</b>'
     +(rosterPending(rec)?('<br>✉️ In attesa: '+rec.invitati.join(', ')):'')
