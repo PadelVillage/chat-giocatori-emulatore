@@ -207,7 +207,7 @@
 const LS_KEY='pmo_emu_state_v10';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.74 · 04/07';
+const APP_BUILD='v0.75 · 04/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -563,7 +563,7 @@ function showIceBreakers(){
   /* 2 Ice Breakers (Meta: max 4, no emoji, solo 1° contatto): il flusso
      principale + "Vedi il menu". Su WhatsApp reale l'Ice Breaker invia un testo
      predefinito → "VEDI IL MENU" invia "Vedi il menu" e il routing risponde con
-     un List Message ("Ecco il menu 👇" + pulsante ☰ Apri → le voci nello sheet).
+     un List Message ("Ecco il menu" + pulsante ☰ Apri → le voci nello sheet).
      Label in MAIUSCOLO (enfasi consentita, no colore): amo di primo contatto —
      la gente non legge, il maiuscolo è la call-to-action. Il testo INVIATO resta
      minuscolo (bolla utente naturale). */
@@ -616,8 +616,8 @@ function sendUser(text,silent){
 }
 function route(intent,t){
   switch(intent){
-    case 'saluto': showMenu('Ciao '+esc(S.player.nome.split(' ')[0])+', come possiamo aiutarti? 👇'); break;
-    case 'altro': showMenuAltro('Ecco il menu 👇'); break;
+    case 'saluto': showMenu('Ciao '+esc(S.player.nome.split(' ')[0])+', come possiamo aiutarti?'); break;
+    case 'altro': showMenuAltro('Ecco il menu'); break;
     case 'profilo': doProfilo(); break;
     case 'amici': doAmici(); break;
     case 'borsellino': doBorsellino(); break;
@@ -627,7 +627,7 @@ function route(intent,t){
     case 'annulla': startCancel(); break;
     case 'modifica': startModify(); break;
     case 'prenota': startBooking(t); break;
-    default: showMenu('Scusa, non abbiamo capito bene 🤔 Ecco cosa possiamo fare 👇');
+    default: showMenu('Scusa, non abbiamo capito bene 🤔 Ecco cosa possiamo fare');
   }
 }
 /* Menu "home" in coda ai flussi foglia = direttamente il List Message del menu
@@ -671,14 +671,14 @@ function menuRows(){
 /* Menu principale = List Message fedele: UNA card (corpo=body) + UN pulsante
    "☰ Menu" → le voci (titolo+descrizione) in una schermata a comparsa. */
 function showMenu(body){
-  addListMessage({ body: body||'Ecco cosa possiamo fare per te 👇', button:'Apri il menu', title:'Cosa possiamo fare', rows: menuRows() });   /* bottone auto-esplicativo (≤20 char): dice COSA apre */
+  addListMessage({ body: body||'Ecco cosa possiamo fare per te', button:'Apri il menu', title:'Cosa possiamo fare', rows: menuRows() });   /* bottone auto-esplicativo (≤20 char): dice COSA apre */
 }
 /* Menu "Altro" = STESSE voci del menu principale (scelta utente); niente "Come funziona".
    Il pulsante della List dice "Menu" (non "Altro"): così, dopo l'Ice Breaker "Altro",
    compare "☰ Menu" da aprire — non la stessa parola due volte. Titolo sheet = come il
    menu principale (il contenuto è identico). Fedeltà WA: la List si apre col suo pulsante. */
 function showMenuAltro(body){
-  addListMessage({ body: body||'Ecco cos\'altro possiamo fare per te 👇', button:'Apri il menu', title:'Cosa possiamo fare', rows: menuRows() });
+  addListMessage({ body: body||'Ecco cos\'altro possiamo fare per te', button:'Apri il menu', title:'Cosa possiamo fare', rows: menuRows() });
 }
 
 /* ---------- Profilo -------------------------------------------------------- */
@@ -699,10 +699,10 @@ function doProfilo(){
     +'<br>💶 Borsellino '+euro(S.player.borselloCent));
   // GESTISCI IL PROFILO = List Message (le azioni hanno descrizioni → non stanno in 3 reply-button),
   // stesso pattern di "Gestisci la prenotazione". I Flow (autovalutazione/notifiche) si aprono col "↗ Apri".
-  addListMessage({ body:'Da qui gestisci il tuo profilo 👇<br>Autovalutazione del livello, notifiche e dati.', button:'Apri', title:'Gestisci il profilo', rows:[
-    {section:'Profilo', ic:'📊', label:'Valuta il tuo livello', desc:'Autovalutazione del livello di gioco', action:()=>botSay(()=>addFlowLaunch('Apriamo il questionario livello — 8 domande a risposta chiusa. 👇', openAssessmentFlow))},
+  addListMessage({ body:'Da qui gestisci il tuo profilo<br>Autovalutazione del livello, notifiche e dati.', button:'Apri', title:'Gestisci il profilo', rows:[
+    {section:'Profilo', ic:'📊', label:'Valuta il tuo livello', desc:'Autovalutazione del livello di gioco', action:()=>botSay(()=>addFlowLaunch('Apriamo il questionario livello — 8 domande a risposta chiusa.', openAssessmentFlow))},
     {ic:'ℹ️', label:'Il mio livello', desc:'Cosa significa la scala da 1.0 a 7.0', action:()=>botSay(explainLevel)},
-    {ic:'🔔', label:'Preferenze notifiche', desc:'Scegli i messaggi che vuoi ricevere', action:()=>botSay(()=>addFlowLaunch('Apriamo le preferenze notifiche. 👇', openNotifPrefs))},
+    {ic:'🔔', label:'Preferenze notifiche', desc:'Scegli i messaggi che vuoi ricevere', action:()=>botSay(()=>addFlowLaunch('Apriamo le preferenze notifiche.', openNotifPrefs))},
     {ic:'✏️', label:'Aggiorna i tuoi dati', desc:'Email e contatti', action:()=>botSay(editData)},
     {section:'Oppure', ic:'🗑️', label:'Cancella i miei dati', desc:'Richiesta di cancellazione alla segreteria', action:()=>botSay(startDeleteData)},
     menuBackRow('Oppure')
@@ -719,7 +719,7 @@ function explainLevel(){
     +'<br>• <b>5.0–6.0</b> agonista'
     +'<br>• <b>6.0+</b> professionista'
     +'<br>Serve a formare partite <b>equilibrate</b>. Puoi aggiornarlo con l\'autovalutazione del livello di gioco.');
-  addQuick([{label:'📊 Valuta il livello',action:()=>botSay(()=>addFlowLaunch('Apriamo il questionario livello — 8 domande a risposta chiusa. 👇', openAssessmentFlow))},menuBtn()]);   /* ≤20 char (reply-button) */
+  addQuick([{label:'📊 Valuta il livello',action:()=>botSay(()=>addFlowLaunch('Apriamo il questionario livello — 8 domande a risposta chiusa.', openAssessmentFlow))},menuBtn()]);   /* ≤20 char (reply-button) */
 }
 
 /* ---------- Autovalutazione livello (WhatsApp Flow nativo) -----------------
@@ -880,7 +880,7 @@ function editData(){
     +'<br>✉️ Email: <b>'+(S.player.email?esc(S.player.email):'non impostata')+'</b> (puoi modificarla)'
     +'<br>👤 Nome e 📱 telefono sono gestiti dalla <b>segreteria</b> (per correggerli scrivici).');
   addQuick([
-    {label:'✉️ Aggiorna email',action:()=>botSay(()=>addFlowLaunch('Apriamo il modulo per l\'email. 👇', openEmailFlow))},
+    {label:'✉️ Aggiorna email',action:()=>botSay(()=>addFlowLaunch('Apriamo il modulo per l\'email.', openEmailFlow))},
     {label:'✏️ Chiedi correzione',action:()=>botSay(requestDataFix)},   /* 20 char — reply-button ≤20 (l'emoji 🧑‍💼 ZWJ contava 3 code point → 21) */
     menuBtn()
   ]);
@@ -942,14 +942,14 @@ function doAmici(){
     addQuick([{label:'➕ Aggiungi amico',action:openAddFriendFlow},{label:'🎾 Prenota un campo',text:'Vorrei prenotare un campo'}]);
     return;
   }
-  addInHtml('I tuoi amici con cui giochi 👇');
+  addInHtml('I tuoi amici con cui giochi');
   addCard(S.friends.map(f=>'👤 '+esc(f.nome)+' · '+friendBadge(f)).join('<br>'));
   addQuick([{label:'➕ Aggiungi amico',action:openAddFriendFlow},{label:'🗑️ Rimuovi amico',action:()=>botSay(()=>doRemoveFriend())},{label:'🎾 Prenota un campo',text:'Vorrei prenotare un campo'}]);
 }
 /* Rimuovi un amico dalla rubrica (List Message → scegli → conferma). */
 function doRemoveFriend(){
   if(!S.friends.length){ addInHtml('Non hai ancora amici da rimuovere.'); homeMenu(); return; }
-  addListMessage({ body:'Chi vuoi togliere dalla tua rubrica? 👇', button:'Apri', title:'Rimuovi un amico',
+  addListMessage({ body:'Chi vuoi togliere dalla tua rubrica?', button:'Apri', title:'Rimuovi un amico',
     rows: S.friends.slice(0,9).map(f=>({section:'I tuoi amici', ic:'👤', label:f.nome, desc:'Tocca per rimuoverlo', action:()=>botSay(()=>confirmRemoveFriend(f.id))})).concat([menuBackRow()]) });
 }
 function confirmRemoveFriend(id){
@@ -967,7 +967,7 @@ function confirmRemoveFriend(id){
 /* ctx (opzionale) = {backTo:<idPrenotazione>}: se presente, dopo l'aggiunta si TORNA
    al modulo "Completa la partita" (aggiunta amico al volo durante la prenotazione). */
 function openAddFriendFlow(ctx){
-  addInHtml('Per aggiungere un amico, <b>condividi il suo contatto</b>: 📎 → <b>Contatto</b> e scegli chi vuoi aggiungere. 👇');
+  addInHtml('Per aggiungere un amico, <b>condividi il suo contatto</b>: 📎 → <b>Contatto</b> e scegli chi vuoi aggiungere.');
   openContactPicker(ctx);
 }
 function openContactPicker(ctx){
@@ -983,7 +983,7 @@ function openContactPicker(ctx){
 function normNum(n){ return (n||'').replace(/\D/g,''); }
 function isGiaAmico(entry){ return S.friends.some(f=>normNum(f.numero)===normNum(entry.numero)); }
 /* Ritorno al modulo "Completa la partita" dopo un'aggiunta al volo (se ctx.backTo). */
-function backToRoster(ctx){ if(!ctx||!ctx.backTo) return null; return ()=>{ const rr=S.prenotazioni.find(x=>x.id===ctx.backTo); if(rr) botSay(()=>addFlowLaunch('Torniamo al modulo — spunta gli amici che giocano con te. 👇', ()=>openAddPlayersFlow(rr))); else homeMenu(); }; }
+function backToRoster(ctx){ if(!ctx||!ctx.backTo) return null; return ()=>{ const rr=S.prenotazioni.find(x=>x.id===ctx.backTo); if(rr) botSay(()=>addFlowLaunch('Torniamo al modulo — spunta gli amici che giocano con te.', ()=>openAddPlayersFlow(rr))); else homeMenu(); }; }
 /* Il giocatore ha condiviso un contatto → 3 rami secondo l'anagrafica. */
 function shareContact(entry, ctx){
   const back=backToRoster(ctx);
@@ -1012,10 +1012,10 @@ function inviteToJoin(entry, back){
 }
 function showJoinInvite(entry, back){
   const nome1=entry.nome.split(' ')[0];
-  addSys('Inoltra questo messaggio a '+nome1+' 👇');
+  addSys('Inoltra questo messaggio a '+nome1);
   addInHtml('🎾 <b>Padel Village</b>'
     +'<br>Un amico ti ha invitato a giocare una partita con lui!'
-    +'<br>Per partecipare, iscriviti: scrivici su WhatsApp e ti inseriamo nella partita 👇'
+    +'<br>Per partecipare, iscriviti: scrivici su WhatsApp e ti inseriamo nella partita'
     +'<br>https://wa.me/'+CLUB_WA+'?text=Ciao!%20Un%20amico%20mi%20ha%20invitato%20a%20giocare%2C%20vorrei%20iscrivermi');
   if(back) addQuick([{label:'🔙 Torna a completare',action:back}]); else homeMenu();
 }
@@ -1041,13 +1041,13 @@ function doHelp(t){
     addInHtml('<b>Prenotare</b> 🎾<br>Scegli giorno e orario; prenoti il campo a tuo nome e completi la partita. Ti mostriamo sempre il prezzo.');
     addQuick([{label:'🎾 Prenota un campo',text:'Vorrei prenotare un campo'}]); return; }
   // guida generale (List Message)
-  showMenu('Ecco cosa possiamo fare per te — scrivimi con parole tue oppure tocca una voce 👇');
+  showMenu('Ecco cosa possiamo fare per te — scrivimi con parole tue oppure tocca una voce');
 }
 
 /* ---------- Disponibilità (= vista giorni/orari nel modulo) ---------------- */
 function doDisponibilita(t){
   const w=parseWhen(t);
-  addFlowLaunch('Ecco la disponibilità'+(w.giorno?' di '+esc(w.giorno):' dei prossimi giorni')+' — tocca un orario libero per prenotare. 👇', ()=>openBookingFlow({giorno:w.giorno}));
+  addFlowLaunch('Ecco la disponibilità'+(w.giorno?' di '+esc(w.giorno):' dei prossimi giorni')+' — tocca un orario libero per prenotare.', ()=>openBookingFlow({giorno:w.giorno}));
 }
 
 /* ---------- Le mie prenotazioni -------------------------------------------- */
@@ -1071,7 +1071,7 @@ function playersDesc(p){
 function doMie(){
   const list=S.prenotazioni;
   if(!list.length){ addInHtml('Al momento non hai prenotazioni future. Vuoi prenotare un campo?'); addQuick([{label:'🎾 Prenota un campo',text:'Vorrei prenotare un campo'}]); return; }
-  addListMessage({ body:'Le tue prenotazioni — apri per gestirle 👇', button:'Apri', title:'Le mie prenotazioni',
+  addListMessage({ body:'Le tue prenotazioni — apri per gestirle', button:'Apri', title:'Le mie prenotazioni',
     rows:list.slice(0,9).map(p=>({section:'Prenotazioni', ic:'✅', label:p.giorno+' · '+p.ora, desc:'Campo '+p.campo+' · '+p.tipo, action:()=>botSay(()=>showBookingDetail(p.id))})).concat([menuBackRow()]) });
 }
 function showBookingDetail(id){
@@ -1087,18 +1087,18 @@ function showBookingDetail(id){
   const rows=[];
   if(!p.concierge){
     rows.push({section:'Gestisci', ic:'👥', label:'Giocatori', desc:playersDesc(p),
-      action:()=>botSay(()=>addFlowLaunch('Apriamo il modulo — aggiungi, togli o invita i giocatori. 👇', ()=>openAddPlayersFlow(p)))});
+      action:()=>botSay(()=>addFlowLaunch('Apriamo il modulo — aggiungi, togli o invita i giocatori.', ()=>openAddPlayersFlow(p)))});
   }
   if(incomplete && !p.concierge){   // segreteria = facoltativa finché la partita non è al completo
     rows.push({section:'Gestisci', ic:'🧑‍💼', label:'💶 Segreteria (+'+CONCIERGE_FEE+'€)', desc:'Troviamo noi i giocatori · da pagare in cassa',
       action:()=>botSay(()=>delegateConcierge(p))});
   }
   rows.push({section:'Gestisci', ic:'✏️', label:'Data e orario', desc:'Sposta a un altro giorno o orario',
-    action:()=>botSay(()=>addFlowLaunch('Riapriamo il modulo — scegli di nuovo giorno e orario. 👇', ()=>openBookingFlow({editId:p.id, giorno:p.giorno, ora:p.ora})))});
+    action:()=>botSay(()=>addFlowLaunch('Riapriamo il modulo — scegli di nuovo giorno e orario.', ()=>openBookingFlow({editId:p.id, giorno:p.giorno, ora:p.ora})))});
   rows.push({section:'Oppure', ic:'🗑️', label:'Annulla la prenotazione', desc:'Libera il campo'+(p.concierge?' · +'+CONCIERGE_FEE+' € se già organizzata':''),
     action:()=>botSay(()=>startCancelOne(p))});
   rows.push(menuBackRow('Oppure'));
-  addListMessage({body:'Gestisci questa prenotazione 👇<br>'+(p.concierge?'Data e orario o annulla.':'Giocatori, data e orario o annulla.'), button:'Apri', title:'Gestisci la prenotazione', rows:rows.slice(0,10)});
+  addListMessage({body:'Gestisci questa prenotazione<br>'+(p.concierge?'Data e orario o annulla.':'Giocatori, data e orario o annulla.'), button:'Apri', title:'Gestisci la prenotazione', rows:rows.slice(0,10)});
 }
 /* Supplemento concierge in caso di disdetta: dovuto SOLO se la segreteria ha
    già organizzato la partita (stato 'completo'). Finché è ancora 'in organizzazione'
@@ -1125,14 +1125,14 @@ function cancelWarn(){ return '<br>L’azione è definitiva: il campo torna disp
 function startBooking(text){
   const w=parseWhen(text);
   if(w.date && w.ora){ return decideAndPresent({giorno:w.giorno,dow:w.dow,ora:w.ora,tipo:'Partita',durata:90,amici:[]}); }
-  addFlowLaunch('Ti apriamo il modulo — scegli un giorno e tocca un orario libero. 👇', ()=>openBookingFlow({giorno:w.giorno,ora:w.ora}));
+  addFlowLaunch('Ti apriamo il modulo — scegli un giorno e tocca un orario libero.', ()=>openBookingFlow({giorno:w.giorno,ora:w.ora}));
 }
 /* ⚠️ CONCIERGE STANDALONE — NON più cablato (opzione A, scelta utente 03/07): nessun
    comando/intent/menu lo raggiunge. Il concierge esiste SOLO come completamento
    DOPO la prenotazione (delegateConcierge, schermata "Completa la partita"). Funzione
    e ramo `openBookingFlow({concierge:true})` tenuti per riferimento, non invocati. */
 function doConcierge(){
-  addInHtml('Ci pensiamo noi 🧑‍💼<br>Scegli quando vuoi giocare, ai giocatori pensiamo noi.<br>'+FEE_LINE+' 👇');
+  addInHtml('Ci pensiamo noi 🧑‍💼<br>Scegli quando vuoi giocare, ai giocatori pensiamo noi.<br>'+FEE_LINE);
   openBookingFlow({concierge:true});
 }
 function openBookingFlow(prefill){
@@ -1279,7 +1279,7 @@ function decideAndPresent(draft){
   const off=offsetForGiorno(draft.giorno);
   const draftMeta = off!=null ? slotMetaFor(off,draft.dow,draft.ora,draft.durata,draft.players) : null;
   if(draftMeta && draftMeta.status==='busy'){
-    addFlowLaunch('A quell\'ora è tutto occupato. Ti apriamo il modulo con gli orari disponibili. 👇', ()=>openBookingFlow({giorno:draft.giorno,durata:draft.durata,amici:draft.amici}));
+    addFlowLaunch('A quell\'ora è tutto occupato. Ti apriamo il modulo con gli orari disponibili.', ()=>openBookingFlow({giorno:draft.giorno,durata:draft.durata,amici:draft.amici}));
     return;
   }
   const campo=campoLibero(draft.dow,draft.ora); const fine=addMin(draft.ora,draft.durata);
@@ -1350,9 +1350,9 @@ function rosterActionButtons(rec, opts){
     +(posti>0 ? '<br>'+disclaimerLines(rec) : '');
   // Le voci (con descrizione) vivono NELLA SCHERMATA che apre il pulsante (fedele a WA).
   const rows=[
-    {section:'Completa la partita', ic:'👥', label:'Invito i miei amici', desc:rosterPending(rec)?('Invita o revoca · '+rosterPending(rec)+' in attesa'):'Scegli tu con chi giocare', action:()=>botSay(()=>addFlowLaunch('Apriamo il modulo — spunta gli amici che giocano con te. 👇', ()=>openAddPlayersFlow(rec)))},
+    {section:'Completa la partita', ic:'👥', label:'Invito i miei amici', desc:rosterPending(rec)?('Invita o revoca · '+rosterPending(rec)+' in attesa'):'Scegli tu con chi giocare', action:()=>botSay(()=>addFlowLaunch('Apriamo il modulo — spunta gli amici che giocano con te.', ()=>openAddPlayersFlow(rec)))},
     {ic:'🧑‍💼', label:'💶 Segreteria (+'+CONCIERGE_FEE+'€)', desc:'Troviamo noi i giocatori · da pagare in cassa', action:()=>botSay(()=>delegateConcierge(rec))},
-    {section:'Oppure', ic:'✏️', label:'Modifica la prenotazione', desc:'Cambia giorno o orario', action:()=>botSay(()=>{ addFlowLaunch('Riapriamo il modulo — scegli di nuovo giorno e orario. 👇', ()=>openBookingFlow({editId:rec.id, giorno:rec.giorno, ora:rec.ora})); })},
+    {section:'Oppure', ic:'✏️', label:'Modifica la prenotazione', desc:'Cambia giorno o orario', action:()=>botSay(()=>{ addFlowLaunch('Riapriamo il modulo — scegli di nuovo giorno e orario.', ()=>openBookingFlow({editId:rec.id, giorno:rec.giorno, ora:rec.ora})); })},
     menuBackRow('Oppure')
   ];
   addListMessage({body:body, button:'Completa la partita', title:'Completa la partita', rows:rows.slice(0,10)});   /* pulsante = CTA (eccezione voluta a "Apri") */
@@ -1505,7 +1505,7 @@ function openAddPlayersFlow(rec){
     row.appendChild(cb); row.appendChild(sp); fl.appendChild(row);
   });
   // 3) amici invitabili (+ disabilitati con motivo: non sul canale / opt-out 🔕)
-  if(!avail.length && !preChecked.length){ fl.appendChild(el('luce-hint','Nessun amico ancora: aggiungine uno qui sotto 👇 — oppure lascia che sia la <b>segreteria</b> a trovare i giocatori.')); }
+  if(!avail.length && !preChecked.length){ fl.appendChild(el('luce-hint','Nessun amico ancora: aggiungine uno qui sotto — oppure lascia che sia la <b>segreteria</b> a trovare i giocatori.')); }
   // CheckboxGroup reale: max 20 opzioni nel data-source (confermati + in attesa + invitabili).
   const availCap=avail.slice(0, Math.max(0, 20-preChecked.length));
   availCap.forEach(f=>{ const nm=f.nome.split(' ')[0];
@@ -1581,7 +1581,7 @@ function inviteResponse(r,nm){
 function decideConcierge(draft){
   const off=offsetForGiorno(draft.giorno); const fine=addMin(draft.ora,draft.durata);
   const meta=off!=null?slotMetaFor(off,draft.dow,draft.ora,draft.durata,draft.players):null;
-  if(meta && meta.status==='busy'){ addInHtml('A quell\'ora è tutto occupato. Scegli un altro orario. 👇'); openBookingFlow({concierge:true,giorno:draft.giorno}); return; }
+  if(meta && meta.status==='busy'){ addInHtml('A quell\'ora è tutto occupato. Scegli un altro orario.'); openBookingFlow({concierge:true,giorno:draft.giorno}); return; }
   const pr=slotPrezzo(meta,draft.players); const campo=campoLibero(draft.dow,draft.ora);
   draft.campo=campo; draft.fine=fine; draft.target=pr.giocatori;
   addInHtml('Ci pensiamo noi 💪 Ecco il riepilogo:');
@@ -1615,7 +1615,7 @@ function startCancel(){
   if(!S.prenotazioni.length){ addInHtml('Non hai prenotazioni da annullare.'); addQuick([{label:'🎾 Prenota un campo',text:'Vorrei prenotare un campo'}]); return; }
   // LIST MESSAGE (non reply-button): le righe "giorno · ora / Campo N · tipo" superano
   // i 20 char dei reply-button e possono essere >3 → fedele = lista (titolo ≤24, ≤10 righe).
-  addListMessage({ body:'Quale prenotazione vuoi annullare? 👇', button:'Apri', title:'Annulla una prenotazione',
+  addListMessage({ body:'Quale prenotazione vuoi annullare?', button:'Apri', title:'Annulla una prenotazione',
     rows: S.prenotazioni.slice(0,9).map(p=>({section:'Le mie prenotazioni', ic:'🗑️', label:p.giorno+' · '+p.ora, desc:'Campo '+p.campo+' · '+p.tipo, action:()=>botSay(()=>startCancelOne(p))})).concat([menuBackRow()]) });
 }
 function cancelStep(t){
@@ -1636,8 +1636,8 @@ function startModify(){
   if(!S.prenotazioni.length){ addInHtml('Non hai prenotazioni da modificare.'); addQuick([{label:'🎾 Prenota un campo',text:'Vorrei prenotare un campo'}]); return; }
   // LIST MESSAGE (non reply-button): stesso motivo di startCancel (>20 char / >3 voci).
   // Ogni scelta riapre il MODULO in edit-mode (come showBookingDetail / le opzioni).
-  addListMessage({ body:'Quale prenotazione vuoi modificare? 👇', button:'Apri', title:'Modifica una prenotazione',
-    rows: S.prenotazioni.slice(0,9).map(p=>({section:'Le mie prenotazioni', ic:'✏️', label:p.giorno+' · '+p.ora, desc:'Campo '+p.campo+' · '+p.tipo, action:()=>botSay(()=>addFlowLaunch('Riapriamo il modulo — scegli di nuovo giorno e orario. 👇', ()=>openBookingFlow({editId:p.id, giorno:p.giorno, ora:p.ora})))})).concat([menuBackRow()]) });
+  addListMessage({ body:'Quale prenotazione vuoi modificare?', button:'Apri', title:'Modifica una prenotazione',
+    rows: S.prenotazioni.slice(0,9).map(p=>({section:'Le mie prenotazioni', ic:'✏️', label:p.giorno+' · '+p.ora, desc:'Campo '+p.campo+' · '+p.tipo, action:()=>botSay(()=>addFlowLaunch('Riapriamo il modulo — scegli di nuovo giorno e orario.', ()=>openBookingFlow({editId:p.id, giorno:p.giorno, ora:p.ora})))})).concat([menuBackRow()]) });
 }
 function matchPren(t){
   t=t.toLowerCase(); const byId=t.match(/\b(\d{1,4})\b/); if(byId){ const p=S.prenotazioni.find(x=>x.id===parseInt(byId[1],10)); if(p) return p; }
