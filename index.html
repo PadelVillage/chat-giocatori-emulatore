@@ -118,6 +118,13 @@
   .friend-list{padding:2px 14px}
   .friend-row{display:flex;align-items:center;gap:11px;padding:9px 2px;font-size:14px;border-bottom:1px solid #f2f5f6;cursor:pointer}
   .friend-row input{width:19px;height:19px;flex:0 0 auto}
+  /* Questionario autovalutazione = WhatsApp Flow: un RadioButtonsGroup per domanda
+     (opzioni native, niente testo colorato). Riga = radio + etichetta. */
+  .assess-opts{padding:1px 14px 8px}
+  .assess-opt{display:flex;align-items:flex-start;gap:11px;padding:9px 2px;font-size:14px;border-bottom:1px solid #f2f5f6;cursor:pointer;line-height:1.35}
+  .assess-opt input{width:18px;height:18px;flex:0 0 auto;margin-top:1px}
+  /* OptIn privacy del Flow: checkbox + pannello espandibile (EmbeddedLink per aprirlo). */
+  .assess-policy{margin:4px 14px 6px;padding:10px 12px;background:#f3f6f7;border-radius:10px;font-size:12px;color:var(--muted);line-height:1.5}
   /* Disponibilità nel Flow: striscia giorni + orari a 3 stati */
   .days{display:flex;gap:8px;overflow-x:auto;padding:3px 14px 4px}
   .day{flex:0 0 auto;min-width:62px;border:1px solid #cdd6d9;background:#fff;border-radius:10px;padding:7px 8px;text-align:center;cursor:pointer;font-family:inherit;line-height:1.25}
@@ -195,10 +202,10 @@
    fedelmente su WhatsApp reale (componenti/limiti Flows + policy Meta).
    Verificare sui doc Meta PRIMA di aggiungere grafica/layout/interazioni.
    ========================================================================== */
-const LS_KEY='pmo_emu_state_v8';
+const LS_KEY='pmo_emu_state_v9';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.47 · 04/07';
+const APP_BUILD='v0.48 · 04/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -229,6 +236,10 @@ const APP_BUILD='v0.47 · 04/07';
 function demoState(){
   return {
     player:{ nome:'Marco Aprea', numero:'+39 333 123 4567', socio:true, livello:'4.0', inRegola:true,
+             livelloFonte:'segreteria',   // come è stato determinato il livello: 'segreteria' (anagrafica MP) | 'autovalutazione'
+             livelloVerifica:null,        // se l'autovalutazione è incoerente: livello indicativo in coda validazione staff (l'ufficiale NON cambia)
+             email:'',                    // contatto FACOLTATIVO, self-editable dal giocatore (nome/telefono restano gestiti dalla segreteria)
+             prefs:{ promemoria:true, novita:false },   // preferenze notifiche proattive (opt-out marketing = igiene Meta)
              genere:'M',   // dal dato anagrafica: serve alla domanda concierge "mista o omogenea" (F = donna)
              strikes:0,    // assenze registrate (no-show / disdette tardive) → tutela no-show (blocco soft al 3°)
              borselloCent:2400, ultimoMov:'ricarica € 20 il 28/06' },
@@ -722,12 +733,243 @@ function showMenuAltro(body){
 }
 
 /* ---------- Profilo -------------------------------------------------------- */
+/* Suffisso sul livello: come è stato determinato (segreteria vs autovalutazione),
+   ed eventuale stato "in verifica" quando l'autovalutazione è incoerente (l'ufficiale
+   non cambia finché la segreteria non valida). Enfasi con emoji, mai colore-testo. */
+function levelSuffix(){
+  if(S.player.livelloVerifica) return ' · ⏳ in verifica (indicativo '+esc(S.player.livelloVerifica)+')';
+  if(S.player.livelloFonte==='autovalutazione') return ' · da autovalutazione';
+  return '';
+}
 function doProfilo(){
   addInHtml('Ecco il tuo profilo:');
   addCard('<b>'+esc(S.player.nome)+'</b> · ✅ socio'   /* niente pill colorata dentro la bolla: enfasi con emoji, non con colore del testo (fedeltà WA) */
-    +'<br>📱 '+esc(S.player.numero)+'<br>🎾 Livello '+esc(S.player.livello)+'<br>💶 Borsellino '+euro(S.player.borselloCent)
+    +'<br>📱 '+esc(S.player.numero)
+    +(S.player.email?('<br>✉️ '+esc(S.player.email)):'')
+    +'<br>🎾 Livello '+esc(S.player.livello)+levelSuffix()
+    +'<br>💶 Borsellino '+euro(S.player.borselloCent)
     +(strikeCount()?('<br>⚠️ Assenze: <b>'+strikeCount()+'/'+NOSHOW_LIMIT+'</b>'+(isBlocked()?' · <b>prenotazioni online sospese</b>':'')):''));
-  homeMenu();   // i "shortcut" (amici, borsellino) sono già voci del menu → un solo List Message
+  // GESTISCI IL PROFILO = List Message (le azioni hanno descrizioni → non stanno in 3 reply-button),
+  // stesso pattern di "Gestisci la prenotazione". I Flow (autovalutazione/notifiche) si aprono col "↗ Apri".
+  addListMessage({ body:'Cosa vuoi fare? 👇', button:'Apri', title:'Gestisci il profilo', rows:[
+    {section:'Profilo', ic:'📊', label:'Fai l\'autovalutazione', desc:'Scopri o aggiorna il tuo livello', action:()=>botSay(()=>addFlowLaunch('Apriamo il questionario livello — 8 domande a risposta chiusa. 👇', openAssessmentFlow))},
+    {ic:'ℹ️', label:'Il mio livello', desc:'Cosa significa la scala da 1.0 a 7.0', action:()=>botSay(explainLevel)},
+    {ic:'🔔', label:'Preferenze notifiche', desc:'Scegli i messaggi che vuoi ricevere', action:()=>botSay(()=>addFlowLaunch('Apriamo le preferenze notifiche. 👇', openNotifPrefs))},
+    {ic:'✏️', label:'Aggiorna i tuoi dati', desc:'Email e contatti', action:()=>botSay(editData)},
+    {section:'Oppure', ic:'🗑️', label:'Cancella i miei dati', desc:'Richiesta di cancellazione alla segreteria', action:()=>botSay(startDeleteData)},
+    menuBackRow('Oppure')
+  ]});
+}
+/* ℹ️ Cosa significa il livello (scala 1.0–7.0). Testo semplice, enfasi con emoji. */
+function explainLevel(){
+  addInHtml('🎾 <b>Il tuo livello di gioco</b>'
+    +'<br>Usiamo la scala padel da <b>1.0 a 7.0</b> (a passi di 0.5):'
+    +'<br>• <b>1.0–2.0</b> principiante'
+    +'<br>• <b>2.5–3.5</b> intermedio'
+    +'<br>• <b>4.0–5.0</b> avanzato'
+    +'<br>• <b>5.5+</b> agonista'
+    +'<br>Serve a formare partite <b>equilibrate</b>. Puoi aggiornarlo con l\'autovalutazione.');
+  addQuick([{label:'📊 Fai l\'autovalutazione',action:()=>botSay(()=>addFlowLaunch('Apriamo il questionario livello — 8 domande a risposta chiusa. 👇', openAssessmentFlow))}]);
+}
+
+/* ---------- Autovalutazione livello (WhatsApp Flow nativo) -----------------
+   Parità con la web app staff: STESSE 8 domande a scelta chiusa e STESSO scoring
+   deterministico (declared 40% + balanced 25% + media tecnica 35%, arrotondato a
+   0.5, freni prudenziali, coerenza high/medium/low). Fedele WA = un Flow con un
+   RadioButtonsGroup per domanda + consenso privacy (OptIn) + 1 solo Footer.
+   Applicazione del livello (decisione utente): coerente → applica; incoerente →
+   va in validazione staff (l'ufficiale non cambia). In Fase C il Flow scriverà in
+   assessment_responses e applicherà con le stesse regole; qui è simulato. */
+function emuClean(s){ return String(s==null?'':s).replace(/\s+/g,' ').trim(); }
+function emuNorm(s){ return emuClean(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,''); }
+function emuScoreFromText(value,map){ const raw=emuClean(value); if(!raw) return null; const key=emuNorm(raw);
+  for(const [needle,score] of map){ if(key.includes(emuNorm(needle))) return score; } return null; }
+function emuTechnical(d){
+  const rally=emuScoreFromText(d.rally,[['Faccio fatica a tenere 3-4 colpi',1.0],['Tengo lo scambio solo a ritmo lento',2.0],['Tengo scambi regolari con continuità',3.0],['Tengo scambi anche con ritmo alto',4.0],['Costruisco il punto con controllo',5.0]]);
+  const glass=emuScoreFromText(d.glass,[['Evito quasi sempre il vetro',1.0],['Lo uso solo se la palla è facile',2.0],['Difendo con il vetro in modo base',2.5],['Lo uso con continuità anche sotto pressione',3.5],['Lo uso per difendere e ripartire in attacco',4.5]]);
+  const net=emuScoreFromText(d.net,[['Sto poco a rete',1.5],['Vado a rete ma faccio fatica a chiudere',2.0],['Gioco volée semplici',2.5],['Tengo posizione e controllo le volée',3.5],['Costruisco e chiudo il punto a rete',4.5]]);
+  const overhead=emuScoreFromText(d.overhead,[['Non li uso',1.5],['Li provo ma con poca sicurezza',2.0],['Uso almeno la bandeja in modo semplice',2.5],['Uso bandeja e smash con controllo',3.5],['Uso colpi alti in modo tattico e affidabile',4.5]]);
+  const vals=[rally,glass,net,overhead].filter(v=>typeof v==='number'&&isFinite(v));
+  const average=vals.length?vals.reduce((s,v)=>s+v,0)/vals.length:null;
+  return {rally,glass,net,overhead,average};
+}
+function emuParseLevel(v){ const raw=emuClean(v); if(!raw) return ''; const n=raw.replace(',','.').trim(); if(/^\s*5\+/.test(n)) return '5'; const m=n.match(/\d+(?:\.\d+)?/); return m?m[0]:''; }
+function emuRoundHalf(v){ const n=Number(v); if(!isFinite(n)) return ''; return String(Math.max(0.5,Math.min(7,Math.round(n*2)/2))); }
+function emuCalcLevel(d){
+  const declared=parseFloat(emuParseLevel(d.declaredLevel));
+  const balanced=parseFloat(emuParseLevel(d.balancedLevel));
+  const tech=emuTechnical(d); const parts=[];
+  if(isFinite(declared)) parts.push({value:declared,weight:0.40});
+  if(isFinite(balanced)) parts.push({value:balanced,weight:0.25});
+  if(isFinite(tech.average)) parts.push({value:tech.average,weight:0.35});
+  if(!parts.length) return {declared_level:'',calculated_level:'',coherence:'medium',staff_status:'review'};
+  const wsum=parts.reduce((s,p)=>s+p.weight,0);
+  const raw=parts.reduce((s,p)=>s+p.value*p.weight,0)/wsum;
+  let calc=parseFloat(emuRoundHalf(raw));
+  if(isFinite(declared)){ if(calc>declared+0.5) calc=declared+0.5; if(calc<declared-1.0) calc=declared-1.0; calc=Math.max(0.5,Math.min(7,Math.round(calc*2)/2)); }
+  const techRef=isFinite(tech.average)?tech.average:(isFinite(balanced)?balanced:calc);
+  const diff=isFinite(declared)?Math.abs(declared-techRef):0;
+  const coherence=diff<=0.5?'high':(diff<=1?'medium':'low');
+  return {declared_level:isFinite(declared)?String(declared):'', calculated_level:String(calc), coherence, staff_status:coherence==='low'?'review':''};
+}
+/* Le 8 domande (parità col form staff). Le prime 4 producono declared/balanced,
+   le altre 4 sono tecniche (score fissi). Ogni domanda = un RadioButtonsGroup. */
+const ASSESS_Q=[
+  {name:'experience',   q:'1. Da quanto giochi a padel?',              opts:['Meno di 1 mese','1-3 mesi','3-6 mesi','6-12 mesi','Più di 1 anno','Più di 3 anni']},
+  {name:'frequency',    q:'2. Quante volte giochi al mese?',           opts:['0-1','2-3','4-6','7-10','Più di 10']},
+  {name:'declaredLevel',q:'3. Che livello pensi di avere?',            opts:['1.0 - Principiante','1.5','2.0','2.5','3.0','3.5','4.0','4.5','5+']},
+  {name:'balancedLevel',q:'4. Con quali livelli fai partite equilibrate?', opts:['1.0 / 1.5','2.0','2.5','3.0','3.5','4.0','4.5','5+']},
+  {name:'rally',        q:'5. Riesci a mantenere lo scambio?',         opts:['Faccio fatica a tenere 3-4 colpi','Tengo lo scambio solo a ritmo lento','Tengo scambi regolari con continuità','Tengo scambi anche con ritmo alto','Costruisco il punto con controllo']},
+  {name:'glass',        q:'6. Come gestisci il vetro in difesa?',      opts:['Evito quasi sempre il vetro','Lo uso solo se la palla è facile','Difendo con il vetro in modo base','Lo uso con continuità anche sotto pressione','Lo uso per difendere e ripartire in attacco']},
+  {name:'net',          q:'7. A rete come ti comporti?',               opts:['Sto poco a rete','Vado a rete ma faccio fatica a chiudere','Gioco volée semplici','Tengo posizione e controllo le volée','Costruisco e chiudo il punto a rete']},
+  {name:'overhead',     q:'8. Bandeja / vibora / smash',               opts:['Non li uso','Li provo ma con poca sicurezza','Uso almeno la bandeja in modo semplice','Uso bandeja e smash con controllo','Uso colpi alti in modo tattico e affidabile']}
+];
+function openAssessmentFlow(){
+  const st={ privacy:false };
+  const body=el('flow');
+  body.appendChild(el('luce-hint','<b>Questionario livello</b> — solo risposte a scelta, nessun testo libero. Rispondi a tutte le domande, poi invia.'));
+  // OptIn privacy (checkbox + EmbeddedLink che espande l'informativa)
+  const pv=document.createElement('label'); pv.className='friend-row'; pv.style.padding='10px 14px';
+  const pvcb=document.createElement('input'); pvcb.type='checkbox'; pvcb.onchange=()=>{ st.privacy=pvcb.checked; };
+  const pvsp=document.createElement('span'); pvsp.innerHTML='Ho letto e accetto la <b>Privacy Policy</b> Padel Village.';
+  pv.appendChild(pvcb); pv.appendChild(pvsp); body.appendChild(pv);
+  const pvLink=document.createElement('a'); pvLink.href='#'; pvLink.className='flow-link'; pvLink.textContent='Leggi la Privacy Policy';
+  const pvPanel=el('assess-policy','Useremo i dati del questionario per creare/aggiornare la tua scheda giocatore e gestire l\'autovalutazione del livello. Non saranno venduti a terzi; puoi chiederne correzione o cancellazione scrivendo a info@padelvillage.club.'); pvPanel.style.display='none';
+  pvLink.onclick=(e)=>{ e.preventDefault(); pvPanel.style.display=(pvPanel.style.display==='none')?'':'none'; };
+  body.appendChild(pvLink); body.appendChild(pvPanel);
+  // 8 domande = 8 RadioButtonsGroup
+  ASSESS_Q.forEach(Q=>{
+    body.appendChild(fieldLabel(Q.q));
+    const wrap=el('assess-opts');
+    Q.opts.forEach(opt=>{
+      const row=document.createElement('label'); row.className='assess-opt';
+      const inp=document.createElement('input'); inp.type='radio'; inp.name='aq_'+Q.name; inp.value=opt;
+      inp.onchange=()=>{ st[Q.name]=opt; };
+      const sp=document.createElement('span'); sp.textContent=opt;
+      row.appendChild(inp); row.appendChild(sp); wrap.appendChild(row);
+    });
+    body.appendChild(wrap);
+  });
+  const foot=document.createElement('button'); foot.className='flow-submit'; foot.textContent='Invia autovalutazione';
+  foot.onclick=()=>{
+    if(!st.privacy){ toast('Accetta la Privacy Policy per continuare.'); return; }
+    const missing=ASSESS_Q.filter(Q=>!st[Q.name]);
+    if(missing.length){ toast('Rispondi a tutte le domande ('+missing.length+' mancant'+(missing.length>1?'i':'e')+').'); return; }
+    closeSheet();
+    addOut('📊 Autovalutazione inviata');
+    botSay(()=>submitAssessment(st));
+  };
+  body.appendChild(foot);
+  openSheet('Autovalutazione livello', body, 'Questionario · 8 domande');
+}
+/* Livello sempre mostrato a una cifra decimale (4 → "4.0", 4.5 → "4.5"). */
+function fmtLevel(v){ const n=parseFloat(v); return isFinite(n)?n.toFixed(1):String(v); }
+function submitAssessment(answers){
+  const res=emuCalcLevel(answers);
+  const lvl=fmtLevel(res.calculated_level);
+  if(res.coherence==='low'){
+    // Incoerente (dichiarato vs tecnica > 1.0): l'ufficiale NON cambia → validazione staff.
+    S.player.livelloVerifica=lvl; save();
+    addInHtml('📊 <b>Autovalutazione registrata</b>'
+      +'<br>🎾 Livello indicativo: <b>'+esc(lvl)+'</b>'
+      +'<br>⚠️ C\'è una differenza tra il livello che hai indicato e le risposte tecniche.'
+      +'<br>La <b>segreteria lo verifica</b> e te lo confermiamo qui. Per ora il tuo livello resta <b>'+esc(S.player.livello)+'</b>.',true);
+  } else {
+    // Coerente (alta/media): applichiamo subito il livello calcolato.
+    S.player.livello=lvl; S.player.livelloFonte='autovalutazione'; S.player.livelloVerifica=null; save();
+    addInHtml('✅ <b>Autovalutazione registrata</b>'
+      +'<br>🎾 Il tuo livello ora è <b>'+esc(lvl)+'</b>'
+      +'<br>Lo useremo per formarti partite equilibrate. Puoi rifarla quando vuoi.',true);
+  }
+  addQuick([{label:'👤 Il mio profilo',text:'Il mio profilo'}]);
+}
+
+/* ---------- Preferenze notifiche (Flow: consensi proattivi) ----------------
+   Gestione consensi: promemoria delle TUE prenotazioni (utility) e novità/promozioni
+   (marketing). L'opt-out delle promozioni è igiene Meta. Fedele WA = CheckboxGroup
+   + 1 Footer; il business poi rispetta le scelte. */
+function openNotifPrefs(){
+  const p=S.player.prefs||(S.player.prefs={promemoria:true,novita:false});
+  const st={ promemoria:!!p.promemoria, novita:!!p.novita };
+  const body=el('flow');
+  body.appendChild(el('luce-hint','Scegli quali messaggi vuoi ricevere. Le comunicazioni <b>di servizio</b> sulle tue prenotazioni le mandiamo sempre.'));
+  body.appendChild(fieldLabel('Messaggi proattivi'));
+  const fl=el('friend-list');
+  [['promemoria','🔔 Promemoria delle mie prenotazioni'],['novita','📣 Novità e promozioni del circolo']].forEach(x=>{
+    const row=document.createElement('label'); row.className='friend-row';
+    const cb=document.createElement('input'); cb.type='checkbox'; cb.checked=st[x[0]]; cb.onchange=()=>{ st[x[0]]=cb.checked; };
+    const sp=document.createElement('span'); sp.textContent=x[1];
+    row.appendChild(cb); row.appendChild(sp); fl.appendChild(row);
+  });
+  body.appendChild(fl);
+  const foot=document.createElement('button'); foot.className='flow-submit'; foot.textContent='Salva preferenze';
+  foot.onclick=()=>{ S.player.prefs={promemoria:st.promemoria,novita:st.novita}; save(); closeSheet();
+    addOut('🔔 Preferenze notifiche');
+    botSay(()=>{ addInHtml('✅ <b>Preferenze aggiornate</b>'
+      +'<br>🔔 Promemoria prenotazioni: <b>'+(st.promemoria?'sì':'no')+'</b>'
+      +'<br>📣 Novità e promozioni: <b>'+(st.novita?'sì':'no')+'</b>',true);
+      addQuick([{label:'👤 Il mio profilo',text:'Il mio profilo'}]); }); };
+  body.appendChild(foot);
+  openSheet('Preferenze notifiche', body, 'I messaggi che ricevi');
+}
+
+/* ---------- Aggiorna i tuoi dati -------------------------------------------
+   Nome/telefono = gestiti dalla segreteria (fonte Matchpoint; il telefono È
+   l'identità WhatsApp) → non self-editable, si chiede correzione. L'email è un
+   contatto proprio, facoltativo → modificabile con un Flow (TextInput). */
+function editData(){
+  addInHtml('✏️ <b>Aggiorna i tuoi dati</b>'
+    +'<br>✉️ Email: <b>'+(S.player.email?esc(S.player.email):'non impostata')+'</b> (puoi modificarla)'
+    +'<br>👤 Nome e 📱 telefono sono gestiti dalla <b>segreteria</b> (per correggerli scrivici).');
+  addQuick([
+    {label:'✉️ Aggiorna email',action:()=>botSay(()=>addFlowLaunch('Apriamo il modulo per l\'email. 👇', openEmailFlow))},
+    {label:'🧑‍💼 Correggi con segreteria',action:()=>botSay(requestDataFix)}
+  ]);
+}
+function openEmailFlow(){
+  const st={ email:S.player.email||'' };
+  const body=el('flow');
+  body.appendChild(fieldLabel('La tua email'));
+  const inp=document.createElement('input'); inp.className='flow-inp'; inp.type='email'; inp.placeholder='nome@email.it'; inp.value=st.email;
+  inp.oninput=()=>{ st.email=inp.value; }; body.appendChild(inp);
+  body.appendChild(el('luce-hint','Facoltativa: la usiamo per comunicazioni e ricevute. Puoi lasciarla vuota.'));
+  const foot=document.createElement('button'); foot.className='flow-submit'; foot.textContent='Salva email';
+  foot.onclick=()=>{ const e=(st.email||'').trim();
+    if(e && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)){ toast('Controlla l\'email.'); return; }
+    S.player.email=e; save(); closeSheet();
+    addOut(e?('✉️ '+e):'✉️ Email rimossa');
+    botSay(()=>{ addInHtml(e?('✅ Email aggiornata: <b>'+esc(e)+'</b>'):'✅ Email rimossa dal profilo.',true);
+      addQuick([{label:'👤 Il mio profilo',text:'Il mio profilo'}]); }); };
+  body.appendChild(foot);
+  openSheet('Aggiorna email', body, 'Contatto facoltativo');
+}
+function requestDataFix(){
+  addInHtml('🧑‍💼 Scrivici qui cosa c\'è da correggere (nome o telefono) e la <b>segreteria aggiorna la tua scheda</b>. Il numero WhatsApp è anche il tuo accesso: se cambia, lo sistemiamo noi.');
+  homeMenu();
+}
+
+/* ---------- Cancella i miei dati (richiesta GDPR alla segreteria) ----------
+   Coerente con la regola staff "solo disattiva, mai elimina": niente delete duro
+   self-service. Il giocatore INVIA una richiesta; la segreteria disattiva/anonimizza.
+   Guardia: credito residuo o prenotazioni attive vanno gestiti prima. */
+function startDeleteData(){
+  const credito=S.player.borselloCent>0;
+  const preNum=S.prenotazioni.length;
+  let warn='';
+  if(credito) warn+='<br>💶 Hai <b>'+euro(S.player.borselloCent)+'</b> di credito: la segreteria lo gestisce prima.';
+  if(preNum) warn+='<br>📅 Hai <b>'+preNum+'</b> prenotazion'+(preNum>1?'i':'e')+' attiv'+(preNum>1?'e':'a')+': '+(preNum>1?'verranno annullate':'verrà annullata')+'.';
+  addInHtml('🗑️ <b>Cancellazione dei tuoi dati</b>'
+    +'<br>Invii una richiesta e la <b>segreteria</b> procede alla cancellazione (o disattivazione) della tua scheda.'
+    +warn
+    +'<br>Vuoi inviare la richiesta?');
+  addQuick([
+    {label:'🗑️ Sì, invia richiesta',danger:true,action:()=>botSay(()=>{
+      addInHtml('✅ <b>Richiesta inviata</b>'
+        +'<br>La segreteria ti contatta per completare la cancellazione dei dati (diritto GDPR).'
+        +'<br>Fino alla conferma il tuo profilo resta attivo. 🎾',true);
+      homeMenu(); })},
+    {label:'Annulla',action:()=>botSay(()=>homeMenu())}
+  ]);
 }
 
 /* ---------- Amici ---------------------------------------------------------- */
