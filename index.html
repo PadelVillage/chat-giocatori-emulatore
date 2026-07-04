@@ -193,7 +193,7 @@
 const LS_KEY='pmo_emu_state_v7';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.41 · 04/07';
+const APP_BUILD='v0.42 · 04/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -723,7 +723,7 @@ function doAmici(){
   // EMPTY-STATE (nuovo utente): spiega a cosa serve la rubrica + come si aggiunge.
   if(!S.friends.length){
     addInHtml('👥 <b>I miei amici</b>');
-    addCard('Qui tieni la tua <b>rubrica di gioco</b>: aggiungi i soci con cui giochi e li <b>inviti in un tap</b> quando prenoti.<br><br>Ancora nessun amico. Per aggiungerne uno ti basta <b>condividere il suo contatto</b> (📎 → Contatto).');
+    addCard('Qui tieni la tua <b>rubrica di gioco</b>: aggiungi i soci con cui giochi e li <b>inviti in un tap</b> quando prenoti.<br><br>Ancora nessun amico — aggiungine uno <b>condividendo il suo contatto</b> (📎 → Contatto).<br><br>💡 Nessun amico? <b>Giochi lo stesso</b>: prenoti un campo e, se vuoi, <b>troviamo noi i giocatori</b> per la partita.');
     addQuick([{label:'➕ Aggiungi amico',action:openAddFriendFlow},{label:'🎾 Prenota un campo',text:'Vorrei prenotare un campo'}]);
     return;
   }
