@@ -205,7 +205,7 @@
 const LS_KEY='pmo_emu_state_v10';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.62 · 04/07';
+const APP_BUILD='v0.63 · 04/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -1183,7 +1183,7 @@ function openBookingFlow(prefill){
     momBox.innerHTML='';
     const flat=flatDay(days[st.off].off,days[st.off].dow).filter(s=>s.status!=='busy');
     const avail=MOMENTI.filter(mm=>flat.some(s=>momentoKey(s.ora)===mm.key));
-    if(!avail.some(m=>m.key===st.momento)) st.momento=avail.length?avail[0].key:null;
+    if(!avail.some(m=>m.key===st.momento)) st.momento=null;   // niente pre-selezione del momento all'apertura: l'utente sceglie (edit/prefill imposta st.momento esplicito → resta)
     momLabel.style.display=avail.length?'':'none';
     avail.forEach(mm=>{
       const n=flat.filter(s=>momentoKey(s.ora)===mm.key).length;
@@ -1197,7 +1197,7 @@ function openBookingFlow(prefill){
   function renderSlots(){
     slotBox.innerHTML='';
     const d=days[st.off];
-    if(!st.momento){ slotBox.appendChild(el('slot-empty','Nessun orario disponibile in questo giorno.')); return; }
+    if(!st.momento){ slotBox.appendChild(el('slot-empty','👇 Scegli un momento, poi l\'orario.')); return; }
     const flat=flatDay(d.off,d.dow).filter(s=>s.status!=='busy'&&momentoKey(s.ora)===st.momento);
     if(!flat.length){ slotBox.appendChild(el('slot-empty','Nessun orario in questa fascia.')); return; }
     const uniform=flat.length && flat.every(s=>s.prezzo===flat[0].prezzo), first=flat[0];
