@@ -207,7 +207,7 @@
 const LS_KEY='pmo_emu_state_v10';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.73 · 04/07';
+const APP_BUILD='v0.74 · 04/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -635,10 +635,11 @@ function route(intent,t){
    Fedele a WhatsApp: l'elenco sta dietro il pulsante di UN List Message (prima c'era
    un reply-button "🏠 Menu" che generava un SECONDO List Message → doppio "Menu" e due
    tap). WhatsApp NON ha barre/bottoni fissi; la home reale = questo + il comando /menu. */
-/* Ritorno al menu (dopo ogni foglia): body ridotto al minimo (solo 👇, la bolla List
-   NON può essere vuota — WhatsApp esige un body). Il significato sta nel bottone
-   "☰ Apri il menu". Via la frase "Posso fare altro per te?" (ricorreva ovunque = filler). */
-function homeMenu(){ showMenu('👇'); }
+/* Ritorno al menu (dopo ogni foglia): body ridotto al minimo (parola secca "Menu",
+   niente manina). La bolla List NON può essere vuota — WhatsApp esige un body e non
+   consente di centrarlo (testo sempre a sinistra) → il minimo fedele è una parola.
+   Il significato sta nel bottone "☰ Apri il menu". Via il filler "Posso fare altro per te?". */
+function homeMenu(){ showMenu('Menu'); }
 /* Riga "🏠 Torna al menu" per le List OPERATIVE: rientro in UN tap se apri una lista
    e non vuoi nessuna voce (senza chiudere con la ✕ e riscrivere). Fedele WA: è una
    normale riga di List Message. NON si mette nel menu stesso (sarebbe una voce-menu
