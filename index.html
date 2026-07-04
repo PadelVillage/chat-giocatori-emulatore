@@ -205,7 +205,7 @@
 const LS_KEY='pmo_emu_state_v10';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.65 · 04/07';
+const APP_BUILD='v0.66 · 04/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -1073,7 +1073,7 @@ function showBookingDetail(id){
       action:()=>botSay(()=>addFlowLaunch('Apriamo il modulo — aggiungi, togli o invita i giocatori. 👇', ()=>openAddPlayersFlow(p)))});
   }
   if(incomplete && !p.concierge){   // segreteria = facoltativa finché la partita non è al completo
-    rows.push({section:'Gestisci', ic:'🧑‍💼', label:'Ci pensa la segreteria', desc:'Troviamo noi i giocatori · +'+CONCIERGE_FEE+' € sul totale',
+    rows.push({section:'Gestisci', ic:'🧑‍💼', label:'💶 Segreteria (+'+CONCIERGE_FEE+'€)', desc:'Troviamo noi i giocatori · da pagare in cassa',
       action:()=>botSay(()=>delegateConcierge(p))});
   }
   rows.push({section:'Gestisci', ic:'✏️', label:'Data e orario', desc:'Sposta a un altro giorno o orario',
@@ -1123,7 +1123,7 @@ function openBookingFlow(prefill){
   const editId=prefill.editId||null;                       // MODIFICA: rifai il giro sul modulo e AGGIORNA la prenotazione esistente
   const concierge=!!prefill.concierge;
   const days=[]; for(let o=0;o<=MAX_GIORNI;o++) days.push(dayInfo(o));
-  const st={ off:0, ora:null, momento:null, tipo:'Partita', players:4, durata:90, amici:(prefill.amici||[]).slice(), concierge:concierge };
+  const st={ off:0, ora:null, tipo:'Partita', players:4, durata:90, amici:(prefill.amici||[]).slice(), concierge:concierge };
   if(prefill.giorno){ const m=days.filter(d=>d.giorno===prefill.giorno)[0]; if(m) st.off=m.off; }
   else{ for(let i=0;i<days.length;i++){ if(availSlots(days[i].off,days[i].dow)>0){ st.off=days[i].off; break; } } }
   // MODIFICA: la prenotazione che stai cambiando "possiede" già il suo slot →
@@ -1139,12 +1139,11 @@ function openBookingFlow(prefill){
   // Passo 1: quando (prossimi 7 giorni con conteggio slot disponibili)
   body.appendChild(fieldLabel('Quando'));
   const dayRow=el('days'); body.appendChild(dayRow);
-  // Passo 2: momento (Mattina/Pomeriggio/Sera) → mostra pochi orari per volta
-  const momLabel=fieldLabel('Momento'); body.appendChild(momLabel);
-  const momBox=el('chips'); body.appendChild(momBox);
-  // Passo 3: gli orari del momento scelto (chips = ChipsSelector nativo)
+  // Passo 2: gli orari (slot da 90') del giorno scelto, mostrati DIRETTAMENTE — niente
+  // più raggruppamento Mattina/Pomeriggio/Sera (meno tap, più fedele a un RadioButtonsGroup
+  // nativo). Nessuna legenda "● Libero": mostriamo solo slot liberi, è ridondante.
+  body.appendChild(fieldLabel('Orari disponibili · 90 min'));
   const slotBox=el('slotbox'); body.appendChild(slotBox);
-  body.appendChild(el('flow-legend','<span><i class="dot free"></i>Libero</span>'));
   // Partita sempre 90' in 4 (niente selettore "in quanti giocate").
   // FASE 1 = SOLO giorno/momento/orario (una scelta per volta). Invita amici e
   // "ci pensate voi" sono la FASE 2, DOPO l'opzione: prima ti assicuri il campo,
@@ -1175,33 +1174,19 @@ function openBookingFlow(prefill){
       const c=availSlots(d.off,d.dow);
       const b=document.createElement('button'); b.type='button'; b.className='day'+(d.off===st.off?' sel':'');
       b.innerHTML='<b>'+d.w+'</b><span>'+d.n+'</span><small class="'+(c?'ok':'no')+'">'+(c?c+' liberi':'pieno')+'</small>';
-      b.onclick=()=>{ st.off=d.off; st.ora=null; st.momento=null; renderDays(); renderMomenti(); renderSlots(); updSum(); };
+      b.onclick=()=>{ st.off=d.off; st.ora=null; renderDays(); renderSlots(); updSum(); };
       dayRow.appendChild(b);
-    });
-  }
-  function renderMomenti(){
-    momBox.innerHTML='';
-    const flat=flatDay(days[st.off].off,days[st.off].dow).filter(s=>s.status!=='busy');
-    const avail=MOMENTI.filter(mm=>flat.some(s=>momentoKey(s.ora)===mm.key));
-    if(!avail.some(m=>m.key===st.momento)) st.momento=null;   // niente pre-selezione del momento all'apertura: l'utente sceglie (edit/prefill imposta st.momento esplicito → resta)
-    momLabel.style.display=avail.length?'':'none';
-    avail.forEach(mm=>{
-      const n=flat.filter(s=>momentoKey(s.ora)===mm.key).length;
-      const b=document.createElement('button'); b.type='button';
-      b.className='chip'+(st.momento===mm.key?' sel':'');
-      b.textContent=mm.label+' ('+n+')';
-      b.onclick=()=>{ st.momento=mm.key; st.ora=null; renderMomenti(); renderSlots(); updSum(); };
-      momBox.appendChild(b);
     });
   }
   function renderSlots(){
     slotBox.innerHTML='';
     const d=days[st.off];
-    if(!st.momento){ slotBox.appendChild(el('slot-empty','👇 Scegli un momento, poi l\'orario.')); return; }
-    const flat=flatDay(d.off,d.dow).filter(s=>s.status!=='busy'&&momentoKey(s.ora)===st.momento);
-    if(!flat.length){ slotBox.appendChild(el('slot-empty','Nessun orario in questa fascia.')); return; }
-    const uniform=flat.length && flat.every(s=>s.prezzo===flat[0].prezzo), first=flat[0];
-    if(uniform){ const hdr=el('slot-fascia'); hdr.textContent=first.prezzo+'€ a testa'; slotBox.appendChild(hdr); }
+    // TUTTI gli slot liberi del giorno (già in ordine cronologico via daySlotsFlat),
+    // niente filtro per momento. Prezzo: header unico se uniforme, altrimenti per-chip.
+    const flat=flatDay(d.off,d.dow).filter(s=>s.status!=='busy');
+    if(!flat.length){ slotBox.appendChild(el('slot-empty','Nessun orario libero in questo giorno.')); return; }
+    const uniform=flat.every(s=>s.prezzo===flat[0].prezzo);
+    if(uniform){ const hdr=el('slot-fascia'); hdr.textContent=flat[0].prezzo+'€ a testa'; slotBox.appendChild(hdr); }
     const row=el('chips');
     flat.forEach(s=>{
       const b=document.createElement('button'); b.type='button';
@@ -1239,11 +1224,11 @@ function openBookingFlow(prefill){
           +'<br>👥 1/'+target+' (tu)'+(inviti?(' · ✉️ '+inviti+' invit'+(inviti>1?'i':'o')):'')
           +'<br>🙋 La partita è <b>tua</b> — se resta incompleta, l\'intero campo (<b>'+pr.campo+'€</b>) è a tuo carico'));
   }
-  openSheet(editId?'Modifica la prenotazione':'Prenota un campo', body, 'Scegli giorno, momento e orario');
-  renderDays(); renderMomenti(); renderSlots();
+  openSheet(editId?'Modifica la prenotazione':'Prenota un campo', body, 'Scegli giorno e orario');
+  renderDays(); renderSlots();
   if(prefill.ora){
     const d=days[st.off]; const meta=slotMetaFor(d.off,d.dow,prefill.ora,st.durata,st.players);
-    if(meta && (editId || meta.status!=='busy')){ st.momento=momentoKey(prefill.ora); st.ora=prefill.ora; renderMomenti(); renderSlots(); }
+    if(meta && (editId || meta.status!=='busy')){ st.ora=prefill.ora; renderSlots(); }
   }
   updSum();
 }
@@ -1349,7 +1334,7 @@ function rosterActionButtons(rec, opts){
   // Le voci (con descrizione) vivono NELLA SCHERMATA che apre il pulsante (fedele a WA).
   const rows=[
     {section:'Completa la partita', ic:'👥', label:'Invito i miei amici', desc:rosterPending(rec)?('Invita o revoca · '+rosterPending(rec)+' in attesa'):'Scegli tu con chi giocare', action:()=>botSay(()=>addFlowLaunch('Apriamo il modulo — spunta gli amici che giocano con te. 👇', ()=>openAddPlayersFlow(rec)))},
-    {ic:'🧑‍💼', label:'Ci pensa la segreteria', desc:'Troviamo noi i giocatori · +'+CONCIERGE_FEE+' € sul totale', action:()=>botSay(()=>delegateConcierge(rec))},
+    {ic:'🧑‍💼', label:'💶 Segreteria (+'+CONCIERGE_FEE+'€)', desc:'Troviamo noi i giocatori · da pagare in cassa', action:()=>botSay(()=>delegateConcierge(rec))},
     {section:'Oppure', ic:'✏️', label:'Modifica la prenotazione', desc:'Cambia giorno o orario', action:()=>botSay(()=>{ addFlowLaunch('Riapriamo il modulo — scegli di nuovo giorno e orario. 👇', ()=>openBookingFlow({editId:rec.id, giorno:rec.giorno, ora:rec.ora})); })},
     menuBackRow('Oppure')
   ];
