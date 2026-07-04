@@ -193,7 +193,7 @@
 const LS_KEY='pmo_emu_state_v7';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.42 · 04/07';
+const APP_BUILD='v0.43 · 04/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -790,7 +790,7 @@ function inviteToJoin(entry, back){
   const nome1=entry.nome.split(' ')[0];
   addInHtml('🙂 <b>'+esc(entry.nome)+'</b> non è ancora iscritto a Padel Village, quindi non possiamo aggiungerlo tra gli amici.<br>Puoi invitarlo tu: gli inoltri l’invito e, appena ci scrive, lo iscriviamo.');
   const btns=[{label:'✉️ Invita '+nome1, action:()=>{ addOut('Invita '+nome1); botSay(()=>showJoinInvite(entry, back)); }}];
-  btns.push(back ? {label:'↩︎ Torna a completare',action:back} : {label:'Lascia stare', action:()=>botSay(()=>addInHtml('Ok, nessun problema.'))});
+  btns.push(back ? {label:'↩︎ Torna a completare',action:back} : {label:'Lascia stare', action:()=>botSay(()=>{ addInHtml('Ok, nessun problema.'); homeMenu(); })});
   addQuick(btns);
 }
 function showJoinInvite(entry, back){
@@ -854,7 +854,7 @@ function doMie(){
     rows:list.slice(0,10).map(p=>({section:'Prenotazioni', ic:'✅', label:p.giorno+' · '+p.ora, desc:'Campo '+p.campo+' · '+p.tipo, action:()=>botSay(()=>showBookingDetail(p.id))})) });
 }
 function showBookingDetail(id){
-  const p=S.prenotazioni.find(x=>x.id===id); if(!p){ addInHtml('Quella prenotazione non è più disponibile.'); return; }
+  const p=S.prenotazioni.find(x=>x.id===id); if(!p){ addInHtml('Quella prenotazione non è più disponibile.'); addQuick([{label:'📅 Le mie prenotazioni',action:()=>botSay(doMie)}]); return; }
   addCard('<b>'+esc(p.giorno)+' · '+p.ora+'</b> — Campo '+p.campo+' · '+p.tipo+(p.concierge?' · 🧑‍💼 concierge':'')
     +(p.amici&&p.amici.length?('<br>Con: '+p.amici.join(', ')):'')
     +(rosterPending(p)?('<br>✉️ In attesa: '+p.invitati.join(', ')):'')
@@ -1155,8 +1155,8 @@ function askMatchMix(done){
 }
 function delegateConcierge(rec){
   const r=S.prenotazioni.find(x=>x.id===rec.id)||rec;
-  if(r.stato==='prenotato'){ addInHtml('Questa partita è già al completo 🎾 — non serve la segreteria.'); return; }
-  if(r.concierge){ addInHtml('Ci stiamo già pensando noi 🧑‍💼 — ti avvisiamo qui appena la partita è al completo.'); return; }
+  if(r.stato==='prenotato'){ addInHtml('Questa partita è già al completo 🎾 — non serve la segreteria.'); homeMenu(); return; }
+  if(r.concierge){ addInHtml('Ci stiamo già pensando noi 🧑‍💼 — ti avvisiamo qui appena la partita è al completo.'); homeMenu(); return; }
   addInHtml('Ci pensiamo noi 🧑‍💼<br>Completiamo la partita di <b>'+esc(r.giorno)+' · '+r.ora+'</b> cercando altri giocatori.<br>'+FEE_LINE+'<br><b>Confermi?</b>');
   addQuick([
     {label:'✅ Sì, ci pensate voi',action:()=>{ addOut('Sì, ci pensate voi'); botSay(()=>askMatchMix(mix=>commitDelegate(r,mix))); }},
@@ -1209,7 +1209,7 @@ function expireOption(rec){ /* disattivato in demo */ }
 function openAddPlayersFlow(rec){
   const r=S.prenotazioni.find(x=>x.id===rec.id)||rec;
   const posti=rosterPosti(r);
-  if(posti===0){ addInHtml('La partita è già al completo. 🎾'); return; }
+  if(posti===0){ addInHtml('La partita è già al completo. 🎾'); homeMenu(); return; }
   const pending=(r.invitati||[]).slice();               // pre-spuntati (revocabili deselezionando)
   const taken=(r.amici||[]).concat(pending);
   const avail=S.friends.filter(f=>taken.indexOf(f.nome.split(' ')[0])<0);
@@ -1326,7 +1326,7 @@ function decideConcierge(draft){
     +'<br>'+FEE_LINE);
   addQuick([
     {label:'✅ Sì, organizzate voi',action:()=>{ addOut('Sì, organizzate voi'); botSay(()=>askMatchMix(mix=>commitConcierge(draft,mix))); }},
-    {label:'Annulla',action:()=>botSay(()=>addInHtml('Nessun problema, richiesta annullata.'))}
+    {label:'Annulla',action:()=>botSay(()=>{ addInHtml('Nessun problema, richiesta annullata.'); homeMenu(); })}
   ]);
 }
 function commitConcierge(draft,mix){
@@ -1346,7 +1346,7 @@ function commitConcierge(draft,mix){
 
 /* ---------- Annulla / Modifica --------------------------------------------- */
 function startCancel(){
-  if(!S.prenotazioni.length){ addInHtml('Non hai prenotazioni da annullare.'); return; }
+  if(!S.prenotazioni.length){ addInHtml('Non hai prenotazioni da annullare.'); addQuick([{label:'🎾 Prenota un campo',text:'Vorrei prenotare un campo'}]); return; }
   convo={mode:'cancel',step:'pick',draft:{}};
   addInHtml('Quale vuoi annullare?');
   addQuick(S.prenotazioni.map(p=>({label:p.giorno+' · '+p.ora+' — Campo '+p.campo, text:'annulla '+p.id})));
@@ -1362,12 +1362,12 @@ function cancelStep(t){
     if(/^s[iì]|conferm|annulla/.test(t.toLowerCase())){ const p=d.target; S.prenotazioni=S.prenotazioni.filter(x=>x.id!==p.id); save();
       if(d.late){ addInHtml('Campo '+p.campo+' di '+esc(p.giorno)+' alle '+p.ora+' liberato.',true); addStrike('disdetta tardiva'); }
       else{ addInHtml('Fatto. Campo '+p.campo+' di '+esc(p.giorno)+' alle '+p.ora+' liberato. Non hai perso nulla.',true); maybeHint(); homeMenu(); } }
-    else addInHtml('Ok, non annullo nulla.');
+    else { addInHtml('Ok, non annullo nulla.'); homeMenu(); }
     resetConvo();
   }
 }
 function startModify(){
-  if(!S.prenotazioni.length){ addInHtml('Non hai prenotazioni da modificare.'); return; }
+  if(!S.prenotazioni.length){ addInHtml('Non hai prenotazioni da modificare.'); addQuick([{label:'🎾 Prenota un campo',text:'Vorrei prenotare un campo'}]); return; }
   addInHtml('Quale prenotazione vuoi modificare?');
   // Ogni scelta riapre il MODULO in edit-mode (come showBookingDetail / le opzioni):
   // niente più prompt a testo per il nuovo orario.
