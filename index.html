@@ -29,8 +29,9 @@
   .hstatus{font-size:11px;opacity:.85}
   .head .spacer{flex:1}
   .head .reset{font-size:12px;background:rgba(255,255,255,.15);border:0;color:#fff;padding:6px 9px;border-radius:14px;cursor:pointer}
-  /* Identity band */
-  .band{background:#d6e7d2;color:#3a5a40;font-size:12px;text-align:center;padding:6px 12px;flex:0 0 auto}
+  /* (Banda identità rimossa: un business NON può ancorare una barra fissa in cima
+     alla chat su WhatsApp. Il riconoscimento è implicito nel saluto per nome; lo
+     stato "prenotazioni sospese" viene comunicato come MESSAGGIO — vedi boot.) */
   /* Chat */
   .chat{flex:1 1 auto;overflow-y:auto;padding:12px 10px 14px;display:flex;flex-direction:column;gap:8px}
   .sys{align-self:center;background:#d6e7d2;color:#3a5a40;font-size:11px;padding:4px 12px;border-radius:10px;text-align:center;max-width:92%}
@@ -39,8 +40,10 @@
   .out{align-self:flex-end;background:#d9fdd3;border-top-right-radius:2px}
   .meta{display:block;text-align:right;font-size:10.5px;color:var(--muted);margin-top:3px}
   .tick{color:#34b7f1}
+  /* Bolla "card" = come un normale messaggio in entrata (nessun bordo colorato:
+     le bolle WhatsApp non hanno bordi/accenti di colore — fedeltà). */
   .card{background:#fff;align-self:flex-start;max-width:86%;border-radius:9px;border-top-left-radius:2px;padding:9px 11px;
-    font-size:13.5px;line-height:1.6;border-left:3px solid var(--wa-green)}
+    font-size:13.5px;line-height:1.6}
   /* Reply buttons (stile WhatsApp) */
   .qr{align-self:flex-start;width:min(86%,320px);background:#fff;border-radius:9px;overflow:hidden;margin-top:-2px;
     box-shadow:0 1px 1px rgba(0,0,0,.06);display:flex;flex-direction:column;flex:0 0 auto}
@@ -138,9 +141,12 @@
   .flow-legend{display:flex;gap:13px;padding:8px 14px 0;font-size:11px;color:var(--muted)}
   .flow-legend .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:4px;vertical-align:-1px}
   .dot.free{background:#2ea36b}.dot.conf,.dot.opt{background:#e0a52e}.dot.busy{background:#c3cbcf}
+  /* Riepilogo del Flow = testo semplice (TextBody nativo): niente testo colorato
+     né sfondo "verde di stato" — il colore lo decide il tema (fedeltà WhatsApp).
+     Placeholder muted; selezione valida = testo scuro leggibile, sfondo neutro. */
   .flow-sum{margin:12px 14px 0;padding:10px 12px;background:#f3f6f7;border-radius:10px;font-size:13px;color:var(--muted)}
-  .flow-sum.on{background:#eaf7e6;color:#0c5f57}
-  .flow-sum .warn{color:#8a6d00;font-weight:600}
+  .flow-sum.on{background:#f3f6f7;color:var(--ink)}
+  .flow-sum .warn{font-weight:600}
   .flow-submit{margin:16px 14px 4px;width:calc(100% - 28px);background:var(--wa-green);color:#fff;border:0;border-radius:22px;padding:13px;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit}
   .toast{position:absolute;bottom:82px;left:50%;transform:translateX(-50%);background:#111b21;color:#fff;font-size:13px;padding:9px 15px;border-radius:20px;z-index:30;max-width:80%;text-align:center}
   /* Ice Breakers (bottoni primo contatto — Meta: niente emoji, max 4) */
@@ -166,7 +172,6 @@
     <div class="spacer"></div>
     <button class="reset" id="resetBtn" title="Ricomincia da capo">↺ Ricomincia</button>
   </div>
-  <div class="band" id="band">✓ Numero riconosciuto: …</div>
   <div class="chat" id="chat"></div>
   <div class="demo-note">🔒 Modalità demo — nessuna prenotazione reale · <span id="buildTag"></span></div>
   <div class="cmd-pop" id="cmdPop"></div>
@@ -193,7 +198,7 @@
 const LS_KEY='pmo_emu_state_v8';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.46 · 04/07';
+const APP_BUILD='v0.47 · 04/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -492,7 +497,7 @@ function rosterPending(rec){ return (rec.invitati&&rec.invitati.length)||0; } //
 function activeOption(){ return S.prenotazioni.find(p=>p.stato==='opzionato' && (p.deadline||0)>Date.now()); }
 function blockIfActiveOption(){ const a=activeOption(); if(!a) return false;
   addInHtml('Hai già un campo in attesa di completamento: <b>'+esc(a.giorno)+' · '+a.ora+'</b>. Completa la partita o lascialo scadere prima di prenotarne un altro.');
-  addQuick([{label:'📅 Vedi la mia prenotazione',action:()=>botSay(doMie)}]); return true; }
+  addQuick([{label:'📅 Le prenotazioni',action:()=>botSay(doMie)}]); return true; }   /* ≤20 char (reply-button) */
 /* --- TUTELA NO-SHOW (strike / blocco soft) --------------------------------
    Niente caparra e niente pagamento in chat → su un no-show il circolo non ha
    appiglio economico. Modello scelto con l'utente = STRIKE / BLOCCO SOFT:
@@ -527,11 +532,10 @@ function addStrike(motivo){
     homeMenu();
   }
 }
-/* Banda identità: riflette lo stato di blocco (accountability sempre visibile). */
-function refreshBand(){ const b=document.getElementById('band'); if(!b) return;
-  if(isBlocked()){ b.textContent='⛔ Prenotazioni online sospese · passa in segreteria'; b.style.background='#f7d6d6'; b.style.color='#8a2b2b'; }
-  else{ b.textContent='✓ Numero riconosciuto: '+S.player.nome+' · '+(S.player.socio?'socio':'non socio'); b.style.background=''; b.style.color=''; }
-}
+/* No-op (banda rimossa per fedeltà WA): lo stato di blocco viene comunicato come
+   MESSAGGIO — a boot (vedi boot()), al momento del 3° strike (addStrike) e quando
+   si prova a prenotare (blockIfNoShow). Funzione tenuta perché ancora chiamata. */
+function refreshBand(){}
 /* Guardia (come blockIfActiveOption): se le prenotazioni online sono sospese,
    ferma il flusso di prenotazione. Blocco SOFT → si riattiva in segreteria. */
 function blockIfNoShow(){ if(!isBlocked()) return false;
@@ -720,7 +724,7 @@ function showMenuAltro(body){
 /* ---------- Profilo -------------------------------------------------------- */
 function doProfilo(){
   addInHtml('Ecco il tuo profilo:');
-  addCard('<b>'+esc(S.player.nome)+'</b> <span style="background:#d6e7d2;color:#3a5a40;font-size:10.5px;padding:1px 7px;border-radius:8px">socio</span>'
+  addCard('<b>'+esc(S.player.nome)+'</b> · ✅ socio'   /* niente pill colorata dentro la bolla: enfasi con emoji, non con colore del testo (fedeltà WA) */
     +'<br>📱 '+esc(S.player.numero)+'<br>🎾 Livello '+esc(S.player.livello)+'<br>💶 Borsellino '+euro(S.player.borselloCent)
     +(strikeCount()?('<br>⚠️ Assenze: <b>'+strikeCount()+'/'+NOSHOW_LIMIT+'</b>'+(isBlocked()?' · <b>prenotazioni online sospese</b>':'')):''));
   homeMenu();   // i "shortcut" (amici, borsellino) sono già voci del menu → un solo List Message
@@ -785,11 +789,11 @@ function shareContact(entry, ctx){
   addOut('📇 '+entry.nome);                                    // il giocatore "invia" il contatto
   botSay(()=>{
     if(!entry.socio){ inviteToJoin(entry, back); return; }      // non in anagrafica → invito a iscriversi
-    if(isGiaAmico(entry)){ addInHtml('👍 <b>'+esc(entry.nome)+'</b> è già tra i tuoi amici.'); if(back) addQuick([{label:'↩︎ Torna a completare',action:back}]); else homeMenu(); return; }
+    if(isGiaAmico(entry)){ addInHtml('👍 <b>'+esc(entry.nome)+'</b> è già tra i tuoi amici.'); if(back) addQuick([{label:'🔙 Torna a completare',action:back}]); else homeMenu(); return; }
     S.friends.push({id:++S.seq, nome:entry.nome, numero:entry.numero, suWhatsApp:entry.suWhatsApp}); save();
     addInHtml('✅ Ho aggiunto <b>'+esc(entry.nome)+'</b> ai tuoi amici.'
       +(entry.suWhatsApp?'':'<br>ℹ️ Non è ancora sul nostro canale: sarà invitabile a giocare appena ci avrà scritto.'),true);
-    if(back) addQuick([{label:'↩︎ Torna a completare',action:back}]);
+    if(back) addQuick([{label:'🔙 Torna a completare',action:back}]);
     else addQuick([{label:'🎾 Prenota',text:'Vorrei prenotare un campo'},{label:'👥 I miei amici',text:'I miei amici'}]);
   });
 }
@@ -800,7 +804,7 @@ function inviteToJoin(entry, back){
   const nome1=entry.nome.split(' ')[0];
   addInHtml('🙂 <b>'+esc(entry.nome)+'</b> non è ancora iscritto a Padel Village, quindi non possiamo aggiungerlo tra gli amici.<br>Puoi invitarlo tu: gli inoltri l’invito e, appena ci scrive, lo iscriviamo.');
   const btns=[{label:'✉️ Invita '+nome1, action:()=>{ addOut('Invita '+nome1); botSay(()=>showJoinInvite(entry, back)); }}];
-  btns.push(back ? {label:'↩︎ Torna a completare',action:back} : {label:'Lascia stare', action:()=>botSay(()=>{ addInHtml('Ok, nessun problema.'); homeMenu(); })});
+  btns.push(back ? {label:'🔙 Torna a completare',action:back} : {label:'Lascia stare', action:()=>botSay(()=>{ addInHtml('Ok, nessun problema.'); homeMenu(); })});
   addQuick(btns);
 }
 function showJoinInvite(entry, back){
@@ -810,7 +814,7 @@ function showJoinInvite(entry, back){
     +'<br>Un amico ti ha invitato a giocare una partita con lui!'
     +'<br>Per partecipare, iscriviti: scrivici su WhatsApp e ti inseriamo nella partita 👇'
     +'<br>https://wa.me/'+CLUB_WA+'?text=Ciao!%20Un%20amico%20mi%20ha%20invitato%20a%20giocare%2C%20vorrei%20iscrivermi');
-  if(back) addQuick([{label:'↩︎ Torna a completare',action:back}]); else homeMenu();
+  if(back) addQuick([{label:'🔙 Torna a completare',action:back}]); else homeMenu();
 }
 
 /* ---------- Borsellino ----------------------------------------------------- */
@@ -871,7 +875,7 @@ function doMie(){
     rows:list.slice(0,9).map(p=>({section:'Prenotazioni', ic:'✅', label:p.giorno+' · '+p.ora, desc:'Campo '+p.campo+' · '+p.tipo, action:()=>botSay(()=>showBookingDetail(p.id))})).concat([menuBackRow()]) });
 }
 function showBookingDetail(id){
-  const p=S.prenotazioni.find(x=>x.id===id); if(!p){ addInHtml('Quella prenotazione non è più disponibile.'); addQuick([{label:'📅 Le mie prenotazioni',action:()=>botSay(doMie)}]); return; }
+  const p=S.prenotazioni.find(x=>x.id===id); if(!p){ addInHtml('Quella prenotazione non è più disponibile.'); addQuick([{label:'📅 Le prenotazioni',action:()=>botSay(doMie)}]); return; }
   addCard('<b>'+esc(p.giorno)+' · '+p.ora+'</b> — Campo '+p.campo+' · '+p.tipo+(p.concierge?' · 🧑‍💼 concierge':'')
     +(p.amici&&p.amici.length?('<br>Con: '+p.amici.join(', ')):'')
     +(rosterPending(p)?('<br>✉️ In attesa: '+p.invitati.join(', ')):'')
@@ -1143,7 +1147,7 @@ function commitOpzione(draft){
    hanno descrizione). Se è delegata alla segreteria non servono azioni sui posti.
    Annulla/aspetta = da "Le mie prenotazioni". */
 function rosterActionButtons(rec, opts){
-  if(rec.concierge){ addQuick([{label:'📅 Le mie prenotazioni',action:()=>botSay(doMie)}]); return; }
+  if(rec.concierge){ addQuick([{label:'📅 Le prenotazioni',action:()=>botSay(doMie)}]); return; }
   const posti=rosterPosti(rec);
   const header=(opts&&opts.header)||'✅ <b>Campo prenotato</b> a tuo nome';   // spunta verde (niente più pallino arancione)
   const fine=addMin(rec.ora,rec.durata||90);
@@ -1379,7 +1383,7 @@ function decideConcierge(draft){
     +'<br>👥 Ai giocatori pensiamo noi'
     +'<br>'+FEE_LINE);
   addQuick([
-    {label:'✅ Sì, organizzate voi',action:()=>{ addOut('Sì, organizzate voi'); botSay(()=>askMatchMix(mix=>commitConcierge(draft,mix))); }},
+    {label:'✅ Organizzate voi',action:()=>{ addOut('Sì, organizzate voi');   /* ≤20 char (reply-button) */ botSay(()=>askMatchMix(mix=>commitConcierge(draft,mix))); }},
     {label:'Annulla',action:()=>botSay(()=>{ addInHtml('Nessun problema, richiesta annullata.'); homeMenu(); })}
   ]);
 }
@@ -1401,9 +1405,10 @@ function commitConcierge(draft,mix){
 /* ---------- Annulla / Modifica --------------------------------------------- */
 function startCancel(){
   if(!S.prenotazioni.length){ addInHtml('Non hai prenotazioni da annullare.'); addQuick([{label:'🎾 Prenota un campo',text:'Vorrei prenotare un campo'}]); return; }
-  convo={mode:'cancel',step:'pick',draft:{}};
-  addInHtml('Quale vuoi annullare?');
-  addQuick(S.prenotazioni.map(p=>({label:p.giorno+' · '+p.ora+' — Campo '+p.campo, text:'annulla '+p.id})));
+  // LIST MESSAGE (non reply-button): le righe "giorno · ora / Campo N · tipo" superano
+  // i 20 char dei reply-button e possono essere >3 → fedele = lista (titolo ≤24, ≤10 righe).
+  addListMessage({ body:'Quale prenotazione vuoi annullare? 👇', button:'Apri', title:'Annulla una prenotazione',
+    rows: S.prenotazioni.slice(0,9).map(p=>({section:'Le mie prenotazioni', ic:'🗑️', label:p.giorno+' · '+p.ora, desc:'Campo '+p.campo+' · '+p.tipo, action:()=>botSay(()=>startCancelOne(p))})).concat([menuBackRow()]) });
 }
 function cancelStep(t){
   const d=convo.draft;
@@ -1422,10 +1427,10 @@ function cancelStep(t){
 }
 function startModify(){
   if(!S.prenotazioni.length){ addInHtml('Non hai prenotazioni da modificare.'); addQuick([{label:'🎾 Prenota un campo',text:'Vorrei prenotare un campo'}]); return; }
-  addInHtml('Quale prenotazione vuoi modificare?');
-  // Ogni scelta riapre il MODULO in edit-mode (come showBookingDetail / le opzioni):
-  // niente più prompt a testo per il nuovo orario.
-  addQuick(S.prenotazioni.map(p=>({label:p.giorno+' · '+p.ora+' — Campo '+p.campo, action:()=>botSay(()=>{ addFlowLaunch('Riapriamo il modulo — scegli di nuovo giorno e orario. 👇', ()=>openBookingFlow({editId:p.id, giorno:p.giorno, ora:p.ora})); })})));
+  // LIST MESSAGE (non reply-button): stesso motivo di startCancel (>20 char / >3 voci).
+  // Ogni scelta riapre il MODULO in edit-mode (come showBookingDetail / le opzioni).
+  addListMessage({ body:'Quale prenotazione vuoi modificare? 👇', button:'Apri', title:'Modifica una prenotazione',
+    rows: S.prenotazioni.slice(0,9).map(p=>({section:'Le mie prenotazioni', ic:'✏️', label:p.giorno+' · '+p.ora, desc:'Campo '+p.campo+' · '+p.tipo, action:()=>botSay(()=>addFlowLaunch('Riapriamo il modulo — scegli di nuovo giorno e orario. 👇', ()=>openBookingFlow({editId:p.id, giorno:p.giorno, ora:p.ora})))})).concat([menuBackRow()]) });
 }
 function matchPren(t){
   t=t.toLowerCase(); const byId=t.match(/\b(\d{1,4})\b/); if(byId){ const p=S.prenotazioni.find(x=>x.id===parseInt(byId[1],10)); if(p) return p; }
@@ -1437,12 +1442,23 @@ function matchPren(t){
 /* ============================ BOOTSTRAP =================================== */
 function boot(){
   chat.innerHTML=''; closeSheet(); resetConvo();
-  refreshBand();   // banda identità + eventuale stato "prenotazioni sospese" (tutela no-show)
   { const bt=document.getElementById('buildTag'); if(bt) bt.textContent=APP_BUILD; }
   try{ console.log('Emulatore Padel Village — build', APP_BUILD); }catch(e){}
   hideCmdPop(); _hintN=0;
   addSys('Suggerimento: digita "/" per i comandi rapidi in ogni momento');
-  botSay(()=>{ addInHtml('Ciao '+esc(S.player.nome.split(' ')[0])+', hai contattato la segreteria di Padel Village. Come possiamo aiutarti? Tocca una voce qui sotto o scrivici pure.'); showIceBreakers(); },500);
+  botSay(()=>{
+    // Riconoscimento del numero = IMPLICITO nel saluto per nome (su WhatsApp il
+    // business non mostra una banda: sa già chi gli scrive). Niente più banda fissa.
+    addInHtml('Ciao '+esc(S.player.nome.split(' ')[0])+', hai contattato la segreteria di Padel Village. Come possiamo aiutarti? Tocca una voce qui sotto o scrivici pure.');
+    // Stato "prenotazioni sospese" (tutela no-show): prima era la banda rossa, ora
+    // un MESSAGGIO all'avvio (fedele: è un'informazione azionabile, non una barra).
+    if(isBlocked()){
+      addInHtml('⛔ <b>Le tue prenotazioni online sono sospese</b>'
+        +'<br>Risultano <b>'+strikeCount()+' assenze</b> sul tuo profilo.'
+        +'<br>Passa in segreteria e le riattiviamo subito. 🎾');
+    }
+    showIceBreakers();
+  },500);
 }
 /* Composer stile WhatsApp/staff: la freccia d'INVIO ↑ appare solo quando c'è testo
    (dopo aver scritto o dettato); il mic 🎤 resta sempre visibile alla sua sinistra. */
