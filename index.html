@@ -205,7 +205,7 @@
 const LS_KEY='pmo_emu_state_v9';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.48 · 04/07';
+const APP_BUILD='v0.49 · 04/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -700,6 +700,10 @@ function homeMenu(){ showMenu('Posso fare altro per te? 👇'); }
    normale riga di List Message. NON si mette nel menu stesso (sarebbe una voce-menu
    dentro il menu) né nei Flow (hanno 1 solo Footer → nessun pulsante extra possibile). */
 function menuBackRow(section){ return {section:section||'Oppure', ic:'🏠', label:'Torna al menu', action:()=>botSay(()=>homeMenu())}; }
+/* Reply-button "🏠 Menu" per le FOGLIE con bottoni contestuali: il ritorno al menu
+   deve esserci SEMPRE (niente punto morto). action=homeMenu (apre il List del menu),
+   NON invia il testo "Menu" → nessun eco ridondante. ≤20 char. */
+function menuBtn(){ return {label:'🏠 Menu', action:()=>botSay(()=>homeMenu())}; }
 /* Righe "Account" comuni a Menu e Altro. Titoli ≤24 char + descrizione ≤72
    (limiti riga List Message reale). */
 function accountRows(){
@@ -769,7 +773,7 @@ function explainLevel(){
     +'<br>• <b>4.0–5.0</b> avanzato'
     +'<br>• <b>5.5+</b> agonista'
     +'<br>Serve a formare partite <b>equilibrate</b>. Puoi aggiornarlo con l\'autovalutazione.');
-  addQuick([{label:'📊 Fai l\'autovalutazione',action:()=>botSay(()=>addFlowLaunch('Apriamo il questionario livello — 8 domande a risposta chiusa. 👇', openAssessmentFlow))}]);
+  addQuick([{label:'📊 Autovalutazione',action:()=>botSay(()=>addFlowLaunch('Apriamo il questionario livello — 8 domande a risposta chiusa. 👇', openAssessmentFlow))},menuBtn()]);   /* ≤20 char (reply-button) */
 }
 
 /* ---------- Autovalutazione livello (WhatsApp Flow nativo) -----------------
@@ -881,7 +885,7 @@ function submitAssessment(answers){
       +'<br>🎾 Il tuo livello ora è <b>'+esc(lvl)+'</b>'
       +'<br>Lo useremo per formarti partite equilibrate. Puoi rifarla quando vuoi.',true);
   }
-  addQuick([{label:'👤 Il mio profilo',text:'Il mio profilo'}]);
+  addQuick([{label:'👤 Il mio profilo',text:'Il mio profilo'},menuBtn()]);
 }
 
 /* ---------- Preferenze notifiche (Flow: consensi proattivi) ----------------
@@ -908,7 +912,7 @@ function openNotifPrefs(){
     botSay(()=>{ addInHtml('✅ <b>Preferenze aggiornate</b>'
       +'<br>🔔 Promemoria prenotazioni: <b>'+(st.promemoria?'sì':'no')+'</b>'
       +'<br>📣 Novità e promozioni: <b>'+(st.novita?'sì':'no')+'</b>',true);
-      addQuick([{label:'👤 Il mio profilo',text:'Il mio profilo'}]); }); };
+      addQuick([{label:'👤 Il mio profilo',text:'Il mio profilo'},menuBtn()]); }); };
   body.appendChild(foot);
   openSheet('Preferenze notifiche', body, 'I messaggi che ricevi');
 }
@@ -923,7 +927,8 @@ function editData(){
     +'<br>👤 Nome e 📱 telefono sono gestiti dalla <b>segreteria</b> (per correggerli scrivici).');
   addQuick([
     {label:'✉️ Aggiorna email',action:()=>botSay(()=>addFlowLaunch('Apriamo il modulo per l\'email. 👇', openEmailFlow))},
-    {label:'🧑‍💼 Correggi con segreteria',action:()=>botSay(requestDataFix)}
+    {label:'🧑‍💼 Chiedi correzione',action:()=>botSay(requestDataFix)},   /* ≤20 char (reply-button) */
+    menuBtn()
   ]);
 }
 function openEmailFlow(){
@@ -939,7 +944,7 @@ function openEmailFlow(){
     S.player.email=e; save(); closeSheet();
     addOut(e?('✉️ '+e):'✉️ Email rimossa');
     botSay(()=>{ addInHtml(e?('✅ Email aggiornata: <b>'+esc(e)+'</b>'):'✅ Email rimossa dal profilo.',true);
-      addQuick([{label:'👤 Il mio profilo',text:'Il mio profilo'}]); }); };
+      addQuick([{label:'👤 Il mio profilo',text:'Il mio profilo'},menuBtn()]); }); };
   body.appendChild(foot);
   openSheet('Aggiorna email', body, 'Contatto facoltativo');
 }
@@ -963,7 +968,7 @@ function startDeleteData(){
     +warn
     +'<br>Vuoi inviare la richiesta?');
   addQuick([
-    {label:'🗑️ Sì, invia richiesta',danger:true,action:()=>botSay(()=>{
+    {label:'🗑️ Sì, invia',danger:true,action:()=>botSay(()=>{   /* ≤20 char (reply-button) */
       addInHtml('✅ <b>Richiesta inviata</b>'
         +'<br>La segreteria ti contatta per completare la cancellazione dei dati (diritto GDPR).'
         +'<br>Fino alla conferma il tuo profilo resta attivo. 🎾',true);
