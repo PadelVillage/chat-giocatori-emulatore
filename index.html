@@ -205,7 +205,7 @@
 const LS_KEY='pmo_emu_state_v9';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.56 · 04/07';
+const APP_BUILD='v0.57 · 04/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -1342,7 +1342,7 @@ function applyEdit(editId,d,ora,meta){
   }
   save();
   // Card UNICA aggiornata (stesso List Message, header "aggiornata").
-  if(rec.stato==='opzionato' && !rec.concierge) rosterActionButtons(rec, {header:'✅ <b>Prenotazione aggiornata</b>'});
+  if(rec.stato==='opzionato' && !rec.concierge) rosterActionButtons(rec, {receipt:true, header:'✅ <b>Prenotazione aggiornata</b>'});
   else {
     // Prenotazione GIÀ completa (o delegata alla segreteria): nessuna fase di
     // completamento da riproporre → conferma segmentata + ritorno al menu.
@@ -1385,7 +1385,7 @@ function commitOpzione(draft){
     prezzoTesta:(draft.prezzoTesta!=null?draft.prezzoTesta:null),
     deadline:optDeadlineMs(off||0,draft.ora), win:rosterWindow(off||0).lbl};
   S.prenotazioni.push(rec); save();
-  rosterActionButtons(rec);                 // CARD UNICA: List Message (recap nel corpo + pulsante → voci nella schermata)
+  rosterActionButtons(rec, {receipt:true}); // MSG 1 ricevuta ✅ + MSG 2 card d'azione "Completa la partita"
   if(invited.length) sendInvites(rec, invited);
   scheduleRosterReminders(rec, off||0);
 }
@@ -1395,21 +1395,31 @@ function commitOpzione(draft){
    descrizione (≤72 char), così ogni scelta si spiega da sola (i reply-button non
    hanno descrizione). Se è delegata alla segreteria non servono azioni sui posti.
    Annulla/aspetta = da "Le mie prenotazioni". */
+/* MSG 1 = RICEVUTA: bolla di conferma "Campo prenotato", SEPARATA dalla card d'azione.
+   Motivo (test utente): un'unica card con ✅ + dettagli + azione veniva letta come
+   "ho finito" → nessuno completava la partita. Emessa SOLO alla conferma iniziale e
+   dopo una modifica (opts.receipt), MAI sui re-show del roster (falsa ricevuta). */
+function bookingReceipt(rec, header){
+  const fine=addMin(rec.ora,rec.durata||90);
+  const priceLine=(rec.prezzoTesta!=null)?('<br>💶 <b>'+rec.prezzoTesta+' € a testa</b>'):'';   // solo a testa
+  addInHtml((header||'✅ <b>Campo prenotato</b> a tuo nome')
+    +'<br>📅 '+esc(rec.giorno)+' · '+rec.ora+'–'+fine+' · Campo '+rec.campo
+    +priceLine);
+}
 function rosterActionButtons(rec, opts){
   if(rec.concierge){ addQuick([{label:'📅 Le prenotazioni',action:()=>botSay(doMie)}]); return; }
   const posti=rosterPosti(rec);
-  const header=(opts&&opts.header)||'✅ <b>Campo prenotato</b> a tuo nome';   // spunta verde (niente più pallino arancione)
   const fine=addMin(rec.ora,rec.durata||90);
-  const priceLine=(rec.prezzoTesta!=null)?('<br>💶 <b>'+rec.prezzoTesta+' € a testa</b>'):'';   // solo a testa (via il totale a campo)
-  // CORPO del List Message = ricevuta + stato roster, tutto in UNA card.
-  const body=header
-    +'<br>📅 '+esc(rec.giorno)+' · '+rec.ora+'–'+fine+' · Campo '+rec.campo
-    +priceLine
+  if(opts && opts.receipt) bookingReceipt(rec, opts.header);   // MSG 1 (ricevuta) prima della card d'azione
+  // MSG 2 = card d'AZIONE (List): stato squadra + scadenza + CTA. Il pulsante DICE
+  // l'azione — "Completa la partita" invece di "☰ Apri": eccezione VOLUTA alla
+  // convenzione (è la card dove la gente non capiva di dover ancora agire).
+  const body='📅 '+esc(rec.giorno)+' · '+rec.ora+'–'+fine+' · Campo '+rec.campo
     +(rosterPending(rec)?('<br>✉️ In attesa: '+rec.invitati.join(', ')):'')
     +'<br>👥 Sei <b>'+rosterFilled(rec)+'/'+rosterTarget(rec)+'</b> · '
       +(posti>1?'mancano <b>'+posti+'</b> giocatori':'manca <b>1</b> giocatore')
       +' · hai <b>'+rec.win+'</b> per completare la partita'
-    +'<br>👇 Tocca «Apri»: invita gli amici o lascia fare alla segreteria';
+    +'<br>👇 Tocca «Completa la partita»: inviti gli amici o li trova la segreteria';
   // Le voci (con descrizione) vivono NELLA SCHERMATA che apre il pulsante (fedele a WA).
   const rows=[
     {section:'Completa la partita', ic:'👥', label:'Invito i miei amici', desc:rosterPending(rec)?('Invita o revoca · '+rosterPending(rec)+' in attesa'):'Scegli tu con chi giocare', action:()=>botSay(()=>addFlowLaunch('Apriamo il modulo — spunta gli amici che giocano con te. 👇', ()=>openAddPlayersFlow(rec)))},
@@ -1417,7 +1427,7 @@ function rosterActionButtons(rec, opts){
     {section:'Oppure', ic:'✏️', label:'Modifica la prenotazione', desc:'Cambia giorno o orario', action:()=>botSay(()=>{ addFlowLaunch('Riapriamo il modulo — scegli di nuovo giorno e orario. 👇', ()=>openBookingFlow({editId:rec.id, giorno:rec.giorno, ora:rec.ora})); })},
     menuBackRow('Oppure')
   ];
-  addListMessage({body:body, button:'Apri', title:'Completa la partita', rows:rows.slice(0,10)});
+  addListMessage({body:body, button:'Completa la partita', title:'Completa la partita', rows:rows.slice(0,10)});   /* pulsante = CTA (eccezione voluta a "Apri") */
 }
 /* Ramo "Ci pensate voi": delega alla segreteria un'opzione già presa (+5 € sulla quota di chi prenota per primo). */
 /* ---------- Preferenza partita: MISTA o OMOGENEA (solo concierge) -----------
