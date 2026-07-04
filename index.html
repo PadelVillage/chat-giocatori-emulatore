@@ -202,7 +202,7 @@
 const LS_KEY='pmo_emu_state_v10';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.67 · 04/07';
+const APP_BUILD='v0.68 · 04/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -1010,7 +1010,7 @@ function doHelp(t){
   if(/opzion|complet|scad|responsab/.test(t)){
     addInHtml('<b>Come funziona</b> 🎾<br>Quando prenoti, il campo è <b>confermato subito</b> a tuo nome (gratis, nessuna scadenza). Sei tu il <b>responsabile</b> della partita: la completi invitando gli amici, oppure <b>ci pensa la segreteria</b> (+'+CONCIERGE_FEE+' €). Se non la completi, l’<b>intero campo</b> resta a tuo carico.'); homeMenu(); return; }
   if(/cost|prezz|tariff|paga|anticip|accont|depos/.test(t)){
-    addInHtml('<b>Prezzi</b> 💶<br>Ti diamo sempre il prezzo <b>a testa</b> prima di confermare. In questa versione <b>non si paga in chat</b>: prenoti senza versare nulla in anticipo e saldi in circolo.');
+    addInHtml('<b>Prezzi</b> 💶<br>Ti diamo sempre il prezzo <b>a giocatore</b> prima di confermare. In questa versione <b>non si paga in chat</b>: prenoti senza versare nulla in anticipo e saldi in circolo.');
     addQuick([{label:'🎾 Prenota un campo',text:'Vorrei prenotare un campo'}]); return; }
   if(/organizz|concierge/.test(t)){
     addInHtml('🧑‍💼 <b>Ci pensa la segreteria</b><br>Prima <b>prenoti un campo</b>, poi — nella schermata <b>Completa la partita</b> — puoi delegarci di trovare i giocatori. Ti chiediamo se la vuoi <b>mista</b> o <b>omogenea</b>.<br>'+FEE_LINE);
@@ -1158,7 +1158,7 @@ function openBookingFlow(prefill){
       botSay(()=>applyEdit(editId,d,st.ora,meta)); return; }
     if(concierge){ addOut('🧑‍💼 Organizzate voi · '+d.giorno+' · '+st.ora+" ("+dur+"')");
       botSay(()=>decideConcierge({giorno:d.giorno,dow:d.dow,ora:st.ora,tipo:st.tipo,durata:dur,players:players})); return; }
-    addOut('📋 '+d.giorno+' · '+st.ora+' · in '+players+" ("+dur+"') · "+pr.testa+'€/testa'+(names.length?(' · con '+names.join(', ')):''));
+    addOut('📋 '+d.giorno+' · '+st.ora+' · in '+players+" ("+dur+"') · "+pr.testa+'€/giocatore'+(names.length?(' · con '+names.join(', ')):''));
     botSay(()=>decideAndPresent({giorno:d.giorno,dow:d.dow,ora:st.ora,tipo:st.tipo,durata:dur,amici:st.amici.slice(),players:players}));
   };
   body.appendChild(foot);
@@ -1181,7 +1181,7 @@ function openBookingFlow(prefill){
     const flat=flatDay(d.off,d.dow).filter(s=>s.status!=='busy');
     if(!flat.length){ slotBox.appendChild(el('slot-empty','Nessun orario libero in questo giorno.')); return; }
     const uniform=flat.every(s=>s.prezzo===flat[0].prezzo);
-    if(uniform){ const hdr=el('slot-fascia'); hdr.textContent=flat[0].prezzo+'€ a testa'; slotBox.appendChild(hdr); }
+    if(uniform){ const hdr=el('slot-fascia'); hdr.textContent=flat[0].prezzo+'€ a giocatore'; slotBox.appendChild(hdr); }
     const row=el('chips');
     flat.forEach(s=>{
       const b=document.createElement('button'); b.type='button';
@@ -1206,16 +1206,16 @@ function openBookingFlow(prefill){
     const editRec=editId?S.prenotazioni.find(x=>x.id===editId):null;
     if(editRec && (editRec.stato==='completo' || editRec.concierge)){
       sum.innerHTML='📅 <b>'+esc(d.giorno)+' · '+st.ora+'–'+addMin(st.ora,dur)+'</b>'
-        +'<br>💶 <b>'+pr.testa+' € a testa</b>'
+        +'<br>💶 <b>'+pr.testa+' € a giocatore</b>'
         +(editRec.concierge?('<br>🧑‍💼 '+FEE_LINE):'');
       return;
     }
     const target=pr.giocatori, inviti=st.amici.length;
     sum.innerHTML='📅 <b>'+esc(d.giorno)+' · '+st.ora+'–'+addMin(st.ora,dur)+'</b>'
       +(st.concierge
-        ? ('<br>💶 <b>'+pr.testa+' € a testa</b>'
+        ? ('<br>💶 <b>'+pr.testa+' € a giocatore</b>'
           +'<br>🧑‍💼 '+FEE_LINE)
-        : ('<br>💶 <b>'+pr.testa+' € a testa</b>'
+        : ('<br>💶 <b>'+pr.testa+' € a giocatore</b>'
           +'<br>👥 1/'+target+' (tu)'+(inviti?(' · ✉️ '+inviti+' invit'+(inviti>1?'i':'o')):'')
           +'<br>🙋 La partita è <b>tua</b> — se resta incompleta, l\'intero campo (<b>'+pr.campo+'€</b>) è a tuo carico'));
   }
@@ -1306,7 +1306,7 @@ function commitOpzione(draft){
    dopo una modifica (opts.receipt), MAI sui re-show del roster (falsa ricevuta). */
 function bookingReceipt(rec, header){
   const fine=addMin(rec.ora,rec.durata||90);
-  const priceLine=(rec.prezzoTesta!=null)?('<br>💶 <b>'+rec.prezzoTesta+' € a testa</b>'):'';   // solo a testa
+  const priceLine=(rec.prezzoTesta!=null)?('<br>💶 <b>'+rec.prezzoTesta+' € a giocatore</b>'):'';   // solo a testa
   addInHtml((header||'📌 <b>Campo prenotato</b> a tuo nome')
     +'<br>📅 '+esc(rec.giorno)+' · '+rec.ora+'–'+fine+' · Campo '+rec.campo
     +priceLine);
@@ -1564,7 +1564,7 @@ function decideConcierge(draft){
   addCard('🧑‍💼 <b>Organizza la partita</b>'
     +'<br>📅 '+esc(draft.giorno)+' · '+draft.ora+'–'+fine
     +'<br>📍 Campo '+campo+' · Partita ('+draft.durata+"')"
-    +'<br>💶 <b>'+pr.testa+' € a testa</b>'
+    +'<br>💶 <b>'+pr.testa+' € a giocatore</b>'
     +'<br>👥 Ai giocatori pensiamo noi'
     +'<br>'+FEE_LINE);
   addQuick([
