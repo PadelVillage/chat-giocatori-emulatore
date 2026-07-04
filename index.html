@@ -193,7 +193,7 @@
 const LS_KEY='pmo_emu_state_v7';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.44 · 04/07';
+const APP_BUILD='v0.45 · 04/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -870,7 +870,7 @@ function showBookingDetail(id){
     if(!p.concierge) btns.push({label:'🧑‍💼 Ci pensa la segreteria',action:()=>{ addOut('Ci pensa la segreteria'); botSay(()=>delegateConcierge(p)); }});
     btns.push({label:'🗑️ Annulla',action:()=>startCancelOne(p),danger:true});
   } else {
-    btns.push({label:'✏️ Modifica orario',action:()=>botSay(()=>{ addFlowLaunch('Riapriamo il modulo — scegli di nuovo giorno e orario. 👇', ()=>openBookingFlow({editId:p.id, giorno:p.giorno, ora:p.ora})); })});
+    btns.push({label:'✏️ Modifica',action:()=>botSay(()=>{ addFlowLaunch('Riapriamo il modulo — scegli di nuovo giorno e orario. 👇', ()=>openBookingFlow({editId:p.id, giorno:p.giorno, ora:p.ora})); })});
     btns.push({label:'🗑️ Annulla',action:()=>startCancelOne(p),danger:true});
   }
   addQuick(btns.slice(0,3));
