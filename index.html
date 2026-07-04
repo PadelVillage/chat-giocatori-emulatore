@@ -193,7 +193,7 @@
 const LS_KEY='pmo_emu_state_v7';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.43 · 04/07';
+const APP_BUILD='v0.44 · 04/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -675,6 +675,11 @@ function route(intent,t){
    un reply-button "🏠 Menu" che generava un SECONDO List Message → doppio "Menu" e due
    tap). WhatsApp NON ha barre/bottoni fissi; la home reale = questo + il comando /menu. */
 function homeMenu(){ showMenu('Posso fare altro per te? 👇'); }
+/* Riga "🏠 Torna al menu" per le List OPERATIVE: rientro in UN tap se apri una lista
+   e non vuoi nessuna voce (senza chiudere con la ✕ e riscrivere). Fedele WA: è una
+   normale riga di List Message. NON si mette nel menu stesso (sarebbe una voce-menu
+   dentro il menu) né nei Flow (hanno 1 solo Footer → nessun pulsante extra possibile). */
+function menuBackRow(section){ return {section:section||'Oppure', ic:'🏠', label:'Torna al menu', action:()=>botSay(()=>homeMenu())}; }
 /* Righe "Account" comuni a Menu e Altro. Titoli ≤24 char + descrizione ≤72
    (limiti riga List Message reale). */
 function accountRows(){
@@ -735,7 +740,7 @@ function doAmici(){
 function doRemoveFriend(){
   if(!S.friends.length){ addInHtml('Non hai ancora amici da rimuovere.'); homeMenu(); return; }
   addListMessage({ body:'Chi vuoi togliere dalla tua rubrica? 👇', button:'Apri', title:'Rimuovi un amico',
-    rows: S.friends.map(f=>({section:'I tuoi amici', ic:'👤', label:f.nome, desc:'Tocca per rimuoverlo', action:()=>botSay(()=>confirmRemoveFriend(f.id))})) });
+    rows: S.friends.slice(0,9).map(f=>({section:'I tuoi amici', ic:'👤', label:f.nome, desc:'Tocca per rimuoverlo', action:()=>botSay(()=>confirmRemoveFriend(f.id))})).concat([menuBackRow()]) });
 }
 function confirmRemoveFriend(id){
   const f=S.friends.find(x=>x.id===id); if(!f){ addInHtml('Quell\'amico non è più in lista.'); homeMenu(); return; }
@@ -851,7 +856,7 @@ function doMie(){
   const list=S.prenotazioni;
   if(!list.length){ addInHtml('Al momento non hai prenotazioni future. Vuoi prenotare un campo?'); addQuick([{label:'🎾 Prenota un campo',text:'Vorrei prenotare un campo'}]); return; }
   addListMessage({ body:'Le tue prossime prenotazioni 👇', button:'Apri', title:'Le mie prenotazioni',
-    rows:list.slice(0,10).map(p=>({section:'Prenotazioni', ic:'✅', label:p.giorno+' · '+p.ora, desc:'Campo '+p.campo+' · '+p.tipo, action:()=>botSay(()=>showBookingDetail(p.id))})) });
+    rows:list.slice(0,9).map(p=>({section:'Prenotazioni', ic:'✅', label:p.giorno+' · '+p.ora, desc:'Campo '+p.campo+' · '+p.tipo, action:()=>botSay(()=>showBookingDetail(p.id))})).concat([menuBackRow()]) });
 }
 function showBookingDetail(id){
   const p=S.prenotazioni.find(x=>x.id===id); if(!p){ addInHtml('Quella prenotazione non è più disponibile.'); addQuick([{label:'📅 Le mie prenotazioni',action:()=>botSay(doMie)}]); return; }
@@ -1126,7 +1131,8 @@ function rosterActionButtons(rec, opts){
   const rows=[
     {section:'Completa la partita', ic:'👥', label:'Invito i miei amici', desc:rosterPending(rec)?('Invita o revoca · '+rosterPending(rec)+' in attesa'):'Scegli tu con chi giocare', action:()=>botSay(()=>addFlowLaunch('Apriamo il modulo — spunta gli amici che giocano con te. 👇', ()=>openAddPlayersFlow(rec)))},
     {ic:'🧑‍💼', label:'Ci pensa la segreteria', desc:'Troviamo noi i giocatori · +'+CONCIERGE_FEE+' € solo sulla tua quota', action:()=>botSay(()=>delegateConcierge(rec))},
-    {section:'Oppure', ic:'✏️', label:'Modifica la prenotazione', desc:'Cambia giorno o orario', action:()=>botSay(()=>{ addFlowLaunch('Riapriamo il modulo — scegli di nuovo giorno e orario. 👇', ()=>openBookingFlow({editId:rec.id, giorno:rec.giorno, ora:rec.ora})); })}
+    {section:'Oppure', ic:'✏️', label:'Modifica la prenotazione', desc:'Cambia giorno o orario', action:()=>botSay(()=>{ addFlowLaunch('Riapriamo il modulo — scegli di nuovo giorno e orario. 👇', ()=>openBookingFlow({editId:rec.id, giorno:rec.giorno, ora:rec.ora})); })},
+    menuBackRow('Oppure')
   ];
   addListMessage({body:body, button:'Apri', title:'Completa la partita', rows:rows.slice(0,10)});
 }
