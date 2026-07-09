@@ -177,7 +177,7 @@
     <button class="reset" id="resetBtn" title="Ricomincia da capo">↺ Ricomincia</button>
   </div>
   <div class="chat" id="chat"></div>
-  <div class="demo-note">🔒 Modalità demo — nessuna prenotazione reale · <span id="buildTag"></span></div>
+  <div class="demo-note">🔒 Modalità demo — nessuna prenotazione reale · <span id="buildTag"></span> · <button type="button" class="demobtn" id="nudgeTestBtn" style="vertical-align:middle" title="Solo test: fa comparire subito il promemoria partita (nel prodotto reale sono ~15 min)">🔔 Testa promemoria</button></div>
   <div class="cmd-pop" id="cmdPop"></div>
   <form class="bar" id="bar" autocomplete="off">
     <button type="button" class="ic-btn" id="emojiBtn">😊</button>
@@ -201,7 +201,7 @@
 const LS_KEY='pmo_emu_state_v10';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.77 · 10/07';
+const APP_BUILD='v0.78 · 10/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -1431,13 +1431,19 @@ function confirmBooking(rec,extra){
    occupo io" (rec._nudgeStop). */
 function nudgeChainLen(off){ if(off===0) return 1; if(off<=2) return 2; return 3; }
 const NUDGE_DELAY_MS=15*60*1000;   // ~15 min: il promemoria non compare subito dopo la prenotazione (nel reale = ore)
+/* Demo-hook (SOLO collaudo): il pulsante "🔔 Testa promemoria" (barra "Modalità
+   demo") accende NUDGE_FAST → il promemoria, e ogni anello della catena, compare
+   in ~3 s invece di 15 min. NON tocca il default reale: è un let che torna false a
+   ogni reload (nessuna persistenza). */
+let NUDGE_FAST=false;
+function nudgeDelay(){ return NUDGE_FAST ? 3000 : NUDGE_DELAY_MS; }
 function scheduleNudge(recId, n){
   if(n<=0) return;
   setTimeout(()=>{
     const r=S.prenotazioni.find(x=>x.id===recId);
     if(!r || r.stato==='completo' || r.concierge || r._nudgeStop || rosterPosti(r)<=0) return;
     botSay(()=>rosterNudge(r, n));
-  }, NUDGE_DELAY_MS);
+  }, nudgeDelay());
 }
 function rosterNudge(r, n){
   addInHtml('🔔 <b>Promemoria partita</b>'
@@ -1452,6 +1458,18 @@ function rosterNudge(r, n){
         +'<br>Non ti mando altri promemoria.'
         +'<br>'+disclaimerLines(r))); }}
   ]);
+}
+/* Demo-hook (SOLO collaudo): fa comparire SUBITO — in fast mode — il promemoria
+   per la prenotazione INCOMPLETA più recente, così è collaudabile in sessione senza
+   aspettare 15 min. Ri-arma anche una prenotazione su cui avevi scelto "me ne occupo
+   io". Se non c'è nulla da completare, lo dice. */
+function demoFireNudge(){
+  NUDGE_FAST=true;
+  const cand=S.prenotazioni.slice().reverse().find(r=>r.stato==='confermato' && !r.concierge && rosterPosti(r)>0);
+  if(!cand){ toast('Prima prenota una partita da completare (non delegata, con posti liberi).'); return; }
+  cand._nudgeStop=false; save();
+  toast('🔔 Promemoria in arrivo tra pochi secondi…');
+  scheduleNudge(cand.id, nudgeChainLen(offsetForGiorno(cand.giorno)||0));
 }
 /* Modulo "gestisci i giocatori" = WhatsApp FLOW nativo: UN solo CheckboxGroup + UN
    footer. Tre tipi di riga, tutte nello stesso gruppo (max-selected = target−1 = 3 altri):
@@ -1664,6 +1682,7 @@ function toggleComposer(){ const send=document.getElementById('send'); if(!send)
 document.getElementById('bar').addEventListener('submit',e=>{ e.preventDefault(); const f=document.getElementById('field'); const v=f.value.trim(); hideCmdPop(); if(!v) return; f.value=''; sendUser(v); toggleComposer(); });
 field.addEventListener('input',()=>{ const v=field.value; if(v.charAt(0)==='/') showCmdPop(v.trim()); else hideCmdPop(); toggleComposer(); });
 document.getElementById('resetBtn').addEventListener('click',()=>{ resetDemo(); boot(); });
+document.getElementById('nudgeTestBtn').addEventListener('click', demoFireNudge);
 document.getElementById('emojiBtn').addEventListener('click',()=>toast('Solo demo 🙂'));
 document.getElementById('clipBtn').addEventListener('click',()=>toast('Allegati: solo demo'));
 toggleComposer();   // stato iniziale: campo vuoto → freccia d'invio nascosta
