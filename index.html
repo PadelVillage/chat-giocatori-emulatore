@@ -207,7 +207,7 @@
 const LS_KEY='pmo_emu_state_v10';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.75 · 04/07';
+const APP_BUILD='v0.76 · 10/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -1275,11 +1275,16 @@ function applyEdit(editId,d,ora,meta){
 
 function decideAndPresent(draft){
   // Coerenza con la vista disponibilità: se l'orario chiesto a parole è
-  // OCCUPATO, apri il modulo con gli orari disponibili.
+  // OCCUPATO — oppure NON è in listino (slotMetaFor → null: es. "alle 22",
+  // "alle 14:15", "alle 8") — NON prenotare alla cieca (finirebbe a 0€ su uno
+  // slot inesistente): apri il modulo con gli orari veri.
   const off=offsetForGiorno(draft.giorno);
   const draftMeta = off!=null ? slotMetaFor(off,draft.dow,draft.ora,draft.durata,draft.players) : null;
-  if(draftMeta && draftMeta.status==='busy'){
-    addFlowLaunch('A quell\'ora è tutto occupato. Ti apriamo il modulo con gli orari disponibili.', ()=>openBookingFlow({giorno:draft.giorno,durata:draft.durata,amici:draft.amici}));
+  if(!draftMeta || draftMeta.status==='busy'){
+    const msg = draftMeta
+      ? 'A quell\'ora è tutto occupato. Ti apriamo il modulo con gli orari disponibili.'
+      : 'Quell\'orario non è disponibile. Ti apriamo il modulo con gli orari liberi.';
+    addFlowLaunch(msg, ()=>openBookingFlow({giorno:draft.giorno,durata:draft.durata,amici:draft.amici}));
     return;
   }
   const campo=campoLibero(draft.dow,draft.ora); const fine=addMin(draft.ora,draft.durata);
