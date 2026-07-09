@@ -90,11 +90,6 @@
   .field{flex:1;background:#fff;border-radius:20px;padding:10px 14px;font-size:16px;border:0;outline:0;font-family:inherit;color:var(--ink)}
   .send{width:42px;height:42px;border-radius:50%;background:var(--wa-green);border:0;color:#fff;font-size:19px;cursor:pointer;flex:0 0 auto}
   .send:active{background:#0c5f57}
-  /* 🎤 mic dettatura = COMODITÀ EMULATORE (stile web app staff), NON un componente WhatsApp. Temporaneo: da togliere prima della review fedeltà. */
-  .mic-btn{width:38px;height:38px;border-radius:50%;border:1px solid #e5e9ee;background:#fff;color:#2f6df6;cursor:pointer;flex:0 0 auto;display:flex;align-items:center;justify-content:center;padding:0}
-  .mic-btn:hover{background:#f4f6f9}
-  .mic-btn.recording{background:#fee2e2;border-color:#ef4444;color:#ef4444;animation:svcMicPulse 1.3s ease-in-out infinite}
-  @keyframes svcMicPulse{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.45)}50%{box-shadow:0 0 0 5px rgba(239,68,68,0)}}
   /* Bottom sheet (simulazione WhatsApp Flow / schermate) */
   .sheet-ov{position:absolute;inset:0;background:rgba(0,0,0,.4);opacity:0;transition:opacity .2s;display:flex;align-items:flex-end;z-index:20}
   .sheet-ov.show{opacity:1}
@@ -186,9 +181,8 @@
   <div class="cmd-pop" id="cmdPop"></div>
   <form class="bar" id="bar" autocomplete="off">
     <button type="button" class="ic-btn" id="emojiBtn">😊</button>
-    <input class="field" id="field" placeholder="💬 Scrivi o detta…" autocomplete="off">
+    <input class="field" id="field" placeholder="💬 Scrivi un messaggio…" autocomplete="off">
     <button type="button" class="ic-btn" id="clipBtn">📎</button>
-    <button type="button" class="mic-btn" id="micBtn" aria-label="Detta un messaggio"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 10v1a7 7 0 0 0 14 0v-1"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="8" y1="22" x2="16" y2="22"/></svg></button>
     <button class="send" id="send" type="submit">↑</button>
   </form>
 </div>
@@ -207,7 +201,7 @@
 const LS_KEY='pmo_emu_state_v10';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.76 · 10/07';
+const APP_BUILD='v0.77 · 10/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -1028,18 +1022,18 @@ function doHelp(t){
   t=(t||'').toLowerCase();
   if(/invit|amic/.test(t)){
     addInHtml('<b>Invitare gli amici</b> 👥<br>Da “Completa la partita” selezioni i tuoi amici (soci): ricevono un messaggio con <b>✅ Confermo / ❌ Non posso</b> e, <b>appena confermano, entrano in partita</b>. Puoi invitarne solo quanti sono i posti liberi, e <b>revocare</b> un invito ancora in attesa. Chi non è sul nostro canale, o ha scelto <b>🔕 Non invitarmi più</b>, non è invitabile. In partita solo giocatori iscritti — niente ospiti.');
-    addQuick([{label:'🎾 Prenota un campo',text:'Vorrei prenotare un campo'}]); return; }
+    addQuick([{label:'🎾 Prenota un campo',text:'Vorrei prenotare un campo'}, menuBtn()]); return; }
   if(/opzion|complet|scad|responsab/.test(t)){
     addInHtml('<b>Come funziona</b> 🎾<br>Quando prenoti, il campo è <b>confermato subito</b> a tuo nome (gratis, nessuna scadenza). Sei tu il <b>responsabile</b> della partita: la completi invitando gli amici, oppure <b>ci pensa la segreteria</b> (+'+CONCIERGE_FEE+' €). Se non la completi, l’<b>intero campo</b> resta a tuo carico.'); homeMenu(); return; }
   if(/cost|prezz|tariff|paga|anticip|accont|depos/.test(t)){
     addInHtml('<b>Prezzi</b> 💶<br>Ti diamo sempre il prezzo <b>a giocatore</b> prima di confermare. In questa versione <b>non si paga in chat</b>: prenoti senza versare nulla in anticipo e saldi in circolo.');
-    addQuick([{label:'🎾 Prenota un campo',text:'Vorrei prenotare un campo'}]); return; }
+    addQuick([{label:'🎾 Prenota un campo',text:'Vorrei prenotare un campo'}, menuBtn()]); return; }
   if(/organizz|concierge/.test(t)){
     addInHtml('🧑‍💼 <b>Ci pensa la segreteria</b><br>Prima <b>prenoti un campo</b>, poi — nella schermata <b>Completa la partita</b> — puoi delegarci di trovare i giocatori. Ti chiediamo se la vuoi <b>mista</b> o <b>omogenea</b>.<br>'+FEE_LINE);
-    addQuick([{label:'🎾 Prenota un campo',text:'Vorrei prenotare un campo'}]); return; }
+    addQuick([{label:'🎾 Prenota un campo',text:'Vorrei prenotare un campo'}, menuBtn()]); return; }
   if(/prenot|campo|dispon|gioc/.test(t)){
     addInHtml('<b>Prenotare</b> 🎾<br>Scegli giorno e orario; prenoti il campo a tuo nome e completi la partita. Ti mostriamo sempre il prezzo.');
-    addQuick([{label:'🎾 Prenota un campo',text:'Vorrei prenotare un campo'}]); return; }
+    addQuick([{label:'🎾 Prenota un campo',text:'Vorrei prenotare un campo'}, menuBtn()]); return; }
   // guida generale (List Message)
   showMenu('Ecco cosa possiamo fare per te — scrivimi con parole tue oppure tocca una voce');
 }
@@ -1070,7 +1064,7 @@ function playersDesc(p){
    "Gestisci la prenotazione". Pattern fedele a WhatsApp (niente valanga di reply-buttons). */
 function doMie(){
   const list=S.prenotazioni;
-  if(!list.length){ addInHtml('Al momento non hai prenotazioni future. Vuoi prenotare un campo?'); addQuick([{label:'🎾 Prenota un campo',text:'Vorrei prenotare un campo'}]); return; }
+  if(!list.length){ addInHtml('Al momento non hai prenotazioni future. Vuoi prenotare un campo?'); addQuick([{label:'🎾 Prenota un campo',text:'Vorrei prenotare un campo'}, menuBtn()]); return; }
   addListMessage({ body:'Le tue prenotazioni — apri per gestirle', button:'Apri', title:'Le mie prenotazioni',
     rows:list.slice(0,9).map(p=>({section:'Prenotazioni', ic:'✅', label:p.giorno+' · '+p.ora, desc:'Campo '+p.campo+' · '+p.tipo, action:()=>botSay(()=>showBookingDetail(p.id))})).concat([menuBackRow()]) });
 }
@@ -1617,7 +1611,7 @@ function commitConcierge(draft,mix){
 
 /* ---------- Annulla / Modifica --------------------------------------------- */
 function startCancel(){
-  if(!S.prenotazioni.length){ addInHtml('Non hai prenotazioni da annullare.'); addQuick([{label:'🎾 Prenota un campo',text:'Vorrei prenotare un campo'}]); return; }
+  if(!S.prenotazioni.length){ addInHtml('Non hai prenotazioni da annullare.'); addQuick([{label:'🎾 Prenota un campo',text:'Vorrei prenotare un campo'}, menuBtn()]); return; }
   // LIST MESSAGE (non reply-button): le righe "giorno · ora / Campo N · tipo" superano
   // i 20 char dei reply-button e possono essere >3 → fedele = lista (titolo ≤24, ≤10 righe).
   addListMessage({ body:'Quale prenotazione vuoi annullare?', button:'Apri', title:'Annulla una prenotazione',
@@ -1638,7 +1632,7 @@ function cancelStep(t){
   }
 }
 function startModify(){
-  if(!S.prenotazioni.length){ addInHtml('Non hai prenotazioni da modificare.'); addQuick([{label:'🎾 Prenota un campo',text:'Vorrei prenotare un campo'}]); return; }
+  if(!S.prenotazioni.length){ addInHtml('Non hai prenotazioni da modificare.'); addQuick([{label:'🎾 Prenota un campo',text:'Vorrei prenotare un campo'}, menuBtn()]); return; }
   // LIST MESSAGE (non reply-button): stesso motivo di startCancel (>20 char / >3 voci).
   // Ogni scelta riapre il MODULO in edit-mode (come showBookingDetail / le opzioni).
   addListMessage({ body:'Quale prenotazione vuoi modificare?', button:'Apri', title:'Modifica una prenotazione',
@@ -1665,49 +1659,14 @@ function boot(){
     showIceBreakers();
   },500);
 }
-/* Composer stile WhatsApp/staff: la freccia d'INVIO ↑ appare solo quando c'è testo
-   (dopo aver scritto o dettato); il mic 🎤 resta sempre visibile alla sua sinistra. */
+/* Composer stile WhatsApp: la freccia d'INVIO ↑ appare solo quando c'è testo. */
 function toggleComposer(){ const send=document.getElementById('send'); if(!send) return; send.style.display=(field.value&&field.value.trim())?'':'none'; }
 document.getElementById('bar').addEventListener('submit',e=>{ e.preventDefault(); const f=document.getElementById('field'); const v=f.value.trim(); hideCmdPop(); if(!v) return; f.value=''; sendUser(v); toggleComposer(); });
 field.addEventListener('input',()=>{ const v=field.value; if(v.charAt(0)==='/') showCmdPop(v.trim()); else hideCmdPop(); toggleComposer(); });
 document.getElementById('resetBtn').addEventListener('click',()=>{ resetDemo(); boot(); });
 document.getElementById('emojiBtn').addEventListener('click',()=>toast('Solo demo 🙂'));
 document.getElementById('clipBtn').addEventListener('click',()=>toast('Allegati: solo demo'));
-/* 🎤 Dettatura vocale (Web Speech API, it-IT). COMODITÀ EMULATORE, non componente
-   WhatsApp: sul prodotto reale la dettatura la fa il microfono della TASTIERA del
-   telefono. Anti-duplicazione mobile: i segmenti finali che "crescono" sostituiscono
-   l'ultimo invece di accodarsi (bug Android/iOS). Riempie #field e simula 'input'
-   così il popup dei comandi "/" reagisce. */
-(function(){
-  const micBtn=document.getElementById('micBtn'); if(!micBtn) return;
-  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  let rec=null, dictating=false;
-  function stopUI(){ dictating=false; micBtn.classList.remove('recording'); }
-  micBtn.addEventListener('click',()=>{
-    if(!SR){ toast('🎤 Dettatura non supportata da questo browser'); return; }
-    if(dictating){ try{rec&&rec.stop();}catch(e){} stopUI(); return; }
-    const base=field.value?field.value.replace(/\s+$/,'')+' ':'';
-    try{rec&&rec.abort();}catch(e){}
-    rec=new SR(); rec.lang='it-IT';
-    const isMobile=(typeof window.matchMedia==='function')&&window.matchMedia('(max-width:899px)').matches;
-    rec.continuous=!isMobile; rec.interimResults=true;
-    rec.onresult=function(e){
-      const finalParts=[]; let interim='';
-      for(let i=0;i<e.results.length;i++){ const seg=e.results[i][0].transcript;
-        if(e.results[i].isFinal){ const t=seg.trim(); const last=finalParts.length?finalParts[finalParts.length-1]:'';
-          if(last&&t.toLowerCase().indexOf(last.toLowerCase())===0) finalParts[finalParts.length-1]=t; else if(t) finalParts.push(t);
-        } else interim+=seg;
-      }
-      const finalTr=finalParts.join(' ');
-      field.value=(base+finalTr+(interim?(finalTr?' ':'')+interim:'')).replace(/\s{2,}/g,' ');
-      field.dispatchEvent(new Event('input'));
-    };
-    rec.onerror=function(){ stopUI(); };
-    rec.onend=function(){ stopUI(); };
-    try{ rec.start(); dictating=true; micBtn.classList.add('recording'); field.focus(); }catch(e){ stopUI(); }
-  });
-})();
-toggleComposer();   // stato iniziale: campo vuoto → freccia d'invio nascosta, solo il mic
+toggleComposer();   // stato iniziale: campo vuoto → freccia d'invio nascosta
 boot();
 </script>
 </body>
