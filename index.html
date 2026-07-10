@@ -201,7 +201,7 @@
 const LS_KEY='pmo_emu_state_v10';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.81 · 11/07';
+const APP_BUILD='v0.82 · 11/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -461,6 +461,10 @@ const CONCIERGE_FEE=5;           // € servizio "organizza la partita": maggior
 const FEE_LINE='💶 +'+CONCIERGE_FEE+' € sul totale della partita, da pagare in segreteria.';
 /* Numero WhatsApp Business del circolo (demo) — usato nei link wa.me d'invito. */
 const CLUB_WA='393510001234';
+/* Durata del "sta scrivendo…" (i tre puntini) TRA una card e l'altra nel flusso
+   invito: ≥3 s per dare tempo di leggere (preferenza utente). Ogni transizione
+   card→card usa questo delay in botSay. */
+const INVITE_TYPING_MS=3200;
 /* Rubrica finta del giocatore: simula il selettore contatti nativo di WhatsApp
    (📎 → Contatto), che qui non possiamo aprire davvero. Su WA reale il business NON
    legge la rubrica: è il giocatore a condividere un contatto e noi riceviamo nome+numero.
@@ -1586,7 +1590,9 @@ function sendInvites(rec, names){
   // COPY ONESTA (brief §5): il giallo = invito APERTO, non certo. Niente "inviato/
   // confermato" a monte: il posto si libera SOLO quando l'amico conferma.
   addSys('✉️ Invito aperto per '+names.join(', ')+' — il posto si libera solo alla conferma; ti avviso appena rispond'+(names.length>1?'ono':'e')+'.');
-  names.forEach((nm,i)=>scheduleInviteResponse(rec, nm, 4000+i*3000));
+  // Stagger ampio: ogni risposta ora impiega ~6-7s (puntini ≥3s tra le sue card) →
+  // le risposte multiple NON si sovrappongono (niente typing indicator doppi).
+  names.forEach((nm,i)=>scheduleInviteResponse(rec, nm, 2500+i*8000));
 }
 /* Programma la risposta SIMULATA dell'amico (riusata dal batch sendInvites e dal
    tap singolo "Invita" della nuova lista). Si annulla da sé se l'invito è già stato
@@ -1594,7 +1600,7 @@ function sendInvites(rec, names){
 function scheduleInviteResponse(rec, nm, delay){
   setTimeout(()=>{ const r=S.prenotazioni.find(x=>x.id===rec.id); if(!r || r.stato==='completo') return;   // le risposte arrivano finché la partita non è al completo
     if((r.invitati||[]).indexOf(nm)<0) return;   // invito già risolto/annullato
-    botSay(()=>inviteResponse(r,nm)); }, delay!=null?delay:4000);
+    botSay(()=>inviteResponse(r,nm), INVITE_TYPING_MS); }, delay!=null?delay:4000);   // puntini ≥3s prima della risposta
 }
 function inviteResponse(r,nm){
   const declina=/Paolo/.test(nm);                  // demo: Paolo rifiuta (❌ Non posso)
@@ -1604,15 +1610,15 @@ function inviteResponse(r,nm){
   // altro "sta scrivendo…" → si legge una cosa alla volta (feedback utente).
   if(declina){ if((r.declinati||[]).indexOf(nm)<0) r.declinati=(r.declinati||[]).concat(nm); save();   // resta ❌ nella lista
     addInHtml('❌ <b>'+esc(nm)+'</b> non può per '+esc(r.giorno)+' alle '+r.ora+'. Resta segnato <b>❌</b> nella lista; invita pure qualcun altro.');
-    botSay(()=>rosterActionButtons(r)); return; }
+    botSay(()=>rosterActionButtons(r), INVITE_TYPING_MS); return; }
   if(optOut){ const fr=S.friends.find(f=>f.nome.split(' ')[0]===nm); if(fr) fr.optOut=true; save();
     addInHtml('🔕 <b>'+esc(nm)+'</b> ha scelto di <b>non ricevere più inviti</b>. Rispettiamo la sua scelta: non gli manderemo altre richieste. Invita pure qualcun altro.');
-    botSay(()=>rosterActionButtons(r)); return; }
+    botSay(()=>rosterActionButtons(r), INVITE_TYPING_MS); return; }
   r.amici=(r.amici||[]).concat(nm); r.declinati=(r.declinati||[]).filter(x=>x!==nm); save();   // ha confermato → via l'eventuale ❌
-  if(rosterPosti(r)===0){ confirmBooking(r); return; }
+  if(rosterPosti(r)===0){ addInHtml('✅ <b>'+esc(nm)+'</b> ha confermato! Partita <b>al completo</b> 🎾',true); botSay(()=>confirmBooking(r), INVITE_TYPING_MS); return; }
   const tail=rosterPending(r)?(' · in attesa: '+r.invitati.join(', ')):(' · manca'+(rosterPosti(r)>1?'no':'')+' '+rosterPosti(r));
   addInHtml('✅ <b>'+esc(nm)+'</b> ha confermato! Ora siete <b>'+rosterFilled(r)+'/'+rosterTarget(r)+'</b>'+tail+'.',true);
-  botSay(()=>rosterActionButtons(r));
+  botSay(()=>rosterActionButtons(r), INVITE_TYPING_MS);
 }
 /* ============================================================================
    INVITO AMICI — modello COST-ZERO (prototipo UX, tutto SIMULATO client-side).
@@ -1691,7 +1697,8 @@ function openInviteFriendsList(rec){
       : (st.ic==='❌' ? 'Ti ha detto che non può · tocca per ri-invitarlo'
       : 'Ha chiesto di non ricevere inviti')));
     return {section:'I tuoi amici', ic:st.ic, label:f.nome, desc:desc,
-      action:()=>botSay(()=> st.can ? inviteFriend(r.id, f.id) : inviteInfoTap(r.id, f.id))};
+      // invitabile → inviteFriend gestisce da sé il "sta scrivendo…"; non-invitabile → botSay per la nota
+      action: st.can ? (()=>inviteFriend(r.id, f.id)) : (()=>botSay(()=>inviteInfoTap(r.id, f.id)))};
   });
   rows.push({section:'Altro', ic:'👥', label:'Gestisci i giocatori', desc:'Togli o revoca chi hai già invitato', action:()=>botSay(()=>addFlowLaunch('Apriamo il modulo — togli o revoca.', ()=>openAddPlayersFlow(r)))});
   rows.push({section:'Altro', ic:'➕', label:'Aggiungi un amico', desc:'Condividi un contatto per invitarlo', action:()=>botSay(()=>openAddFriendFlow({backTo:r.id, invite:true}))});
@@ -1706,7 +1713,7 @@ function inviteInfoTap(recId, fid){
   const st=inviteStateOf(r,f), nm=f.nome.split(' ')[0];
   if(st.ic==='❌'){
     addInHtml('❌ <b>'+esc(nm)+'</b> ti ha detto che <b>non può</b> quel giorno. Vuoi riprovare a invitarlo lo stesso?');
-    addQuick([{label:'✉️ Invita di nuovo',action:()=>botSay(()=>inviteFriend(recId, fid))},{label:'👥 Torna alla lista',action:()=>botSay(()=>openInviteFriendsList(r))}]);
+    addQuick([{label:'✉️ Invita di nuovo',action:()=>inviteFriend(recId, fid)},{label:'👥 Torna alla lista',action:()=>botSay(()=>openInviteFriendsList(r))}]);
     return;
   }
   const msg = st.ic==='🟡' ? '🟡 Hai già un <b>invito aperto</b> per '+esc(nm)+' — aspettiamo la sua risposta. Per revocarlo usa «Gestisci i giocatori».'
@@ -1728,17 +1735,17 @@ function inviteFriend(recId, fid){
   // Se lo stiamo RI-invitando dopo un ❌, togli il flag "non può".
   r.declinati=(r.declinati||[]).filter(x=>x!==nm);
   r.invitati=(r.invitati||[]).concat(nm); save();
-  // RITMO DI LETTURA: i messaggi arrivano UNO ALLA VOLTA, con l'indicatore "sta
-  // scrivendo…", il più recente sempre in basso — non tutti insieme (feedback utente).
+  // RITMO DI LETTURA: i messaggi arrivano UNO ALLA VOLTA, con "sta scrivendo…" (i tre
+  // puntini) ≥3s TRA una card e l'altra, il più recente sempre in basso (feedback utente).
   // 1) anteprima ricca del messaggio a X → 2) riga onesta "invito aperto" → poi la
-  // risposta simulata, ben distanziata. La card roster torna con la risposta.
+  // risposta simulata. La card roster torna con la risposta.
   botSay(()=>{
     addCard(inviteMessagePreviewHtml(r, f));               // 1) anteprima del messaggio a X
     botSay(()=>{
       addInHtml('✉️ <b>Invito aperto</b> per '+esc(nm)+' — appena risponde te lo dico. Il posto si libera solo alla conferma.', true);   // 2) riga onesta
-      scheduleInviteResponse(r, nm, 3600);                 // 3) risposta simulata (✅/❌/🔕), distanziata
-    }, 1000);
-  }, 700);
+      scheduleInviteResponse(r, nm, 1500);                 // 3) breve attesa "sta pensando", poi i puntini ≥3s della risposta
+    }, INVITE_TYPING_MS);
+  }, INVITE_TYPING_MS);
 }
 /* Concierge: la segreteria organizza la partita (+5 € sulla quota di chi prenota per primo, in segreteria). */
 function decideConcierge(draft){
