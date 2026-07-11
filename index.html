@@ -201,7 +201,7 @@
 const LS_KEY='pmo_emu_state_v10';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.85 · 11/07';
+const APP_BUILD='v0.86 · 11/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -237,7 +237,10 @@ function demoState(){
              email:'',                    // contatto FACOLTATIVO, self-editable dal giocatore (nome/telefono restano gestiti dalla segreteria)
              prefs:{ promemoria:true, novita:false },   // preferenze notifiche proattive (opt-out marketing = igiene Meta)
              genere:'M',   // dal dato anagrafica: serve alla domanda concierge "mista o omogenea" (F = donna)
-             borselloCent:2400, ultimoMov:'ricarica € 20 il 28/06' },
+             // Borsellino allineato al modello della NOSTRA app (record `wallet_balance`
+             // = {balance_cents, synced_at}): in Fase 2 l'emulatore leggerà QUEL record dal
+             // cloud, non Matchpoint. `borselloCent`=balance_cents · `borselloAggiornato`=synced_at.
+             borselloCent:2400, borselloAggiornato:'28/06 · 12:30' },
     /* Amici = SOCI del circolo (numero in anagrafica). Niente livello: dopo la
        rimozione delle partite aperte non filtra più nulla.
        MODELLO COST-ZERO: l'invito parte dal WhatsApp PERSONALE dell'organizzatore
@@ -659,7 +662,7 @@ function accountRows(){
   return [
     {section:'Account', ic:'👤', label:'Il mio profilo', desc:'Livello di gioco, autovalutazione e dati', text:'Il mio profilo'},
     {section:'Account', ic:'👥', label:'I miei amici', desc:'La tua rubrica di gioco', text:'I miei amici'},
-    {section:'Account', ic:'💶', label:'Il mio borsellino', desc:'Saldo e ultimo movimento', text:'Saldo borsellino'}
+    {section:'Account', ic:'💶', label:'Il mio borsellino', desc:'Saldo e ultimo aggiornamento', text:'Saldo borsellino'}
   ];
 }
 /* Voci del menu — IDENTICHE nel menu principale e in "Altro" (scelta utente).
@@ -1029,8 +1032,30 @@ function showJoinInvite(entry, back){
   if(back) addQuick([{label:'🔙 Torna a completare',action:back}]); else homeMenu();
 }
 
-/* ---------- Borsellino ----------------------------------------------------- */
-function doBorsellino(){ addInHtml('Il tuo borsellino: <b>'+euro(S.player.borselloCent)+'</b>.<br>Ultimo movimento: '+esc(S.player.ultimoMov)+'.'); homeMenu(); }
+/* ---------- Borsellino -----------------------------------------------------
+   Rispecchia il modello della NOSTRA app (scheda socio → record `wallet_balance`
+   = {balance_cents, synced_at}): in Fase 2 l'emulatore leggerà QUEL record dal
+   cloud, non Matchpoint. Perciò mostriamo SOLO saldo + ultimo aggiornamento
+   (l'app oggi non espone una lista movimenti). Lato giocatore = SOLA LETTURA:
+   la ricarica è operazione di segreteria (nell'app = "Correzione del saldo").
+   Fedeltà WA: enfasi solo in grassetto (niente font-size). */
+function doBorsellino(){
+  addInHtml('Ecco il tuo borsellino 💶');
+  const agg=S.player.borselloAggiornato||'di recente';   // = synced_at; fallback per stati LS vecchi
+  addCard('💶 <b>Saldo attuale: '+euro(S.player.borselloCent)+'</b>'
+    +'<br>🕐 Aggiornato il '+esc(agg)
+    +'<br>Lo usi per <b>pagare la partita</b> in segreteria. Per ricaricare, passa in <b>segreteria</b>.');
+  addQuick([{label:'ℹ️ Come funziona', action:()=>botSay(borselloComeFunziona)}, menuBtn()]);
+}
+/* Spiegazione borsellino: cos'è, come si usa, come si ricarica (segreteria). */
+function borselloComeFunziona(){
+  addInHtml('💶 <b>Il borsellino</b>'
+    +'<br>È il tuo <b>credito prepagato</b> al circolo.'
+    +'<br>🎾 Lo <b>usi</b> per pagare partite e servizi in segreteria: si scala dal saldo.'
+    +'<br>🕐 Il saldo si <b>aggiorna dal circolo</b>: qui lo vedi sempre allineato.'
+    +'<br>➕ Per <b>ricaricare</b>, passa in <b>segreteria</b> (contanti o carta).');
+  addQuick([{label:'💶 Il mio borsellino', action:()=>botSay(doBorsellino)}, menuBtn()]);
+}
 
 /* ---------- Aiuto / come si usa (contestuale + guida) ---------------------- */
 function doHelp(t){
