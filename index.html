@@ -201,7 +201,7 @@
 const LS_KEY='pmo_emu_state_v10';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.93 · 11/07';
+const APP_BUILD='v0.94 · 11/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -543,7 +543,7 @@ const COMMANDS=[
   {cmd:'/profilo',       desc:'Il mio profilo'},
   {cmd:'/amici',         desc:'I miei amici'},
   {cmd:'/borsellino',    desc:'Il mio borsellino'},
-  {cmd:'/segreteria',    desc:'Chat con la segreteria'},
+  {cmd:'/segreteria',    desc:'Info e assistenza'},
   {cmd:'/aiuto',         desc:'Come funziona / cosa posso fare'}
 ];
 const cmdPop=document.getElementById('cmdPop');
@@ -562,16 +562,16 @@ let _hintN=0;
 function maybeHint(){ _hintN++; if(_hintN%2===0) addSys('Suggerimento: digita "/" per i comandi in ogni momento'); }
 function showIceBreakers(){
   const wrap=el('ice');
-  /* 2 Ice Breakers (Meta: max 4, no emoji, solo 1° contatto) = le 2 porte della home:
-     · "PRENOTA CAMPO" → apre il menu (List "Ecco il menu"): da lì "Prenota un campo"
-       avvia il booking (niente più doppione ice-breaker↔voce di menu).
-     · "CHAT CON LA SEGRETERIA" → apre il canale conversazionale con la segreteria.
+  /* 2 Ice Breakers (Meta: max 4, no emoji, solo 1° contatto) = scorciatoie nella
+     CHAT UNICA (niente più modalità separate):
+     · "PRENOTA CAMPO" → avvia direttamente il booking (startBooking).
+     · "COSA POSSO FARE" → apre il menu con TUTTE le sezioni (discovery).
      Label in MAIUSCOLO (enfasi consentita, no colore): amo di primo contatto — la
      gente non legge, il maiuscolo è la call-to-action. Gli ice-breaker vivono SOLO
-     al 1° contatto (poi spariscono): la segreteria resta raggiungibile da menu e /segreteria. */
+     al 1° contatto (poi spariscono): tutto resta raggiungibile a testo libero o da /menu. */
   const items=[
-    {label:'PRENOTA CAMPO',          action:()=>{ addOut('Prenota un campo'); botSay(()=>showMenuAltro('Ecco il menu')); }},
-    {label:'CHAT CON LA SEGRETERIA', action:()=>botSay(()=>openSegreteria('home'))}
+    {label:'PRENOTA CAMPO',   action:()=>{ addOut('Prenota un campo'); botSay(()=>startBooking('')); }},
+    {label:'COSA POSSO FARE', action:()=>{ addOut('Cosa posso fare?'); botSay(()=>showMenu('Ecco cosa possiamo fare per te — scrivimi con parole tue oppure tocca una voce')); }}
   ];
   items.forEach(x=>{
     const b=document.createElement('button'); b.className='ice-b'; b.textContent=x.label;
@@ -598,11 +598,13 @@ function detectIntent(t){
   if(/\b(aiuto|help|guida)\b/.test(t)) return 'aiuto';
   if(/\bcome\s+(si\s+)?(funziona|fa|faccio|posso|uso|usa|prenot|invit|entr|apr|organizz|pag|dispon|complet)/.test(t)) return 'aiuto';
   if(/\bcosa\s+(puoi|sai|posso)\b/.test(t) || /a cosa serv|spiegami|spiega come|non ho capito|come si usa/.test(t)) return 'aiuto';
-  if(/quanto costa|quanto si paga|che prezz|come si paga|serve un anticipo|serve un acconto/.test(t)) return 'aiuto';
+  if(/quanto costa|quanto si paga|che prezz|\bprezz|listino|\btariff|come si paga|serve un anticipo|serve un acconto/.test(t)) return 'aiuto';
   if(/^altro\b|^altre\b|\baltre funzioni\b|\baltre opzioni\b|\baltro men[uù]\b|vedi il men[uù]/.test(t)) return 'altro';
   if(/profil|i miei dati|chi sono/.test(t)) return 'profilo';
   if(/amic|con cui gioc|lista giocator/.test(t)) return 'amici';
   if(/borsell|saldo|credito|monedero|portafogl/.test(t)) return 'borsellino';
+  if(/\borari?\b|\borario\b|a che ora|fino a che ora|siete apert|quando (aprite|apre|chiudete|chiude|siete apert|è apert)/.test(t)) return 'orari';
+  if(/\blivell|autovalut|che livello|il mio livello|quanto valgo|categoria di gioco/.test(t)) return 'livello';
   if(/disponibil|liber|che campi|quali campi|posti/.test(t)) return 'disponibilita';
   if(/cosa ho|mie prenotaz|le mie|prenotazioni/.test(t)) return 'mie';
   if(/annull|disdet|cancell/.test(t)) return 'annulla';
@@ -618,7 +620,6 @@ function sendUser(text,silent){
   if(!silent) addOut(text);
   const t=text.trim(); if(!t) return;
   if(convo.mode==='cancel') return botSay(()=>cancelStep(t));
-  if(convo.mode==='segreteria') return botSay(()=>segreteriaStep(t));
   botSay(()=>route(detectIntent(t),t));
 }
 function route(intent,t){
@@ -628,14 +629,16 @@ function route(intent,t){
     case 'profilo': doProfilo(); break;
     case 'amici': doAmici(); break;
     case 'borsellino': doBorsellino(); break;
+    case 'orari': doOrari(); break;
+    case 'livello': explainLevel(); break;
     case 'disponibilita': doDisponibilita(t); break;
     case 'mie': doMie(); break;
     case 'aiuto': doHelp(t); break;
     case 'annulla': startCancel(); break;
     case 'modifica': startModify(); break;
-    case 'segreteria': openSegreteria('cmd'); break;
+    case 'segreteria': doSegreteria(); break;
     case 'prenota': startBooking(t); break;
-    default: showMenu('Scusa, non abbiamo capito bene 🤔 Ecco cosa possiamo fare');
+    default: showMenu('Non sono sicuro di aver capito 🤔 — giro la richiesta alla segreteria; intanto ecco cosa posso fare');
   }
 }
 /* Menu "home" in coda ai flussi foglia = direttamente il List Message del menu
@@ -667,14 +670,14 @@ function accountRows(){
   ];
 }
 /* Voci del menu — IDENTICHE nel menu principale e in "Altro" (scelta utente).
-   Include "Chat con la segreteria" (Assistenza), così il canale umano resta
-   raggiungibile anche dopo il 1° contatto (gli ice-breaker vivono solo al boot). */
+   La riga "Assistenza" apre un ORIENTAMENTO (doSegreteria): non è più una chat
+   separata, è la stessa chat unica dove scrivi la tua richiesta o chiedi info. */
 function menuRows(){
   return [
     {section:'Prenotazioni', ic:'🎾', label:'Prenota un campo', desc:'Scegli giorno e orario', text:'Vorrei prenotare un campo'},
     {section:'Prenotazioni', ic:'📅', label:'Le mie prenotazioni', desc:'Vedi, modifica o disdici', text:'Cosa ho prenotato?'}
   ].concat(accountRows()).concat([
-    {section:'Assistenza', ic:'💬', label:'Chat con la segreteria', desc:'Domande e informazioni', action:()=>botSay(()=>openSegreteria('menu'))}
+    {section:'Assistenza', ic:'❓', label:'Come funziona / info', desc:'Orari, prezzi e come si usa', action:()=>botSay(()=>doSegreteria())}
   ]);
 }
 /* Menu principale = List Message fedele: UNA card (corpo=body) + UN pulsante
@@ -690,60 +693,25 @@ function showMenuAltro(body){
   addListMessage({ body: body||'Ecco cos\'altro possiamo fare per te', button:'Apri il menu', title:'Cosa possiamo fare', rows: menuRows() });
 }
 
-/* ---------- Chat con la segreteria ----------------------------------------
-   Canale conversazionale "botta e risposta" con la segreteria. Per scelta di
-   prodotto qui NON usiamo reply-button: è una CHAT LIBERA (il socio SCRIVE, noi
-   rispondiamo) — è il GANCIO dove in futuro risponderà l'assistente IA. OGGI =
-   mini-FAQ scriptata fondata sui contenuti GIÀ presenti nell'emulatore (orari,
-   prezzi, prenotare, completare la partita, borsellino, livello) + fallback onesto.
-   Il testo libero viene intercettato da sendUser quando convo.mode==='segreteria'
-   (stesso pattern della modalità 'cancel'). Si esce scrivendo «menu» (o /menu):
-   niente vicolo cieco. openSegreteria renderizza direttamente (niente botSay interno):
-   il "sta scrivendo…" arriva dal chiamante (route è già dentro botSay). */
-function openSegreteria(origin){
-  convo={mode:'segreteria',step:'chat',draft:{}};                    // mode sincrono: intercetta subito il testo libero
-  // Welcome = invito ESPLICITO a scrivere (niente pulsanti: è una chat libera).
+/* ---------- Segreteria: orientamento nella CHAT UNICA ----------------------
+   Non è più una "modalità" separata: c'è UNA sola chat e il router (detectIntent
+   → route) gestisce sia le info sia le azioni. doSegreteria() è solo una bolla di
+   ORIENTAMENTO ("scrivimi / dimmi cosa vuoi fare"), richiamata dagli agganci
+   "Contatta la segreteria" nei flussi, dalla voce menu e dal comando /segreteria.
+   Le vecchie FAQ sono confluite nel router: orari→doOrari, prezzi→doHelp,
+   borsellino→doBorsellino, livello→explainLevel, completare/invita→doHelp.
+   Qui NON si setta convo.mode: il messaggio successivo passa dal router normale. */
+function doSegreteria(){
   addInHtml('👋 Ciao '+esc(S.player.nome.split(' ')[0])+'! Sono la <b>segreteria</b> di Padel Village 💬'
-    +'<br>Scrivimi pure <b>qui sotto</b> la tua domanda, come in una normale chat: ti rispondo io.'
-    +'<br>Ad esempio: <b>orari</b>, <b>prezzi</b>, <b>come prenotare</b>, <b>completare la partita</b>, <b>borsellino</b> o <b>livello</b>.'
-    +'<br>Per tornare al menu scrivi «<b>menu</b>».');
+    +'<br>Scrivimi pure la tua domanda o dimmi cosa vuoi fare, come in una normale chat: ti rispondo io.'
+    +'<br>Info su <b>orari</b>, <b>prezzi</b>, <b>livello</b>… oppure posso farti <b>prenotare</b>, gestire le <b>prenotazioni</b>, il <b>borsellino</b> o <b>invitare gli amici</b>.'
+    +'<br>Scrivi «<b>cosa posso fare</b>» per vedere tutto.');
+  addQuick([{label:'📋 Cosa posso fare', action:()=>botSay(()=>showMenu('Ecco cosa possiamo fare per te — scrivimi con parole tue oppure tocca una voce'))}, menuBtn()]);
 }
-/* FAQ scriptata: keyword-match → bolla "segreteria" (nessun pulsante; chiude con un
-   invito a continuare a scrivere). Il fallback è il placeholder onesto (nessuna finta
-   intelligenza), gancio per l'IA futura. Risposte fondate sui contenuti dell'emulatore. */
-function segreteriaStep(t){
-  const s=(t||'').toLowerCase();
-  if(/^\/menu|torna al menu|torna indietro|^menu$|^esci$|^indietro$|ho finito|chiudi/.test(s)){ resetConvo(); return homeMenu(); }
-  if(/orari|apert|chius|fino a che ora|a che ora|quando (siete|è) apert/.test(s)){
-    addInHtml('🕐 <b>Orari del circolo</b><br>Campi tutti i giorni <b>9:00–23:00</b>.<br>Segreteria in sede <b>9:00–13:00</b> e <b>16:00–21:00</b>.<br>Ti serve altro? Scrivimi pure. 💬');
-    return;
-  }
-  if(/borsell|credito|saldo|ricaric/.test(s)){
-    addInHtml('💶 <b>Il borsellino</b> è il tuo <b>credito prepagato</b> al circolo: lo usi per pagare <b>partite e servizi</b> in segreteria (si scala dal saldo). Il saldo si <b>aggiorna dal circolo</b>. Per <b>ricaricare</b>, passa in segreteria (contanti o carta).<br>Vuoi sapere altro? 💬');
-    return;
-  }
-  if(/prezz|tariff|quanto costa|costo|listino|quanto si paga|pagament|paga/.test(s)){
-    addInHtml('💶 <b>Prezzi campo</b> — a giocatore, luce inclusa<br>· Fascia diurna <b>8€</b> (12:00–15:00 → <b>10€</b>)<br>· Slot serali <b>12–13€</b><br>· Weekend <b>8€</b><br>Si paga in circolo, niente anticipo in chat.<br>Vuoi sapere altro? 💬');
-    return;
-  }
-  if(/complet|invit|amic|manca.*gioc|trovare gioc|come riempio|serve.*gioc|organizz|riempire/.test(s)){
-    addInHtml('🎾 <b>Completare la partita</b><br>Prenoti il campo (confermato subito a tuo nome, gratis) e sei tu il <b>responsabile</b>. Poi da «Completa la partita» → <b>«Invito i miei amici»</b> inviti ogni amico con un tap: gli arriva un messaggio con <b>✅ SÌ / ❌ NO</b> e appena conferma <b>entra in partita</b>. Se non la completi, l\'<b>intero campo</b> resta a tuo carico.<br>Ti serve altro? 💬');
-    return;
-  }
-  if(/prenot|voglio giocare|come gioco|prenotare un campo/.test(s)){
-    addInHtml('🎾 Per <b>prenotare</b> apri il menu e scegli «Prenota un campo», oppure scrivimi <b>giorno e ora</b> e ti guido. Il campo è <b>confermato subito</b> a tuo nome, gratis e senza scadenza.<br>Dimmi pure quando vuoi giocare. 💬');
-    return;
-  }
-  if(/livell|categori|scala|autovalut/.test(s)){
-    addInHtml('🎾 <b>Il livello di gioco</b> usa la scala padel <b>1.0–7.0</b> (a passi di 0.5): principiante, base, intermedio, avanzato, agonista, professionista. Serve a formare partite <b>equilibrate</b>; puoi aggiornarlo con l\'<b>autovalutazione</b> dal tuo profilo.<br>Vuoi sapere altro? 💬');
-    return;
-  }
-  if(/^(ciao|salve|buongiorno|buonasera|ehi|hey)|grazie|perfetto|^ok\b/.test(s)){
-    addInHtml('😊 Sono qui! Scrivimi pure la tua domanda: <b>orari</b>, <b>prezzi</b>, <b>prenotare</b>, <b>completare la partita</b>, <b>borsellino</b> o <b>livello</b>.');
-    return;
-  }
-  // Fallback = placeholder onesto (gancio IA): non fingiamo di aver capito.
-  addInHtml('Grazie! 🙌 Giro la richiesta alla <b>segreteria</b>: ti rispondiamo qui a breve. Nel frattempo posso aiutarti su <b>orari</b>, <b>prezzi</b>, <b>prenotare</b>, <b>completare la partita</b>, <b>borsellino</b> o <b>livello</b> — scrivimi pure. 💬');
+/* Orari del circolo (grounded): mancava nel router principale, ora è un intent. */
+function doOrari(){
+  addInHtml('🕐 <b>Orari del circolo</b><br>Campi tutti i giorni <b>9:00–23:00</b>.<br>Segreteria in sede <b>9:00–13:00</b> e <b>16:00–21:00</b>.');
+  addQuick([{label:'🎾 Prenota un campo',text:'Vorrei prenotare un campo'}, menuBtn()]);
 }
 
 /* ---------- Profilo -------------------------------------------------------- */
@@ -1118,6 +1086,9 @@ function borselloComeFunziona(){
 /* ---------- Aiuto / come si usa (contestuale + guida) ---------------------- */
 function doHelp(t){
   t=(t||'').toLowerCase();
+  if(/borsell|saldo|credito|monedero|portafogl/.test(t)){ borselloComeFunziona(); return; }
+  if(/\blivell|autovalut|che livello|il mio livello/.test(t)){ explainLevel(); return; }
+  if(/orari|a che ora|siete apert/.test(t)){ doOrari(); return; }
   if(/invit|amic/.test(t)){
     addInHtml('<b>Invitare gli amici</b> 👥<br>Da “Completa la partita” → <b>“Invito i miei amici”</b> inviti ogni amico <b>con un tap</b>: gli parte un messaggio WhatsApp con <b>✅ SÌ / ❌ NO</b> e, <b>appena conferma, entra in partita</b>. Stato di ognuno a colpo d’occhio: <b>⚪ da invitare · 🟡 invito aperto · 🟢 in partita</b>. Puoi <b>revocare</b> un invito ancora in attesa da “Gestisci i giocatori”. Solo chi ha scelto <b>🔕 Non invitarmi più</b> non è invitabile. In partita solo giocatori iscritti — niente ospiti.');
     addQuick([{label:'🎾 Prenota un campo',text:'Vorrei prenotare un campo'}, menuBtn()]); return; }
@@ -1128,7 +1099,7 @@ function doHelp(t){
     addQuick([{label:'🎾 Prenota un campo',text:'Vorrei prenotare un campo'}, menuBtn()]); return; }
   if(/organizz/.test(t)){
     addInHtml('🎾 <b>Organizzare la partita</b><br>Prima <b>prenoti un campo</b>, poi completi la partita <b>invitando i tuoi amici</b> da «Completa la partita». Se ti serve una mano, <b>scrivi alla segreteria</b>.');
-    addQuick([{label:'💬 Chat con la segreteria',action:()=>botSay(()=>openSegreteria('help'))}, menuBtn()]); return; }
+    addQuick([{label:'💬 Scrivi alla segreteria',action:()=>botSay(()=>doSegreteria())}, menuBtn()]); return; }
   if(/prenot|campo|dispon|gioc/.test(t)){
     addInHtml('<b>Prenotare</b> 🎾<br>Scegli giorno e orario; prenoti il campo a tuo nome e completi la partita. Ti mostriamo sempre il prezzo.');
     addQuick([{label:'🎾 Prenota un campo',text:'Vorrei prenotare un campo'}, menuBtn()]); return; }
@@ -1180,7 +1151,7 @@ function showBookingDetail(id){
     action:()=>botSay(()=>addFlowLaunch('Apriamo il modulo — aggiungi, togli o invita i giocatori.', ()=>openAddPlayersFlow(p)))});
   if(incomplete){
     rows.push({section:'Gestisci', ic:'💬', label:'Contatta la segreteria',
-      action:()=>botSay(()=>openSegreteria('completa'))});
+      action:()=>botSay(()=>doSegreteria())});
   }
   rows.push({section:'Gestisci', ic:'✏️', label:'Data e orario', desc:'Sposta a un altro giorno o orario',
     action:()=>botSay(()=>addFlowLaunch('Riapriamo il modulo — scegli di nuovo giorno e orario.', ()=>openBookingFlow({editId:p.id, giorno:p.giorno, ora:p.ora})))});
@@ -1413,7 +1384,7 @@ function rosterActionButtons(rec, opts){
   // Le voci (con descrizione) vivono NELLA SCHERMATA che apre il pulsante (fedele a WA).
   const rows=[
     {section:'Completa la partita', ic:'👥', label:'Invito i miei amici', desc:rosterPending(rec)?('Invita in un tap · 🟡 '+rosterPending(rec)+' in attesa'):'Invita in un tap · ⚪ scegli con chi giocare', action:()=>botSay(()=>openInviteFriendsList(rec))},
-    {ic:'💬', label:'Contatta la segreteria', action:()=>botSay(()=>openSegreteria('completa'))},
+    {ic:'💬', label:'Contatta la segreteria', action:()=>botSay(()=>doSegreteria())},
     {section:'Oppure', ic:'✏️', label:'Modifica la prenotazione', desc:'Cambia giorno o orario', action:()=>botSay(()=>{ addFlowLaunch('Riapriamo il modulo — scegli di nuovo giorno e orario.', ()=>openBookingFlow({editId:rec.id, giorno:rec.giorno, ora:rec.ora})); })},
     menuBackRow('Oppure')
   ];
@@ -1678,7 +1649,7 @@ function openInviteFriendsList(rec){
     addQuick([{label:'👥 Gestisci i giocatori',action:()=>botSay(()=>addFlowLaunch('Apriamo il modulo — togli o sostituisci.', ()=>openAddPlayersFlow(r)))}, menuBtn()]); return; }
   if(!S.friends.length){
     addInHtml('Non hai ancora amici in rubrica. Aggiungine uno per invitarlo con un tap — oppure <b>scrivi alla segreteria</b> per una mano.');
-    addQuick([{label:'➕ Aggiungi amico',action:()=>openAddFriendFlow({backTo:r.id, invite:true})},{label:'💬 Contatta la segreteria',action:()=>botSay(()=>openSegreteria('invita'))}]);
+    addQuick([{label:'➕ Aggiungi amico',action:()=>openAddFriendFlow({backTo:r.id, invite:true})},{label:'💬 Contatta la segreteria',action:()=>botSay(()=>doSegreteria())}]);
     return;
   }
   const posti=rosterPosti(r);
