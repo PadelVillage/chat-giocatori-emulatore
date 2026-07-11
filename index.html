@@ -201,7 +201,7 @@
 const LS_KEY='pmo_emu_state_v10';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.87 · 11/07';
+const APP_BUILD='v0.88 · 11/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -508,7 +508,7 @@ function campoPrezzo(rec){ return (rec.prezzoTesta||0)*4; }
    disponibile). Fedele WA: enfasi solo grassetto — niente colore del testo. */
 function disclaimerLines(rec){
   const c=campoPrezzo(rec);
-  return '🎾 La organizzi <b>tu</b>: se resta incompleta, l\'intero campo'
+  return '⚠️ La organizzi <b>tu</b>: se resta incompleta, l\'intero campo'
     + (c ? ' (<b>'+c+'€</b>)' : '')
     + ' è a tuo carico.';
 }
@@ -1273,7 +1273,7 @@ function openBookingFlow(prefill){
           +'<br>🧑‍💼 '+FEE_LINE)
         : ('<br>💶 <b>'+pr.testa+' € a giocatore</b>'
           +'<br>👥 1/'+target+' (tu)'+(inviti?(' · ✉️ '+inviti+' invit'+(inviti>1?'i':'o')):'')
-          +'<br>🎾 La partita la organizzi <b>tu</b> — se resta incompleta, l\'intero campo (<b>'+pr.campo+'€</b>) è a tuo carico'));
+          +'<br>⚠️ La partita la organizzi <b>tu</b> — se resta incompleta, l\'intero campo (<b>'+pr.campo+'€</b>) è a tuo carico'));
   }
   openSheet(editId?'Modifica la prenotazione':'Prenota un campo', body, 'Scegli giorno e orario');
   renderDays(); renderSlots();
