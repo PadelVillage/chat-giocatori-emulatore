@@ -201,7 +201,7 @@
 const LS_KEY='pmo_emu_state_v10';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.82 · 11/07';
+const APP_BUILD='v0.83 · 11/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -464,7 +464,7 @@ const CLUB_WA='393510001234';
 /* Durata del "sta scrivendo…" (i tre puntini) TRA una card e l'altra nel flusso
    invito: ≥3 s per dare tempo di leggere (preferenza utente). Ogni transizione
    card→card usa questo delay in botSay. */
-const INVITE_TYPING_MS=3200;
+const INVITE_TYPING_MS=4000;
 /* Rubrica finta del giocatore: simula il selettore contatti nativo di WhatsApp
    (📎 → Contatto), che qui non possiamo aprire davvero. Su WA reale il business NON
    legge la rubrica: è il giocatore a condividere un contatto e noi riceviamo nome+numero.
