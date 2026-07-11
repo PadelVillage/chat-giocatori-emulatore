@@ -201,7 +201,7 @@
 const LS_KEY='pmo_emu_state_v10';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.86 · 11/07';
+const APP_BUILD='v0.87 · 11/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -504,13 +504,13 @@ function rosterPending(rec){ return (rec.invitati&&rec.invitati.length)||0; } //
 /* Costo dell'INTERO campo (prezzo a testa × 4): la posta in gioco della
    responsabilità di chi prenota. */
 function campoPrezzo(rec){ return (rec.prezzoTesta||0)*4; }
-/* Disclaimer di responsabilità (con cifra intero campo se disponibile). Fedele WA:
-   segmentato, emoji-àncora, enfasi solo grassetto — niente colore del testo. */
+/* Disclaimer di responsabilità: UNA riga, UNA emoji (con cifra intero campo se
+   disponibile). Fedele WA: enfasi solo grassetto — niente colore del testo. */
 function disclaimerLines(rec){
   const c=campoPrezzo(rec);
-  return '🙋 Da qui la partita è <b>tua</b>: sei tu a completarla.'
-    + (c ? '<br>💶 Se resta incompleta, l\'intero campo (<b>'+c+'€</b>) è a tuo carico.'
-         : '<br>💶 Se resta incompleta, l\'intero campo è a tuo carico.');
+  return '🎾 La organizzi <b>tu</b>: se resta incompleta, l\'intero campo'
+    + (c ? ' (<b>'+c+'€</b>)' : '')
+    + ' è a tuo carico.';
 }
 /* --- RESPONSABILITÀ DI CHI PRENOTA (modello economico) --------------------
    Niente più strike/blocco soft/"assenze ingiustificate": la conseguenza del
