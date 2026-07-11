@@ -201,7 +201,7 @@
 const LS_KEY='pmo_emu_state_v10';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.92 · 11/07';
+const APP_BUILD='v0.93 · 11/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -691,59 +691,59 @@ function showMenuAltro(body){
 }
 
 /* ---------- Chat con la segreteria ----------------------------------------
-   Canale conversazionale "botta e risposta" con la segreteria. OGGI = mini-FAQ
-   scriptata (orari, prezzi, completare la partita, prenotare) + placeholder onesto
-   sul resto: è il GANCIO dove in futuro risponderà l'assistente IA. Il testo libero
-   viene intercettato da sendUser quando convo.mode==='segreteria' (stesso pattern
-   della modalità 'cancel'). Si esce dai chip "↩️ Torna al menu" o scrivendo /menu.
-   openSegreteria renderizza direttamente (niente botSay interno): il "sta scrivendo…"
-   arriva dal chiamante (route è già dentro botSay; gli altri call-site wrappano). */
+   Canale conversazionale "botta e risposta" con la segreteria. Per scelta di
+   prodotto qui NON usiamo reply-button: è una CHAT LIBERA (il socio SCRIVE, noi
+   rispondiamo) — è il GANCIO dove in futuro risponderà l'assistente IA. OGGI =
+   mini-FAQ scriptata fondata sui contenuti GIÀ presenti nell'emulatore (orari,
+   prezzi, prenotare, completare la partita, borsellino, livello) + fallback onesto.
+   Il testo libero viene intercettato da sendUser quando convo.mode==='segreteria'
+   (stesso pattern della modalità 'cancel'). Si esce scrivendo «menu» (o /menu):
+   niente vicolo cieco. openSegreteria renderizza direttamente (niente botSay interno):
+   il "sta scrivendo…" arriva dal chiamante (route è già dentro botSay). */
 function openSegreteria(origin){
   convo={mode:'segreteria',step:'chat',draft:{}};                    // mode sincrono: intercetta subito il testo libero
-  addInHtml('👋 Ciao '+esc(S.player.nome.split(' ')[0])+'! Sono la <b>segreteria</b> di Padel Village. Scrivimi pure la tua richiesta — posso aiutarti su <b>orari</b>, <b>prezzi</b> o su <b>come completare la partita</b>.');
-  segreteriaChips();
+  // Welcome = invito ESPLICITO a scrivere (niente pulsanti: è una chat libera).
+  addInHtml('👋 Ciao '+esc(S.player.nome.split(' ')[0])+'! Sono la <b>segreteria</b> di Padel Village 💬'
+    +'<br>Scrivimi pure <b>qui sotto</b> la tua domanda, come in una normale chat: ti rispondo io.'
+    +'<br>Ad esempio: <b>orari</b>, <b>prezzi</b>, <b>come prenotare</b>, <b>completare la partita</b>, <b>borsellino</b> o <b>livello</b>.'
+    +'<br>Per tornare al menu scrivi «<b>menu</b>».');
 }
-/* 3 reply-button (fedele WA ≤3): 2 scorciatoie FAQ + l'uscita, ri-mostrati dopo
-   ogni risposta (i reply-button diventano inerti dopo il tap). */
-function segreteriaChips(){
-  addQuick([
-    {label:'🕐 Orari',  text:'orari'},
-    {label:'💶 Prezzi', text:'prezzi campo'},
-    {label:'↩️ Torna al menu', action:()=>{ resetConvo(); botSay(()=>homeMenu()); }}
-  ]);
-}
-/* FAQ scriptata: keyword-match → bolla "segreteria" + ri-mostra i chip. Il fallback
-   è il placeholder onesto (nessuna finta intelligenza), gancio per l'IA futura. */
+/* FAQ scriptata: keyword-match → bolla "segreteria" (nessun pulsante; chiude con un
+   invito a continuare a scrivere). Il fallback è il placeholder onesto (nessuna finta
+   intelligenza), gancio per l'IA futura. Risposte fondate sui contenuti dell'emulatore. */
 function segreteriaStep(t){
   const s=(t||'').toLowerCase();
-  if(/^\/menu|torna al menu|^menu$|^esci$|ho finito|chiudi/.test(s)){ resetConvo(); return homeMenu(); }
+  if(/^\/menu|torna al menu|torna indietro|^menu$|^esci$|^indietro$|ho finito|chiudi/.test(s)){ resetConvo(); return homeMenu(); }
   if(/orari|apert|chius|fino a che ora|a che ora|quando (siete|è) apert/.test(s)){
-    addInHtml('🕐 <b>Orari del circolo</b><br>Campi tutti i giorni <b>9:00–23:00</b>.<br>Segreteria in sede <b>9:00–13:00</b> e <b>16:00–21:00</b>.');
-    return segreteriaChips();
+    addInHtml('🕐 <b>Orari del circolo</b><br>Campi tutti i giorni <b>9:00–23:00</b>.<br>Segreteria in sede <b>9:00–13:00</b> e <b>16:00–21:00</b>.<br>Ti serve altro? Scrivimi pure. 💬');
+    return;
   }
-  if(/prezz|tariff|quanto costa|costo|listino|quanto si paga/.test(s)){
-    addInHtml('💶 <b>Prezzi campo</b> — a giocatore, luce inclusa<br>· Fascia diurna <b>8€</b> (12:00–15:00 → <b>10€</b>)<br>· Slot serali <b>12–13€</b><br>· Weekend <b>8€</b><br>Si paga in circolo, niente anticipo in chat.');
-    return segreteriaChips();
+  if(/borsell|credito|saldo|ricaric/.test(s)){
+    addInHtml('💶 <b>Il borsellino</b> è il tuo <b>credito prepagato</b> al circolo: lo usi per pagare <b>partite e servizi</b> in segreteria (si scala dal saldo). Il saldo si <b>aggiorna dal circolo</b>. Per <b>ricaricare</b>, passa in segreteria (contanti o carta).<br>Vuoi sapere altro? 💬');
+    return;
   }
-  if(/complet|manca.*gioc|trovare gioc|come riempio|serve.*gioc|organizz|amici in partita/.test(s)){
-    addInHtml('🎾 <b>Completare la partita</b><br>Prenoti il campo, poi <b>inviti i tuoi amici</b> con un tap da «Completa la partita»: appena confermano, entrano in partita. Se ti serve una mano, scrivimi pure qui.');
-    return segreteriaChips();
+  if(/prezz|tariff|quanto costa|costo|listino|quanto si paga|pagament|paga/.test(s)){
+    addInHtml('💶 <b>Prezzi campo</b> — a giocatore, luce inclusa<br>· Fascia diurna <b>8€</b> (12:00–15:00 → <b>10€</b>)<br>· Slot serali <b>12–13€</b><br>· Weekend <b>8€</b><br>Si paga in circolo, niente anticipo in chat.<br>Vuoi sapere altro? 💬');
+    return;
+  }
+  if(/complet|invit|amic|manca.*gioc|trovare gioc|come riempio|serve.*gioc|organizz|riempire/.test(s)){
+    addInHtml('🎾 <b>Completare la partita</b><br>Prenoti il campo (confermato subito a tuo nome, gratis) e sei tu il <b>responsabile</b>. Poi da «Completa la partita» → <b>«Invito i miei amici»</b> inviti ogni amico con un tap: gli arriva un messaggio con <b>✅ SÌ / ❌ NO</b> e appena conferma <b>entra in partita</b>. Se non la completi, l\'<b>intero campo</b> resta a tuo carico.<br>Ti serve altro? 💬');
+    return;
   }
   if(/prenot|voglio giocare|come gioco|prenotare un campo/.test(s)){
-    addInHtml('🎾 Per <b>prenotare</b> apri il menu e scegli «Prenota un campo», oppure dimmi giorno e ora.');
-    addQuick([
-      {label:'🎾 Prenota un campo', action:()=>{ resetConvo(); botSay(()=>startBooking('')); }},
-      {label:'↩️ Torna al menu',    action:()=>{ resetConvo(); botSay(()=>homeMenu()); }}
-    ]);
+    addInHtml('🎾 Per <b>prenotare</b> apri il menu e scegli «Prenota un campo», oppure scrivimi <b>giorno e ora</b> e ti guido. Il campo è <b>confermato subito</b> a tuo nome, gratis e senza scadenza.<br>Dimmi pure quando vuoi giocare. 💬');
+    return;
+  }
+  if(/livell|categori|scala|autovalut/.test(s)){
+    addInHtml('🎾 <b>Il livello di gioco</b> usa la scala padel <b>1.0–7.0</b> (a passi di 0.5): principiante, base, intermedio, avanzato, agonista, professionista. Serve a formare partite <b>equilibrate</b>; puoi aggiornarlo con l\'<b>autovalutazione</b> dal tuo profilo.<br>Vuoi sapere altro? 💬');
     return;
   }
   if(/^(ciao|salve|buongiorno|buonasera|ehi|hey)|grazie|perfetto|^ok\b/.test(s)){
-    addInHtml('😊 Sono qui! Scrivimi pure la tua richiesta.');
-    return segreteriaChips();
+    addInHtml('😊 Sono qui! Scrivimi pure la tua domanda: <b>orari</b>, <b>prezzi</b>, <b>prenotare</b>, <b>completare la partita</b>, <b>borsellino</b> o <b>livello</b>.');
+    return;
   }
   // Fallback = placeholder onesto (gancio IA): non fingiamo di aver capito.
-  addInHtml('Grazie! 🙌 Giro la richiesta alla <b>segreteria</b>: ti rispondiamo qui a breve. Nel frattempo posso aiutarti su <b>orari</b>, <b>prezzi</b> o su <b>come completare la partita</b>.');
-  segreteriaChips();
+  addInHtml('Grazie! 🙌 Giro la richiesta alla <b>segreteria</b>: ti rispondiamo qui a breve. Nel frattempo posso aiutarti su <b>orari</b>, <b>prezzi</b>, <b>prenotare</b>, <b>completare la partita</b>, <b>borsellino</b> o <b>livello</b> — scrivimi pure. 💬');
 }
 
 /* ---------- Profilo -------------------------------------------------------- */
