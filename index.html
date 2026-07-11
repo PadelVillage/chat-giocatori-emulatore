@@ -201,7 +201,7 @@
 const LS_KEY='pmo_emu_state_v10';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.88 · 11/07';
+const APP_BUILD='v0.89 · 11/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -508,7 +508,7 @@ function campoPrezzo(rec){ return (rec.prezzoTesta||0)*4; }
    disponibile). Fedele WA: enfasi solo grassetto — niente colore del testo. */
 function disclaimerLines(rec){
   const c=campoPrezzo(rec);
-  return '⚠️ La organizzi <b>tu</b>: se resta incompleta, l\'intero campo'
+  return '⚠️ La partita la organizzi <b>tu</b>: se resta incompleta, l\'intero campo'
     + (c ? ' (<b>'+c+'€</b>)' : '')
     + ' è a tuo carico.';
 }
@@ -1044,7 +1044,7 @@ function doBorsellino(){
   const agg=S.player.borselloAggiornato||'di recente';   // = synced_at; fallback per stati LS vecchi
   addCard('💶 <b>Saldo attuale: '+euro(S.player.borselloCent)+'</b>'
     +'<br>🕐 Aggiornato il '+esc(agg)
-    +'<br>Lo usi per <b>pagare la partita</b> in segreteria. Per ricaricare, passa in <b>segreteria</b>.');
+    +'<br>Lo usi per <b>pagare partite e servizi</b>; per ricaricarlo, passa in <b>segreteria</b>.');
   addQuick([{label:'ℹ️ Come funziona', action:()=>botSay(borselloComeFunziona)}, menuBtn()]);
 }
 /* Spiegazione borsellino: cos'è, come si usa, come si ricarica (segreteria). */
@@ -1214,7 +1214,7 @@ function openBookingFlow(prefill){
       botSay(()=>applyEdit(editId,d,st.ora,meta)); return; }
     if(concierge){ addOut('🧑‍💼 Organizzate voi · '+d.giorno+' · '+st.ora+" ("+dur+"')");
       botSay(()=>decideConcierge({giorno:d.giorno,dow:d.dow,ora:st.ora,tipo:st.tipo,durata:dur,players:players})); return; }
-    addOut('📋 '+d.giorno+' · '+st.ora+' · in '+players+" ("+dur+"') · "+pr.testa+'€/giocatore'+(names.length?(' · con '+names.join(', ')):''));
+    addOut('📋 '+d.giorno+' · '+st.ora+' · partita '+dur+"' · "+pr.testa+'€/giocatore'+(names.length?(' · con '+names.join(', ')):''));
     botSay(()=>decideAndPresent({giorno:d.giorno,dow:d.dow,ora:st.ora,tipo:st.tipo,durata:dur,amici:st.amici.slice(),players:players}));
   };
   body.appendChild(foot);
@@ -1273,7 +1273,7 @@ function openBookingFlow(prefill){
           +'<br>🧑‍💼 '+FEE_LINE)
         : ('<br>💶 <b>'+pr.testa+' € a giocatore</b>'
           +'<br>👥 1/'+target+' (tu)'+(inviti?(' · ✉️ '+inviti+' invit'+(inviti>1?'i':'o')):'')
-          +'<br>⚠️ La partita la organizzi <b>tu</b> — se resta incompleta, l\'intero campo (<b>'+pr.campo+'€</b>) è a tuo carico'));
+          +'<br>⚠️ La partita la organizzi <b>tu</b> — se resta incompleta, l\'intero campo (<b>'+pr.campo+'€</b>) è a tuo carico.'));
   }
   openSheet(editId?'Modifica la prenotazione':'Prenota un campo', body, 'Scegli giorno e orario');
   renderDays(); renderSlots();
@@ -1853,7 +1853,7 @@ function boot(){
   botSay(()=>{
     // Riconoscimento del numero = IMPLICITO nel saluto per nome (su WhatsApp il
     // business non mostra una banda: sa già chi gli scrive). Niente più banda fissa.
-    addInHtml('Ciao '+esc(S.player.nome.split(' ')[0])+', hai contattato la segreteria di Padel Village. Come possiamo aiutarti? Tocca una voce qui sotto o scrivici pure.');
+    addInHtml('Ciao '+esc(S.player.nome.split(' ')[0])+'! 🎾 Hai contattato la segreteria di Padel Village. Come possiamo aiutarti? Tocca un pulsante qui sotto o scrivici pure.');
     showIceBreakers();
   },500);
 }
