@@ -201,7 +201,7 @@
 const LS_KEY='pmo_emu_state_v10';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.91 · 11/07';
+const APP_BUILD='v0.92 · 11/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -674,7 +674,7 @@ function menuRows(){
     {section:'Prenotazioni', ic:'🎾', label:'Prenota un campo', desc:'Scegli giorno e orario', text:'Vorrei prenotare un campo'},
     {section:'Prenotazioni', ic:'📅', label:'Le mie prenotazioni', desc:'Vedi, modifica o disdici', text:'Cosa ho prenotato?'}
   ].concat(accountRows()).concat([
-    {section:'Assistenza', ic:'💬', label:'Chat con la segreteria', desc:'Scrivici, ti aiutiamo noi', action:()=>botSay(()=>openSegreteria('menu'))}
+    {section:'Assistenza', ic:'💬', label:'Chat con la segreteria', desc:'Domande e informazioni', action:()=>botSay(()=>openSegreteria('menu'))}
   ]);
 }
 /* Menu principale = List Message fedele: UNA card (corpo=body) + UN pulsante
