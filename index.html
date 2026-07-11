@@ -201,7 +201,7 @@
 const LS_KEY='pmo_emu_state_v10';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.94 · 11/07';
+const APP_BUILD='v0.95 · 11/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -638,7 +638,7 @@ function route(intent,t){
     case 'modifica': startModify(); break;
     case 'segreteria': doSegreteria(); break;
     case 'prenota': startBooking(t); break;
-    default: showMenu('Non sono sicuro di aver capito 🤔 — giro la richiesta alla segreteria; intanto ecco cosa posso fare');
+    default: doUnknown(t);
   }
 }
 /* Menu "home" in coda ai flussi foglia = direttamente il List Message del menu
@@ -708,9 +708,20 @@ function doSegreteria(){
     +'<br>Scrivi «<b>cosa posso fare</b>» per vedere tutto.');
   addQuick([{label:'📋 Cosa posso fare', action:()=>botSay(()=>showMenu('Ecco cosa possiamo fare per te — scrivimi con parole tue oppure tocca una voce'))}, menuBtn()]);
 }
-/* Orari del circolo (grounded): mancava nel router principale, ora è un intent. */
+/* Fallback ONESTO: quando non riconosco l'intento NON dico «non ho capito» (spesso
+   l'utente si è spiegato benissimo, sono io a non avere l'info) e NON lo sbatto nel
+   menu. Riconosco che è una domanda da segreteria e resto disponibile su ciò che so. */
+function doUnknown(t){
+  addInHtml('Bella domanda! 🙌 Su questo ti risponde la <b>segreteria</b> a breve.'
+    +'<br>Intanto posso aiutarti io con <b>prenotazioni</b>, <b>orari</b>, <b>prezzi</b>, <b>borsellino</b> o <b>livello</b> — scrivimi pure.');
+}
+/* Orari del circolo (grounded sui listini di prenotazione): serali SOLO nei feriali
+   (ultimo slot 21:00), weekend fino alle 18:00 → così l'info NON contraddice il modulo. */
 function doOrari(){
-  addInHtml('🕐 <b>Orari del circolo</b><br>Campi tutti i giorni <b>9:00–23:00</b>.<br>Segreteria in sede <b>9:00–13:00</b> e <b>16:00–21:00</b>.');
+  addInHtml('🕐 <b>Orari del circolo</b>'
+    +'<br>Campi <b>lun–ven</b>: 9:00–22:30 (ultimo slot alle <b>21:00</b>).'
+    +'<br>Campi <b>sab e dom</b>: 9:00–19:30 (ultimo slot alle <b>18:00</b>).'
+    +'<br>Segreteria in sede <b>9:00–13:00</b> e <b>16:00–21:00</b>.');
   addQuick([{label:'🎾 Prenota un campo',text:'Vorrei prenotare un campo'}, menuBtn()]);
 }
 
@@ -1269,10 +1280,12 @@ function openBookingFlow(prefill){
       return;
     }
     const target=pr.giocatori, inviti=st.amici.length;
+    // Riepilogo: cenno LEGGERO alla responsabilità (senza la cifra intera). La riga
+    // forte «intero campo XX€ a tuo carico» la diamo UNA volta, alla conferma.
     sum.innerHTML='📅 <b>'+esc(d.giorno)+' · '+st.ora+'–'+addMin(st.ora,dur)+'</b>'
       +'<br>💶 <b>'+pr.testa+' € a giocatore</b>'
       +'<br>👥 1/'+target+' (tu)'+(inviti?(' · ✉️ '+inviti+' invit'+(inviti>1?'i':'o')):'')
-      +'<br>⚠️ La partita la organizzi <b>tu</b> — se resta incompleta, l\'intero campo (<b>'+pr.campo+'€</b>) è a tuo carico.';
+      +'<br>👉 <b>Campo tuo</b>: lo completi invitando gli amici.';
   }
   openSheet(editId?'Modifica la prenotazione':'Prenota un campo', body, 'Scegli giorno e orario');
   renderDays(); renderSlots();
@@ -1312,9 +1325,20 @@ function decideAndPresent(draft){
   const off=offsetForGiorno(draft.giorno);
   const draftMeta = off!=null ? slotMetaFor(off,draft.dow,draft.ora,draft.durata,draft.players) : null;
   if(!draftMeta || draftMeta.status==='busy'){
-    const msg = draftMeta
-      ? 'A quell\'ora è tutto occupato. Ti apriamo il modulo con gli orari disponibili.'
-      : 'Quell\'orario non è disponibile. Ti apriamo il modulo con gli orari liberi.';
+    // NON partire dal "no" secco: confermo il giorno che ho capito, spiego perché
+    // quell'ora non va, e propongo lo slot LIBERO più vicino (fiducia > frustrazione).
+    const free=(off!=null?daySlotsFlat(off,draft.dow,draft.durata,draft.players):[]).filter(s=>s.status!=='busy');
+    const dayLbl=esc(draft.giorno);
+    let msg;
+    if(!free.length){
+      msg='Per '+dayLbl+' non trovo campi liberi 😕 — ti apro il modulo per scegliere un altro giorno.';
+    } else {
+      const toMin=s=>{const p=s.split(':');return (+p[0])*60+(+p[1]);};
+      const want=toMin(draft.ora);
+      const near=free.reduce((a,b)=>Math.abs(toMin(b.ora)-want)<Math.abs(toMin(a.ora)-want)?b:a, free[0]);
+      const why=draftMeta ? ('alle '+draft.ora+' è già tutto occupato') : ('alle '+draft.ora+' non ci sono campi');
+      msg='Per '+dayLbl+' 👍 — '+why+'. Il più vicino che ho libero è alle <b>'+near.ora+'</b> ('+near.prezzo+'€ a giocatore). Ti apro il modulo per confermarlo o scegliere un altro orario.';
+    }
     addFlowLaunch(msg, ()=>openBookingFlow({giorno:draft.giorno,durata:draft.durata,amici:draft.amici}));
     return;
   }
@@ -1376,11 +1400,15 @@ function rosterActionButtons(rec, opts){
   // con la cifra dell'intero campo. Data NON ripetuta (è nella ricevuta). Il pulsante
   // DICE l'azione ("Completa la partita") — eccezione voluta a "☰ Apri".
   const amo = posti>1 ? ('MANCANO '+posti+' GIOCATORI') : (posti===1 ? 'MANCA 1 GIOCATORE' : 'PARTITA AL COMPLETO');
+  // Il disclaimer FORTE «intero campo XX€ a tuo carico» solo alla PRIMA comparsa
+  // (opts.receipt = conferma/aggiornamento prenotazione). Sui re-show dopo un invito
+  // NON lo ripetiamo: un cenno leggero e incoraggiante (evita l'effetto rimprovero).
+  const firstShow = !!(opts && opts.receipt);
   const body='🎾 <b>'+amo+'</b>'
     +'<br>🕒 Si gioca '+esc(rec.giorno)+' alle '+rec.ora
     +'<br>👥 Sei in <b>'+rosterFilled(rec)+'/'+rosterTarget(rec)+'</b>'
     +(rosterPending(rec)?('<br>🟡 In attesa: '+rec.invitati.join(', ')):'')
-    +(posti>0 ? '<br>'+disclaimerLines(rec) : '');
+    +(posti>0 ? '<br>'+(firstShow ? disclaimerLines(rec) : '👉 <b>Il campo è già tuo</b> — completa quando vuoi.') : '');
   // Le voci (con descrizione) vivono NELLA SCHERMATA che apre il pulsante (fedele a WA).
   const rows=[
     {section:'Completa la partita', ic:'👥', label:'Invito i miei amici', desc:rosterPending(rec)?('Invita in un tap · 🟡 '+rosterPending(rec)+' in attesa'):'Invita in un tap · ⚪ scegli con chi giocare', action:()=>botSay(()=>openInviteFriendsList(rec))},
@@ -1631,14 +1659,18 @@ function buildInviteMessage(rec, friend){
    Il grigio (--muted) è testo secondario, NON un segnale di stato (il tri-stato = emoji). */
 function inviteMessagePreviewHtml(rec, friend){
   const m=buildInviteMessage(rec, friend);
-  return '📲 <b>Anteprima — messaggio a '+esc(m.fn)+'</b>'
+  // Mostriamo il messaggio COME LO VEDE l'amico: SÌ/NO come "link" puliti da toccare,
+  // NON le URL wa.me grezze/codificate (%20, id, numero) — sembravano roba tecnica.
+  return '📲 <b>Anteprima — il messaggio che riceve '+esc(m.fn)+'</b>'
     +'<div style="margin-top:6px;padding:8px 10px;border-radius:8px;background:var(--wa-bg);border:1px solid #e2d9cf">'
     +'Ciao '+esc(m.fn)+'! <b>'+esc(m.org)+'</b> ti invita a padel:<br>'
-    +'📅 '+esc(rec.giorno)+' alle '+rec.ora+', Campo '+rec.campo+'.<br>'
-    +'<span style="word-break:break-all">✅ <b>SÌ, partecipo</b> → <span style="color:var(--muted)">'+esc(m.yes)+'</span></span><br>'
-    +'<span style="word-break:break-all">❌ <b>NO, non posso</b> → <span style="color:var(--muted)">'+esc(m.no)+'</span></span>'
+    +'📅 '+esc(rec.giorno)+' alle '+rec.ora+', Campo '+rec.campo+'.'
+    +'<div style="margin-top:6px;line-height:1.9">'
+    +'<span style="color:#128C7E;text-decoration:underline">✅ <b>SÌ, partecipo</b></span><br>'
+    +'<span style="color:#128C7E;text-decoration:underline">❌ <b>NO, non posso</b></span>'
     +'</div>'
-    +'<div style="margin-top:6px;font-size:12px;color:var(--muted)">🔗 Link simulati — nella demo nessuna chat si apre davvero.</div>';
+    +'</div>'
+    +'<div style="margin-top:6px;font-size:12px;color:var(--muted)">🔗 Con un tap ci fa sapere se viene · demo: nessun messaggio parte davvero.</div>';
 }
 /* NUOVA lista "Invita i miei amici" (List Message ≤10 righe): un amico per riga col
    suo tri-stato; tap su un amico ⚪ = lo invita (un tap per amico, fedele a WA).
