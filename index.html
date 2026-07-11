@@ -201,7 +201,7 @@
 const LS_KEY='pmo_emu_state_v10';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.90 · 11/07';
+const APP_BUILD='v0.91 · 11/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -1179,7 +1179,7 @@ function showBookingDetail(id){
   rows.push({section:'Gestisci', ic:'👥', label:'Giocatori', desc:playersDesc(p),
     action:()=>botSay(()=>addFlowLaunch('Apriamo il modulo — aggiungi, togli o invita i giocatori.', ()=>openAddPlayersFlow(p)))});
   if(incomplete){
-    rows.push({section:'Gestisci', ic:'💬', label:'Scrivi alla segreteria', desc:'Ti aiutiamo a completare la partita',
+    rows.push({section:'Gestisci', ic:'💬', label:'Contatta la segreteria',
       action:()=>botSay(()=>openSegreteria('completa'))});
   }
   rows.push({section:'Gestisci', ic:'✏️', label:'Data e orario', desc:'Sposta a un altro giorno o orario',
@@ -1413,7 +1413,7 @@ function rosterActionButtons(rec, opts){
   // Le voci (con descrizione) vivono NELLA SCHERMATA che apre il pulsante (fedele a WA).
   const rows=[
     {section:'Completa la partita', ic:'👥', label:'Invito i miei amici', desc:rosterPending(rec)?('Invita in un tap · 🟡 '+rosterPending(rec)+' in attesa'):'Invita in un tap · ⚪ scegli con chi giocare', action:()=>botSay(()=>openInviteFriendsList(rec))},
-    {ic:'💬', label:'Scrivi alla segreteria', desc:'Ti aiutiamo a completare la partita', action:()=>botSay(()=>openSegreteria('completa'))},
+    {ic:'💬', label:'Contatta la segreteria', action:()=>botSay(()=>openSegreteria('completa'))},
     {section:'Oppure', ic:'✏️', label:'Modifica la prenotazione', desc:'Cambia giorno o orario', action:()=>botSay(()=>{ addFlowLaunch('Riapriamo il modulo — scegli di nuovo giorno e orario.', ()=>openBookingFlow({editId:rec.id, giorno:rec.giorno, ora:rec.ora})); })},
     menuBackRow('Oppure')
   ];
@@ -1678,7 +1678,7 @@ function openInviteFriendsList(rec){
     addQuick([{label:'👥 Gestisci i giocatori',action:()=>botSay(()=>addFlowLaunch('Apriamo il modulo — togli o sostituisci.', ()=>openAddPlayersFlow(r)))}, menuBtn()]); return; }
   if(!S.friends.length){
     addInHtml('Non hai ancora amici in rubrica. Aggiungine uno per invitarlo con un tap — oppure <b>scrivi alla segreteria</b> per una mano.');
-    addQuick([{label:'➕ Aggiungi amico',action:()=>openAddFriendFlow({backTo:r.id, invite:true})},{label:'💬 Scrivi alla segreteria',action:()=>botSay(()=>openSegreteria('invita'))}]);
+    addQuick([{label:'➕ Aggiungi amico',action:()=>openAddFriendFlow({backTo:r.id, invite:true})},{label:'💬 Contatta la segreteria',action:()=>botSay(()=>openSegreteria('invita'))}]);
     return;
   }
   const posti=rosterPosti(r);
