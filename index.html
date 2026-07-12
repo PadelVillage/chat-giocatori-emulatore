@@ -201,7 +201,7 @@
 const LS_KEY='pmo_emu_state_v10';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.95 · 11/07';
+const APP_BUILD='v0.96 · 12/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -501,10 +501,13 @@ function campoPrezzo(rec){ return (rec.prezzoTesta||0)*4; }
 /* Disclaimer di responsabilità: UNA riga, UNA emoji (con cifra intero campo se
    disponibile). Fedele WA: enfasi solo grassetto — niente colore del testo. */
 function disclaimerLines(rec){
-  const c=campoPrezzo(rec);
-  return '⚠️ La partita la organizzi <b>tu</b>: se resta incompleta, l\'intero campo'
-    + (c ? ' (<b>'+c+'€</b>)' : '')
-    + ' è a tuo carico.';
+  const c=campoPrezzo(rec);       // intero campo
+  const t=rec.prezzoTesta;        // a testa
+  // Responsabilità dei 32€ detta UNA volta, come INFO DI PREZZO + incentivo (completa
+  // → costa meno a testa), NON come minaccia/colpa. Via «la organizzi TU / a tuo
+  // carico» (paura + solitudine): il momento post-prenotazione deve dare sollievo.
+  if(!c) return '💡 Appena siete in 4, ognuno paga solo la sua parte.';
+  return '💡 Finché siete in meno di 4 il campo conta intero (<b>'+c+'€</b>); appena siete in 4 sono <b>'+t+'€</b> a testa.';
 }
 /* --- RESPONSABILITÀ DI CHI PRENOTA (modello economico) --------------------
    Niente più strike/blocco soft/"assenze ingiustificate": la conseguenza del
@@ -517,14 +520,24 @@ function availSlots(off,dow){ let c=0; daySlotGroups(off,dow,90).forEach(g=>g.sl
 const GIORNI=['domenica','lunedì','martedì','mercoledì','giovedì','venerdì','sabato'];
 function parseWhen(txt){
   const t=txt.toLowerCase(); const base=new Date(); let target=null;
-  if(/\boggi\b/.test(t)) target=new Date(base);
+  // Fascia oraria del giorno (per l'eco + la pre-selezione del modulo): mattina/pomeriggio/sera.
+  // «stasera/stanotte»=sera · «stamattina/stamane»=mattina · «(oggi/domani) pomeriggio».
+  let fascia=null;
+  if(/\bstaser|stanotte|\bsera\b/.test(t)) fascia='sera';
+  else if(/stamattin|stamane|\bmattin/.test(t)) fascia='mattina';
+  else if(/pomerigg/.test(t)) fascia='pomeriggio';
+  // «stasera/stamattina/stamane/stanotte» implicano OGGI (oltre a «oggi»).
+  if(/\boggi\b|staser|stamattin|stamane|stanotte/.test(t)) target=new Date(base);
   else if(/\bdomani\b/.test(t)){ target=new Date(base); target.setDate(base.getDate()+1); }
   else if(/\bdopodomani\b/.test(t)){ target=new Date(base); target.setDate(base.getDate()+2); }
   else for(let i=0;i<7;i++){ if(t.includes(GIORNI[i])){ target=new Date(base); let diff=(i-base.getDay()+7)%7; if(diff===0) diff=7; target.setDate(base.getDate()+diff); break; } }
   let ora=null; const m=t.match(/(?:alle|ore)?\s*\b([01]?\d|2[0-3])(?:[:.](\d{2}))?\b/);
   if(m){ ora=m[1].padStart(2,'0')+':'+(m[2]||'00'); }
-  return { date:!!target, giorno: target?lbl(target):null, dow: target?target.getDay():null, ora };
+  return { date:!!target, giorno: target?lbl(target):null, dow: target?target.getDay():null, ora, fascia };
 }
+/* Etichetta discorsiva della fascia (per l'eco) e range orario (per la pre-selezione). */
+function fasciaLabel(f){ return f==='sera'?'in serata':f==='mattina'?'in mattinata':f==='pomeriggio'?'nel pomeriggio':''; }
+function fasciaRange(f){ return f==='mattina'?[0,13]:f==='pomeriggio'?[13,18]:f==='sera'?[18,24]:[0,24]; }
 function parseTipo(txt){ const t=txt.toLowerCase(); if(t.includes('lezione'))return 'Lezione'; if(t.includes('partita'))return 'Partita'; return null; }
 function inRegola(){ return S.player.socio && S.player.inRegola && S.player.borselloCent>=0; }
 function isCritica(dow,ora){ if(dow===0){ const h=parseInt((ora||'12').split(':')[0],10); if(h<13) return true; } return false; }
@@ -560,26 +573,10 @@ function hideCmdPop(){ cmdPop.classList.remove('show'); }
 /* Promemoria "/" ripetuto ogni tanto, a fine azione (non a ogni azione) */
 let _hintN=0;
 function maybeHint(){ _hintN++; if(_hintN%2===0) addSys('Suggerimento: digita "/" per i comandi in ogni momento'); }
-function showIceBreakers(){
-  const wrap=el('ice');
-  /* 2 Ice Breakers (Meta: max 4, no emoji, solo 1° contatto) = scorciatoie nella
-     CHAT UNICA (niente più modalità separate):
-     · "PRENOTA CAMPO" → avvia direttamente il booking (startBooking).
-     · "COSA POSSO FARE" → apre il menu con TUTTE le sezioni (discovery).
-     Label in MAIUSCOLO (enfasi consentita, no colore): amo di primo contatto — la
-     gente non legge, il maiuscolo è la call-to-action. Gli ice-breaker vivono SOLO
-     al 1° contatto (poi spariscono): tutto resta raggiungibile a testo libero o da /menu. */
-  const items=[
-    {label:'PRENOTA CAMPO',   action:()=>{ addOut('Prenota un campo'); botSay(()=>startBooking('')); }},
-    {label:'COSA POSSO FARE', action:()=>{ addOut('Cosa posso fare?'); botSay(()=>showMenu('Ecco cosa possiamo fare per te — scrivimi con parole tue oppure tocca una voce')); }}
-  ];
-  items.forEach(x=>{
-    const b=document.createElement('button'); b.className='ice-b'; b.textContent=x.label;
-    b.onclick=()=>{ wrap.remove(); x.action(); };
-    wrap.appendChild(b);
-  });
-  chat.appendChild(wrap); scrollDown();
-}
+/* Ice-breaker iniziali RIMOSSI (v0.96): niente più bottoni "PRENOTA CAMPO"/"COSA
+   POSSO FARE" all'apertura. Non tutti entrano per prenotare — il messaggio iniziale
+   (vedi boot) accoglie a parole e lascia scrivere liberamente. Tutto resta
+   raggiungibile a testo libero o da /menu. */
 
 /* ============================ INTENT ROUTING =============================== */
 function detectIntent(t){
@@ -599,6 +596,11 @@ function detectIntent(t){
   if(/\bcome\s+(si\s+)?(funziona|fa|faccio|posso|uso|usa|prenot|invit|entr|apr|organizz|pag|dispon|complet)/.test(t)) return 'aiuto';
   if(/\bcosa\s+(puoi|sai|posso)\b/.test(t) || /a cosa serv|spiegami|spiega come|non ho capito|come si usa/.test(t)) return 'aiuto';
   if(/quanto costa|quanto si paga|che prezz|\bprezz|listino|\btariff|come si paga|serve un anticipo|serve un acconto/.test(t)) return 'aiuto';
+  // COMPLETA/INVITA = il verbo bandiera («tu pensa a giocare — il quarto lo troviamo noi»):
+  // «invita Giulia», «completa la partita», «mi mancano giocatori», «chi ho invitato»,
+  // «gestisci i giocatori», «togli Luca». DOPO 'aiuto' (così «come invito un amico?» resta
+  // aiuto) e PRIMA di 'amici' (così «invita i miei amici» apre gli inviti, non la rubrica).
+  if(/\b(invit|complet(a|are|iamo|ala|arla)|manca(no)?\s+(un\s+|dei\s+|degli\s+|di\s+)?giocator|trov(a|are|ami|iamo|atemi).*(quarto|giocator)|chi\s+ho\s+invitat|gestisci\s+(i\s+)?giocator|togli\s+\w)/.test(t)) return 'completa';
   if(/^altro\b|^altre\b|\baltre funzioni\b|\baltre opzioni\b|\baltro men[uù]\b|vedi il men[uù]/.test(t)) return 'altro';
   if(/profil|i miei dati|chi sono/.test(t)) return 'profilo';
   if(/amic|con cui gioc|lista giocator/.test(t)) return 'amici';
@@ -637,6 +639,7 @@ function route(intent,t){
     case 'annulla': startCancel(); break;
     case 'modifica': startModify(); break;
     case 'segreteria': doSegreteria(); break;
+    case 'completa': doCompleta(t); break;
     case 'prenota': startBooking(t); break;
     default: doUnknown(t);
   }
@@ -714,6 +717,56 @@ function doSegreteria(){
 function doUnknown(t){
   addInHtml('Bella domanda! 🙌 Su questo ti risponde la <b>segreteria</b> a breve.'
     +'<br>Intanto posso aiutarti io con <b>prenotazioni</b>, <b>orari</b>, <b>prezzi</b>, <b>borsellino</b> o <b>livello</b> — scrivimi pure.');
+}
+/* Fix #2 — «invita X» / «completa» capiti A PAROLE (il verbo bandiera dell'anima).
+   PARITÀ: l'azione a voce fa ESATTAMENTE ciò che fa il pulsante «Completa la partita».
+   Trova la partita da completare (la più recente incompleta) e:
+   · se cito un amico invitabile → lo invito subito (inviteFriend, con eco «Ok, invito X!»);
+   · se cito un amico non invitabile (🟡/🟢/❌/🔕) → spiego lo stato (inviteInfoTap);
+   · «togli/gestisci» → apro il modulo di gestione (NON un invito);
+   · nessun nome → apro la lista inviti (identico al tap «Invito i miei amici»).
+   Nessuna partita aperta → messaggio onesto + gancio a «prenota». */
+function doCompleta(t){
+  const rec=S.prenotazioni.slice().reverse().find(r=>r.stato==='confermato' && rosterPosti(r)>0);
+  if(!rec){
+    addInHtml('Non hai una partita aperta da completare 🎾'
+      +'<br>Vuoi <b>prenotare un campo</b>? Al quarto poi ci pensiamo insieme.');
+    addQuick([{label:'🎾 Prenota un campo', action:()=>botSay(()=>startBooking(''))}, menuBtn()]);
+    return;
+  }
+  const low=(t||'').toLowerCase();
+  // «togli / gestisci / sostituisci» = gestione roster → il Flow dedicato (togli/sostituisci),
+  // NON un invito (altrimenti «togli Luca» finirebbe per INVITARE Luca).
+  if(/\b(togli|rimuov|leva|gestisc|sostituisc|revoc)/.test(low)){
+    addFlowLaunch('Apriamo il modulo — togli o sostituisci i giocatori.', ()=>openAddPlayersFlow(rec));
+    return;
+  }
+  // Amici citati per nome (primo nome, case-insensitive).
+  const named=S.friends.filter(f=>low.includes(f.nome.split(' ')[0].toLowerCase()));
+  if(!named.length){ openInviteFriendsList(rec); return; }
+  if(named.length===1){
+    const f=named[0];
+    if(inviteStateOf(rec,f).can){
+      addInHtml('Ok, invito <b>'+esc(f.nome.split(' ')[0])+'</b>! 👇');
+      inviteFriend(rec.id, f.id);              // gestisce da sé «sta scrivendo…» + anteprima
+    } else {
+      inviteInfoTap(rec.id, f.id);             // 🟡/🟢/❌/🔕 → spiega (il ❌ offre «Invita di nuovo»)
+    }
+    return;
+  }
+  // BONUS multi-invito (avvicina il fix «manda a 2-3 in un colpo»): invito tutti gli
+  // invitabili citati, senza superare i posti liberi. Riuso sendInvites (una riga
+  // onesta + risposte simulate scaglionate).
+  const invitabili=named.filter(f=>inviteStateOf(rec,f).can);
+  if(!invitabili.length){ inviteInfoTap(rec.id, named[0].id); return; }
+  const toInvite=invitabili.slice(0, rosterPosti(rec));
+  const nomi=toInvite.map(f=>f.nome.split(' ')[0]);
+  addInHtml('Ok, invito <b>'+esc(nomi.join(', '))+'</b>! 👇');
+  toInvite.forEach(f=>{ const nm=f.nome.split(' ')[0];
+    rec.declinati=(rec.declinati||[]).filter(x=>x!==nm);
+    rec.invitati=(rec.invitati||[]).concat(nm); });
+  save();
+  botSay(()=>{ rosterActionButtons(rec); sendInvites(rec, nomi); });
 }
 /* Orari del circolo (grounded sui listini di prenotazione): serali SOLO nei feriali
    (ultimo slot 21:00), weekend fino alle 18:00 → così l'info NON contraddice il modulo. */
@@ -1183,10 +1236,40 @@ function startCancelOne(p){
 function cancelWarn(){ return '<br>L’azione è definitiva: il campo torna disponibile per altri.'; }
 
 /* ---------- Prenotazione: WhatsApp Flow (modulo) --------------------------- */
+/* Fix #3 — «mi mancano giocatori / siamo in due / da soli»: il bisogno NON deve
+   evaporare. Lo riconosciamo e rispondiamo con l'anima (senza promettere l'open-match
+   che non esiste ancora). */
+function _lackingPlayers(t){ return /manc\w*\s+(un\s+|dei\s+|degli\s+|di\s+)?giocator|manc\w*\s+(il\s+)?quart|siamo\s+in\s+(due|2|tre|3)|da\s+sol|trovare\s+(gente|giocator|qualcun)|mi\s+manca/.test(t); }
+/* Eco di ciò che ho capito PRIMA di aprire il modulo (giorno + fascia + eventuale
+   «pieno→primo libero») così il giocatore si sente CAPITO, non sbattuto in un form muto. */
+function bookingEcho(w, lacking, pienoMsg){
+  const parts=[];
+  if(pienoMsg){ parts.push(pienoMsg); }
+  else if(w.giorno){ parts.push('Ok, per <b>'+esc(w.giorno)+'</b>'+(w.fascia?(' '+fasciaLabel(w.fascia)):'')+(w.ora?(' alle '+w.ora):'')+' 👍'); }
+  else if(w.fascia){ parts.push('Ok, '+fasciaLabel(w.fascia)+' 👍'); }
+  else { parts.push('Apriamo il modulo 🎾'); }
+  parts.push('Tocca un orario libero e il campo è tuo.');
+  if(lacking){ parts.push('👥 Ai giocatori pensiamo dopo: prendi il campo e <b>al quarto ci pensiamo insieme</b>.'); }
+  return parts.join('<br>');
+}
 function startBooking(text){
   const w=parseWhen(text);
+  const lacking=_lackingPlayers((text||'').toLowerCase());
   if(w.date && w.ora){ return decideAndPresent({giorno:w.giorno,dow:w.dow,ora:w.ora,tipo:'Partita',durata:90,amici:[]}); }
-  addFlowLaunch('Ti apriamo il modulo — scegli un giorno e tocca un orario libero.', ()=>openBookingFlow({giorno:w.giorno,ora:w.ora}));
+  // «oggi pieno → domani» detto a PAROLE (niente salto muto): se il giorno chiesto non
+  // ha slot liberi, lo diciamo e apriamo sul primo giorno disponibile.
+  if(w.giorno){
+    const off=offsetForGiorno(w.giorno);
+    if(off!=null && availSlots(off, w.dow)===0){
+      let firstFree=null; for(let o=0;o<=MAX_GIORNI;o++){ const di=dayInfo(o); if(availSlots(di.off,di.dow)>0){ firstFree=di; break; } }
+      const pienoMsg = firstFree
+        ? ('Per <b>'+esc(w.giorno)+'</b> è tutto pieno 😕 — ti propongo il primo giorno libero: <b>'+esc(firstFree.giorno)+'</b>.')
+        : ('Per <b>'+esc(w.giorno)+'</b> è tutto pieno 😕 — apri il modulo per cercare un altro giorno.');
+      addFlowLaunch(bookingEcho(w, lacking, pienoMsg), ()=>openBookingFlow({giorno: firstFree?firstFree.giorno:w.giorno, ora:w.ora, fascia:w.fascia}));
+      return;
+    }
+  }
+  addFlowLaunch(bookingEcho(w, lacking, ''), ()=>openBookingFlow({giorno:w.giorno,ora:w.ora,fascia:w.fascia}));
 }
 function openBookingFlow(prefill){
   prefill=prefill||{};
@@ -1292,6 +1375,14 @@ function openBookingFlow(prefill){
   if(prefill.ora){
     const d=days[st.off]; const meta=slotMetaFor(d.off,d.dow,prefill.ora,st.durata,st.players);
     if(meta && (editId || meta.status!=='busy')){ st.ora=prefill.ora; renderSlots(); }
+  }
+  // Fix #3 — pre-selezione per fascia: se ho capito «stasera/pomeriggio/mattina» ma non
+  // un'ora precisa, pre-seleziono il primo slot libero in quella fascia (rispecchia ciò
+  // che ho detto nell'eco). L'utente può sempre cambiarlo.
+  if(!st.ora && prefill.fascia){
+    const d=days[st.off]; const rng=fasciaRange(prefill.fascia);
+    const cand=flatDay(d.off,d.dow).filter(s=>s.status!=='busy').filter(s=>{ const h=parseInt(s.ora.split(':')[0],10); return h>=rng[0] && h<rng[1]; })[0];
+    if(cand){ st.ora=cand.ora; renderSlots(); }
   }
   updSum();
 }
@@ -1404,11 +1495,26 @@ function rosterActionButtons(rec, opts){
   // (opts.receipt = conferma/aggiornamento prenotazione). Sui re-show dopo un invito
   // NON lo ripetiamo: un cenno leggero e incoraggiante (evita l'effetto rimprovero).
   const firstShow = !!(opts && opts.receipt);
-  const body='🎾 <b>'+amo+'</b>'
-    +'<br>🕒 Si gioca '+esc(rec.giorno)+' alle '+rec.ora
-    +'<br>👥 Sei in <b>'+rosterFilled(rec)+'/'+rosterTarget(rec)+'</b>'
-    +(rosterPending(rec)?('<br>🟡 In attesa: '+rec.invitati.join(', ')):'')
-    +(posti>0 ? '<br>'+(firstShow ? disclaimerLines(rec) : '👉 <b>Il campo è già tuo</b> — completa quando vuoi.') : '');
+  const filled=rosterFilled(rec), tgt=rosterTarget(rec);
+  let body;
+  if(firstShow && posti>0){
+    // PRIMO show dopo la prenotazione = il momento più delicato: deve dare SOLLIEVO,
+    // non paura. Apre con l'ANIMA («campo tuo, al quarto ci pensiamo insieme»), roster
+    // NEUTRO (non l'allarme «MANCANO N»), promessa REALE (a ogni "sì" ti avviso), e
+    // solo in fondo la nota-prezzo calma (disclaimerLines).
+    body='🎾 <b>Campo tuo — al quarto ci pensiamo insieme</b>'
+      +'<br>🕒 Si gioca '+esc(rec.giorno)+' alle '+rec.ora
+      +'<br>👥 Siete in <b>'+filled+'/'+tgt+'</b> — '+(posti>1?('mancano '+posti):'manca 1')
+      +(rosterPending(rec)?('<br>🟡 In attesa: '+rec.invitati.join(', ')):'')
+      +'<br>👉 Invita chi vuoi qui sotto: a ogni «sì» ti avviso io.'
+      +'<br>'+disclaimerLines(rec);
+  } else {
+    body='🎾 <b>'+amo+'</b>'
+      +'<br>🕒 Si gioca '+esc(rec.giorno)+' alle '+rec.ora
+      +'<br>👥 Sei in <b>'+filled+'/'+tgt+'</b>'
+      +(rosterPending(rec)?('<br>🟡 In attesa: '+rec.invitati.join(', ')):'')
+      +(posti>0 ? '<br>👉 <b>Il campo è già tuo</b> — completa quando vuoi.' : '');
+  }
   // Le voci (con descrizione) vivono NELLA SCHERMATA che apre il pulsante (fedele a WA).
   const rows=[
     {section:'Completa la partita', ic:'👥', label:'Invito i miei amici', desc:rosterPending(rec)?('Invita in un tap · 🟡 '+rosterPending(rec)+' in attesa'):'Invita in un tap · ⚪ scegli con chi giocare', action:()=>botSay(()=>openInviteFriendsList(rec))},
@@ -1792,8 +1898,16 @@ function boot(){
   botSay(()=>{
     // Riconoscimento del numero = IMPLICITO nel saluto per nome (su WhatsApp il
     // business non mostra una banda: sa già chi gli scrive). Niente più banda fissa.
-    addInHtml('Ciao '+esc(S.player.nome.split(' ')[0])+'! 🎾 Hai contattato la segreteria di Padel Village. Come possiamo aiutarti? Tocca un pulsante qui sotto o scrivici pure.');
-    showIceBreakers();
+    // MESSAGGIO INIZIALE (senza bottoni): apre con l'ANIMA — «tu pensa a giocare,
+    // il quarto lo troviamo noi» — e SUBITO dopo apre la porta a chi NON vuole
+    // giocare ma solo un'info (orari/prezzi/borsellino). Niente ice-breaker: si
+    // risponde a parole; il 👇 punta al composer.
+    addInHtml(
+      'Ciao '+esc(S.player.nome.split(' ')[0])+'! 🎾<br>'+
+      '<b>Tu pensa a giocare: il quarto lo troviamo noi.</b><br>'+
+      'Vuoi organizzare una partita? Campo e giocatori li sistemiamo insieme, e ti avviso appena siete in quattro.<br>'+
+      'Ti serve altro — <b>orari, prezzi, borsellino</b> o un\'info? Dimmi pure, con parole tue 👇'
+    );
   },500);
 }
 /* Composer stile WhatsApp: la freccia d'INVIO ↑ appare solo quando c'è testo. */
