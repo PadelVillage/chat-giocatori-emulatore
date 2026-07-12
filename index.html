@@ -201,7 +201,7 @@
 const LS_KEY='pmo_emu_state_v10';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.96 · 12/07';
+const APP_BUILD='v0.97 · 12/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -258,6 +258,24 @@ function demoState(){
       {id:13,nome:'Giulia Verdi',  numero:'+39 333 555 0104', suWhatsApp:false, origine:'socio'},
       {id:14,nome:'Paolo Neri',    numero:'+39 333 555 0105', suWhatsApp:true,  origine:'socio'},
       {id:15,nome:'Davide Gallo',  numero:'+39 333 555 0107', suWhatsApp:true,  origine:'socio'}
+    ],
+    /* POOL SOCI (Fix #4 «open-match») — usato SOLO internamente dal matching mediato
+       (doOpenMatch): Marco NON lo vede MAI come lista (decisione privacy D1 = «mediato»).
+       Sono soci del CIRCOLO con `livello` (distinti dagli amici/rubrica, che non hanno
+       livello). Il circolo li contatta al posto di Marco; lui riceve solo «cerco… trovato».
+       In Fase 2 REALE questi livelli verranno letti dall'anagrafica/Supabase (i livelli si
+       replicano da Matchpoint) — qui è lo specchio UX. Nomi scelti per NON collidere coi
+       primi nomi degli amici (il roster è per primo nome). `_declina` = questo socio, a
+       questo giro, non può → il circolo passa oltre in modo INVISIBILE a Marco (è il senso
+       del «ci pensiamo noi»). Marco è 4.0 → banda ±0.5 = 3.5–4.5; Giorgio/Elena stanno
+       FUORI e compaiono solo se Marco chiede di «allargare» il livello (±1.0). */
+    pool:[
+      {id:31,nome:'Matteo Conti', livello:'4.0', _declina:true},   // in banda, ma stavolta non può → assorbito backstage
+      {id:32,nome:'Marta Belli',  livello:'4.0'},                  // in banda → accetta (il "quarto" tipico)
+      {id:33,nome:'Andrea Longo', livello:'4.5'},                  // in banda (limite alto)
+      {id:34,nome:'Chiara Riva',  livello:'3.5'},                  // in banda (limite basso)
+      {id:35,nome:'Giorgio Pini', livello:'3.0'},                  // FUORI ±0.5 → solo con "allarga" (±1.0)
+      {id:36,nome:'Elena Sarti',  livello:'5.0'}                   // FUORI ±0.5 → solo con "allarga" (±1.0)
     ],
     /* Demo pulita: una prenotazione già al completo come esempio. Lo stato
        "da completare" (confermato) lo si vede prenotando un nuovo campo. */
@@ -600,7 +618,12 @@ function detectIntent(t){
   // «invita Giulia», «completa la partita», «mi mancano giocatori», «chi ho invitato»,
   // «gestisci i giocatori», «togli Luca». DOPO 'aiuto' (così «come invito un amico?» resta
   // aiuto) e PRIMA di 'amici' (così «invita i miei amici» apre gli inviti, non la rubrica).
-  if(/\b(invit|complet(a|are|iamo|ala|arla)|manca(no)?\s+(un\s+|dei\s+|degli\s+|di\s+)?giocator|trov(a|are|ami|iamo|atemi).*(quarto|giocator)|chi\s+ho\s+invitat|gestisci\s+(i\s+)?giocator|togli\s+\w)/.test(t)) return 'completa';
+  // Include l'OPEN-MATCH «trovate voi il quarto / pensateci voi / cercatemi un
+  // giocatore» (Fix #4): il verbo «trov*» è ampliato a trovate/trovateci (prima
+  // matchava solo trova/trovami/trovatemi) e si aggiungono «pensateci voi / trovate
+  // voi». doCompleta() smista poi a doOpenMatch. Se non c'è una partita aperta,
+  // doCompleta risponde in modo onesto → nessun falso positivo.
+  if(/\b(invit|complet(a|are|iamo|ala|arla)|manca(no)?\s+(un\s+|dei\s+|degli\s+|di\s+)?giocator|trov(a|ate|ami|atemi|iamo|are|armi|ateci)\w*.*(quart|giocator|gente|qualcun)|pensateci voi|trovate voi|cerca(mi|ci|te|temi|teci)\b.*(quart|giocator)|chi\s+ho\s+invitat|gestisci\s+(i\s+)?giocator|togli\s+\w)/.test(t)) return 'completa';
   if(/^altro\b|^altre\b|\baltre funzioni\b|\baltre opzioni\b|\baltro men[uù]\b|vedi il men[uù]/.test(t)) return 'altro';
   if(/profil|i miei dati|chi sono/.test(t)) return 'profilo';
   if(/amic|con cui gioc|lista giocator/.test(t)) return 'amici';
@@ -613,8 +636,10 @@ function detectIntent(t){
   if(/modific|spost|cambia orario/.test(t)) return 'modifica';
   if(/segreteria|assistenza|operatore|parlare con (qualcuno|un operatore|una persona)/.test(t)) return 'segreteria';
   // "organizzatemi la partita" cade su 'prenota' (prima ti assicuri il campo, poi lo
-  // completi invitando gli amici). Per una mano c'è la Chat con la segreteria (intent 'segreteria').
-  if(/prenot|campo|partita|lezione|gioc|organizz|trovate voi|pensateci voi/.test(t)) return 'prenota';
+  // completi invitando gli amici). «trovate voi / pensateci voi» NON stanno più qui: con
+  // l'anima significano «trovate voi il quarto» → intent 'completa' (open-match), gestito
+  // sopra; se manca la partita, doCompleta rimanda a prenota. Una mano generica = segreteria.
+  if(/prenot|campo|partita|lezione|gioc|organizz/.test(t)) return 'prenota';
   if(/ciao|salve|buongiorno|buonasera|ehi|hey|menu/.test(t)) return 'saluto';
   return 'fallback';
 }
@@ -726,6 +751,13 @@ function doUnknown(t){
    · «togli/gestisci» → apro il modulo di gestione (NON un invito);
    · nessun nome → apro la lista inviti (identico al tap «Invito i miei amici»).
    Nessuna partita aperta → messaggio onesto + gancio a «prenota». */
+/* Fix #4 — Marco chiede al CIRCOLO di trovare il quarto (open-match ON-DEMAND):
+   «trovate voi (il quarto) / pensateci voi / trovami un giocatore / cercatemi qualcuno».
+   Distinto da «invita Giulia» (nome amico) e da «mancano giocatori» (→ lista amici, che
+   comunque offre l'open-match). Richiede un verbo-di-ricerca RIVOLTO A NOI + il bisogno. */
+function _wantsOpenMatch(t){
+  return /(trov(a|ate|ami|atemi|iamo|are|armi|ateci)\w*|cerca(mi|ci|te|temi|teci)\w*)[^.!?]*(quart|giocator|gente|qualcun)|pensateci voi|ci pensate voi|trovate voi|ci pensiate voi/.test(t);
+}
 function doCompleta(t){
   const rec=S.prenotazioni.slice().reverse().find(r=>r.stato==='confermato' && rosterPosti(r)>0);
   if(!rec){
@@ -741,6 +773,9 @@ function doCompleta(t){
     addFlowLaunch('Apriamo il modulo — togli o sostituisci i giocatori.', ()=>openAddPlayersFlow(rec));
     return;
   }
+  // «trovate voi il quarto» = l'anima resa vera → il CIRCOLO cerca (open-match mediato).
+  // Prima del match per nome: è una richiesta rivolta a noi, non un invito a un amico.
+  if(_wantsOpenMatch(low)){ doOpenMatch(rec); return; }
   // Amici citati per nome (primo nome, case-insensitive).
   const named=S.friends.filter(f=>low.includes(f.nome.split(' ')[0].toLowerCase()));
   if(!named.length){ openInviteFriendsList(rec); return; }
@@ -1154,7 +1189,8 @@ function doHelp(t){
   if(/\blivell|autovalut|che livello|il mio livello/.test(t)){ explainLevel(); return; }
   if(/orari|a che ora|siete apert/.test(t)){ doOrari(); return; }
   if(/invit|amic/.test(t)){
-    addInHtml('<b>Invitare gli amici</b> 👥<br>Da “Completa la partita” → <b>“Invito i miei amici”</b> inviti ogni amico <b>con un tap</b>: gli parte un messaggio WhatsApp con <b>✅ SÌ / ❌ NO</b> e, <b>appena conferma, entra in partita</b>. Stato di ognuno a colpo d’occhio: <b>⚪ da invitare · 🟡 invito aperto · 🟢 in partita</b>. Puoi <b>revocare</b> un invito ancora in attesa da “Gestisci i giocatori”. Solo chi ha scelto <b>🔕 Non invitarmi più</b> non è invitabile. In partita solo giocatori iscritti — niente ospiti.');
+    addInHtml('<b>Invitare gli amici</b> 👥<br>Da “Completa la partita” → <b>“Invito i miei amici”</b> inviti ogni amico <b>con un tap</b>: gli parte un messaggio WhatsApp con <b>✅ SÌ / ❌ NO</b> e, <b>appena conferma, entra in partita</b>. Stato di ognuno a colpo d’occhio: <b>⚪ da invitare · 🟡 invito aperto · 🟢 in partita</b>. Puoi <b>revocare</b> un invito ancora in attesa da “Gestisci i giocatori”. Solo chi ha scelto <b>🔕 Non invitarmi più</b> non è invitabile. In partita solo giocatori iscritti — niente ospiti.'
+      +'<br><br>🎾 <b>Finiti gli amici liberi?</b> Scrivi «<b>trovate voi il quarto</b>»: al quarto ci pensiamo noi — cerchiamo un socio del <b>tuo livello</b> libero e, quando dice sì, entra in partita.');
     addQuick([{label:'🎾 Prenota un campo',text:'Vorrei prenotare un campo'}, menuBtn()]); return; }
   if(/opzion|complet|scad|responsab/.test(t)){
     addInHtml('<b>Come funziona</b> 🎾<br>Quando prenoti, il campo è <b>confermato subito</b> a tuo nome (gratis, nessuna scadenza). Sei tu il <b>responsabile</b> della partita: la completi <b>invitando gli amici</b>. Se non la completi, l’<b>intero campo</b> resta a tuo carico.'); homeMenu(); return; }
@@ -1713,10 +1749,10 @@ function inviteResponse(r,nm){
   // altro "sta scrivendo…" → si legge una cosa alla volta (feedback utente).
   if(declina){ if((r.declinati||[]).indexOf(nm)<0) r.declinati=(r.declinati||[]).concat(nm); save();   // resta ❌ nella lista
     addInHtml('❌ <b>'+esc(nm)+'</b> non può per '+esc(r.giorno)+' alle '+r.ora+'. Resta segnato <b>❌</b> nella lista; invita pure qualcun altro.');
-    botSay(()=>rosterActionButtons(r), TYPING_MS); return; }
+    botSay(()=>{ rosterActionButtons(r); rosterOfferAfterMiss(r); }, TYPING_MS); return; }
   if(optOut){ const fr=S.friends.find(f=>f.nome.split(' ')[0]===nm); if(fr) fr.optOut=true; save();
     addInHtml('🔕 <b>'+esc(nm)+'</b> ha scelto di <b>non ricevere più inviti</b>. Rispettiamo la sua scelta: non gli manderemo altre richieste. Invita pure qualcun altro.');
-    botSay(()=>rosterActionButtons(r), TYPING_MS); return; }
+    botSay(()=>{ rosterActionButtons(r); rosterOfferAfterMiss(r); }, TYPING_MS); return; }
   r.amici=(r.amici||[]).concat(nm); r.declinati=(r.declinati||[]).filter(x=>x!==nm); save();   // ha confermato → via l'eventuale ❌
   if(rosterPosti(r)===0){ addInHtml('✅ <b>'+esc(nm)+'</b> ha confermato! Partita <b>al completo</b> 🎾',true); botSay(()=>confirmBooking(r), TYPING_MS); return; }
   const tail=rosterPending(r)?(' · in attesa: '+r.invitati.join(', ')):(' · manca'+(rosterPosti(r)>1?'no':'')+' '+rosterPosti(r));
@@ -1791,11 +1827,16 @@ function openInviteFriendsList(rec){
     return;
   }
   const posti=rosterPosti(r);
+  // Fix #4 — se Marco ha ESAURITO gli amici invitabili (tutti 🟡/🟢/❌/🔕) ma restano
+  // posti, PROMUOVIAMO l'open-match: è la frontiera dove oggi la promessa finiva in
+  // segreteria. Altrimenti l'open-match resta un'opzione secondaria (amici prima → D6).
+  const noInvitable = posti>0 && !hasInvitableFriend(r);
   const body='👥 <b>Invita i tuoi amici</b>'
     +'<br>🕒 '+esc(r.giorno)+' alle '+r.ora+' · Campo '+r.campo
     +'<br>🎾 '+(posti>1?('Mancano <b>'+posti+'</b> giocatori'):(posti===1?'Manca <b>1</b> giocatore':'Al completo'))
-    +'<br>⚪ da invitare · 🟡 in attesa · 🟢 in partita · ❌ non può';
-  const rows=S.friends.slice(0,7).map(f=>{
+    +(noInvitable?'<br>👉 Finiti gli amici liberi? <b>Al quarto ci pensiamo noi.</b>'
+                 :'<br>⚪ da invitare · 🟡 in attesa · 🟢 in partita · ❌ non può');
+  const friendRows=S.friends.slice(0,7).map(f=>{
     const st=inviteStateOf(r,f);
     const desc = st.can ? 'Tocca per invitarlo (messaggio WhatsApp)'
       : (st.ic==='🟡' ? 'Invito aperto · revoca da «Gestisci i giocatori»'
@@ -1806,6 +1847,13 @@ function openInviteFriendsList(rec){
       // invitabile → inviteFriend gestisce da sé il "sta scrivendo…"; non-invitabile → botSay per la nota
       action: st.can ? (()=>inviteFriend(r.id, f.id)) : (()=>botSay(()=>inviteInfoTap(r.id, f.id)))};
   });
+  // La riga «ci pensiamo noi al quarto» (open-match mediato): PRIMA se Marco è a corto di
+  // amici, altrimenti dopo la lista amici come alternativa calma. Marco non vede soci: tocca
+  // e il circolo cerca per lui (doOpenMatch).
+  const openRow = posti>0 ? [{ section: noInvitable?'Al quarto ci pensiamo noi':'Oppure', ic:'🎾',
+    label: noInvitable?'Al quarto pensiamo noi':'Trovate voi il quarto',
+    desc:'Cerchiamo un socio del tuo livello libero', action:()=>botSay(()=>doOpenMatch(r)) }] : [];
+  const rows = (noInvitable ? openRow.concat(friendRows) : friendRows.concat(openRow));
   rows.push({section:'Altro', ic:'👥', label:'Gestisci i giocatori', desc:'Togli o revoca chi hai già invitato', action:()=>botSay(()=>addFlowLaunch('Apriamo il modulo — togli o revoca.', ()=>openAddPlayersFlow(r)))});
   rows.push({section:'Altro', ic:'➕', label:'Aggiungi un amico', desc:'Condividi un contatto per invitarlo', action:()=>botSay(()=>openAddFriendFlow({backTo:r.id, invite:true}))});
   rows.push(menuBackRow('Altro'));
@@ -1852,6 +1900,128 @@ function inviteFriend(recId, fid){
       scheduleInviteResponse(r, nm, 1500);                 // 3) breve attesa "sta pensando", poi i puntini ≥3s della risposta
     }, TYPING_MS);
   }, TYPING_MS);
+}
+/* ============================================================================
+   FIX #4 — OPEN-MATCH «trovami il quarto» (modello MEDIATO, tutto SIMULATO)
+   L'anima resa VERA: «Tu pensa a giocare — il quarto lo troviamo NOI». Quando
+   Marco non completa con i suoi amici, il CIRCOLO gli trova un socio compatibile.
+   Decisioni di prodotto (chiuse con l'utente, 12/07):
+   · D1 MEDIATO: Marco NON vede MAI una lista di soci. Il circolo contatta i
+     compatibili; Marco riceve solo «cerco… 🎾 trovato Nome, livello». I "no" degli
+     altri soci sono ASSORBITI backstage (privacy) → nessun pool navigabile.
+   · D3 AUTO-FILL nome+livello, RIMOVIBILE: il posto si riempie da solo; se proprio
+     non gli va, Marco toglie il socio da «Gestisci i giocatori» (già esistente).
+     Niente veto per-candidato (rimetterebbe Marco "al lavoro" + esporrebbe lo scartato).
+   · D4 LIVELLO ±0.5, nessun altro filtro (no genere/categoria): 4.0 → 3.5–4.5;
+     se vuoto → ramo onesto «allargo?» (±1.0). Mai un vicolo cieco.
+   · D5 GRATIS (il concierge +5€ è ABOLITO, non si reintroduce).
+   · D6 PROATTIVO con garbo (offerto quando finisci gli amici da invitare) + ON-DEMAND
+     («trovami il quarto» funziona sempre). NON offerto subito dopo la prenotazione.
+   · D7 CONSENSO del socio contattato (✅/❌/🔕) — nel simulato `_declina` = rifiuto
+     assorbito; l'opt-out da open-match sarebbe `_openOptOut` (igiene anti-spam Meta).
+   Riusa il modello roster (rec.amici) e il chiudi-partita (confirmBooking). ========= */
+const OPEN_BAND=0.5;               // banda di livello di default (±0.5); «allarga» → 1.0
+/* Assicura che il pool esista anche su stati vecchi salvati in localStorage (demoState
+   pre-Fix#4 non aveva S.pool): auto-guarigione, evita che l'open-match sembri "rotto". */
+function ensurePool(){ if(!S.pool || !S.pool.length){ S.pool=demoState().pool; save(); } return S.pool; }
+/* C'è ancora almeno un amico ⚪ da invitare per questa partita? (decide se PROMUOVERE
+   l'open-match: se Marco ha esaurito gli amici, il circolo si fa avanti — "garbo" D6). */
+function hasInvitableFriend(rec){ return S.friends.some(f=>inviteStateOf(rec,f).can); }
+/* Candidati del pool compatibili per livello, ordinati dal più vicino di livello.
+   Esclude: opt-out da open-match, già in roster/invitati, già TENTATI per questa
+   partita (rec._poolTried → non ricontattiamo chi ha già declinato). NIENTE filtro
+   genere/categoria (D4). Marco non vede mai questo elenco: è solo il "cervello" del bot. */
+function poolCandidates(rec, band){
+  const my=parseFloat(S.player.livello)||4.0; const b=(band||OPEN_BAND)+1e-9;
+  const tried=rec._poolTried||[];
+  const inRoster=new Set([].concat(rec.amici||[], rec.invitati||[]));
+  return ensurePool().filter(p=>{
+    if(p._openOptOut) return false;
+    if(tried.indexOf(p.id)>=0) return false;
+    if(inRoster.has(p.nome.split(' ')[0])) return false;
+    return Math.abs((parseFloat(p.livello)||0)-my) <= b;
+  }).sort((a,b2)=>Math.abs(parseFloat(a.livello)-my)-Math.abs(parseFloat(b2.livello)-my));
+}
+/* Entry-point «ci pensiamo noi». Riga calma (nessuna lista di soci → D1 mediato),
+   poi la ricerca simulata. `band` cresce a 1.0 se Marco chiede di allargare. */
+function doOpenMatch(rec, band){
+  const r=S.prenotazioni.find(x=>x.id===rec.id)||rec; ensurePool(); band=band||OPEN_BAND;
+  if(rosterPosti(r)<=0){ addInHtml('La tua partita è già <b>al completo</b> 🎾.'); botSay(()=>rosterActionButtons(r)); return; }
+  r._poolTried=r._poolTried||[];
+  // Riga d'apertura = la promessa mantenuta: cerco IO, tu non fai nulla. Mai «cerco nel
+  // database soci»: il tono è «ci pensiamo noi», non tecnico.
+  const larga = band>OPEN_BAND ? ' (allargo un pelo il livello)' : '';
+  addInHtml('Ci penso io 🎾'
+    +'<br>Cerco un giocatore del tuo livello (~<b>'+esc(S.player.livello)+'</b>)'+larga+' libero per <b>'+esc(r.giorno)+'</b> alle '+r.ora+'.'
+    +'<br>Rilassati: ti avviso appena l\'ho trovato.');
+  botSay(()=>resolveOpenMatch(r, band), TYPING_MS);
+}
+/* Cuore della mediazione: contatta i candidati (un rifiuto viene ASSORBITO in silenzio,
+   Marco non lo vede — è il senso del «noi»), il primo che accetta RIEMPIE il posto
+   (riusa rec.amici + il modello roster). Se restano posti, CONTINUA a cercare da solo
+   (chaining) → Marco legge «Trovato X… Trovato Y… al completo!». Se non c'è nessuno del
+   livello, ramo ONESTO (openMatchNoResult), mai un vicolo cieco. */
+function resolveOpenMatch(r, band){
+  const rr=S.prenotazioni.find(x=>x.id===r.id)||r;
+  if(rosterPosti(rr)<=0){ return; }
+  const cands=poolCandidates(rr, band);
+  if(!cands.length){ openMatchNoResult(rr, band); return; }
+  // Consenso del contattato (D7): un candidato può declinare (backstage). Contiamo i
+  // rifiuti SOLO per ammorbidire il copy («ci ho messo un attimo»), senza svelare CHI.
+  let declines=0, picked=null;
+  for(const c of cands){
+    rr._poolTried.push(c.id);
+    if(c._declina && !c._declinaUsed){ c._declinaUsed=true; declines++; continue; }  // rifiuto assorbito
+    picked=c; break;
+  }
+  save();
+  if(!picked){ openMatchNoResult(rr, band); return; }   // tutti i candidati hanno declinato
+  const nm=picked.nome.split(' ')[0];
+  rr.amici=(rr.amici||[]).concat(nm); save();            // AUTO-FILL: il posto si riempie (D3)
+  const soft = declines>0 ? 'Ci ho messo un attimo, ma ci siamo 🙌<br>' : '';
+  if(rosterPosti(rr)===0){
+    addInHtml(soft+'🎾 <b>Trovato!</b> <b>'+esc(nm)+'</b> (livello '+esc(picked.livello)+'), socio del circolo, ci sta. Partita <b>al completo</b>!',true);
+    botSay(()=>confirmBooking(rr), TYPING_MS); return;
+  }
+  // Ancora posti: annuncio il trovato e CONTINUO a cercare gli altri (il circolo lavora).
+  addInHtml(soft+'🎾 <b>Trovato!</b> <b>'+esc(nm)+'</b> (livello '+esc(picked.livello)+'), socio del circolo, ci sta. Ora siete <b>'+rosterFilled(rr)+'/'+rosterTarget(rr)+'</b> — cerco '+(rosterPosti(rr)>1?('gli altri '+rosterPosti(rr)):'l\'ultimo')+'.',true);
+  botSay(()=>resolveOpenMatch(rr, band), TYPING_MS);
+}
+/* Nessun socio del livello (o pool esaurito): ONESTO + PROATTIVO, mai vicolo cieco.
+   Tengo l'invito aperto e propongo: allarga la banda (se non già a 1.0) · invita un
+   amico · lascia che continui a cercare in sottofondo. */
+function openMatchNoResult(r, band){
+  const rr=S.prenotazioni.find(x=>x.id===r.id)||r;
+  if(rosterPosti(rr)<=0) return;
+  const canWiden = (band||OPEN_BAND) < 1.0;
+  const quanti = rosterPosti(rr)>1 ? 'altri giocatori' : 'un altro giocatore';
+  addInHtml('Per <b>'+esc(rr.giorno)+'</b> alle '+rr.ora+' non ho ancora trovato '+quanti+' del tuo livello 😕'
+    +'<br>Nessun problema: tengo l\'invito <b>aperto</b> e continuo a cercare.'
+    +(canWiden?'<br>Vuoi che <b>allarghi un po\'</b> il livello?':''));
+  const qs=[];
+  if(canWiden) qs.push({label:'🎾 Allarga il livello', action:()=>{ addOut('Allarga il livello'); botSay(()=>doOpenMatch(rr, 1.0)); }});
+  qs.push({label:'👥 Invito un amico', action:()=>botSay(()=>openInviteFriendsList(rr))});
+  qs.push({label:'🔕 Continua a cercare', action:()=>{ addOut('Continua pure a cercare'); botSay(()=>{ addInHtml('👍 Ci penso io: continuo a cercare in sottofondo e <b>ti avviso appena trovo</b> qualcuno del tuo livello. Intanto il campo resta tuo.'); homeMenu(); }); }});
+  addQuick(qs);
+}
+/* PROATTIVO con garbo (D6): al momento giusto — Marco ha esaurito gli amici da invitare
+   e restano posti — il circolo si fa avanti con UNA riga calma + un bottone. NON è spam:
+   compare solo alla frontiera «finiti gli amici», dove oggi la promessa finiva in segreteria. */
+function maybeOfferOpenMatch(rec){
+  const r=S.prenotazioni.find(x=>x.id===rec.id)||rec;
+  if(rosterPosti(r)<=0) return false;
+  if(hasInvitableFriend(r)) return false;         // ha ancora amici ⚪ → non forziamo (amici prima)
+  addInHtml('Finiti gli amici da invitare? Tranquillo 🎾'
+    +'<br><b>Al quarto ci pensiamo noi</b>: cerco un socio del tuo livello libero per '+esc(r.giorno)+' alle '+r.ora+'.');
+  addQuick([{label:'🎾 Trovate voi il quarto', action:()=>{ addOut('Trovate voi il quarto'); botSay(()=>doOpenMatch(r)); }}, menuBtn()]);
+  return true;
+}
+/* Dopo un ❌/🔕 (inviteResponse): SOLO se ha senso (posti aperti + niente amici ⚪) offro
+   l'open-match, con un "sta scrivendo…" per il ritmo di lettura. Il gate PRIMA del botSay
+   evita il typing-fantasma quando l'offerta non parte (ha ancora amici da invitare). */
+function rosterOfferAfterMiss(rec){
+  const r=S.prenotazioni.find(x=>x.id===rec.id)||rec;
+  if(rosterPosti(r)>0 && !hasInvitableFriend(r)){ botSay(()=>maybeOfferOpenMatch(r)); }
 }
 /* ---------- Annulla / Modifica --------------------------------------------- */
 function startCancel(){
