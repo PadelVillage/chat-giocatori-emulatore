@@ -198,10 +198,15 @@
    fedelmente su WhatsApp reale (componenti/limiti Flows + policy Meta).
    Verificare sui doc Meta PRIMA di aggiungere grafica/layout/interazioni.
    ========================================================================== */
-const LS_KEY='pmo_emu_state_v10';
+/* v11: REGISTRO DISPONIBILITÀ (S.player.disponibilita + pool con optIn/disponibilita).
+   Il bump della chiave è OBBLIGATORIO, non cosmetico: load() non migra nulla e
+   ensurePool() rigenera il pool solo se è VUOTO → restando su v10 i soci già in
+   localStorage non avrebbero i campi nuovi, `optIn` sarebbe undefined per tutti e
+   l'open-match non troverebbe MAI nessuno. */
+const LS_KEY='pmo_emu_state_v11';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.97 · 12/07';
+const APP_BUILD='v0.98 · 18/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -235,7 +240,17 @@ function demoState(){
              livelloFonte:'segreteria',   // come è stato determinato il livello: 'segreteria' (anagrafica MP) | 'autovalutazione'
              livelloVerifica:null,        // se l'autovalutazione è incoerente: livello indicativo in coda validazione staff (l'ufficiale NON cambia)
              email:'',                    // contatto FACOLTATIVO, self-editable dal giocatore (nome/telefono restano gestiti dalla segreteria)
-             prefs:{ promemoria:true, novita:false },   // preferenze notifiche proattive (opt-out marketing = igiene Meta)
+             /* `openMatch` = opt-IN esplicito «cercami per le partite». Default FALSE:
+                chi non sceglie NON viene contattato. È il consenso che rende difendibile
+                il push mirato — e la prova da mostrare a Meta se arriva una segnalazione. */
+             prefs:{ promemoria:true, novita:false, openMatch:false },
+             /* REGISTRO DISPONIBILITÀ. Vocabolario allineato a `availabilityProfile` della
+                scheda socio staff (web app: days/time/frequency/notice/matchType/source/
+                updatedAt) → il Flow WhatsApp scrive nel registro che la segreteria GIÀ vede
+                e modifica, invece di aprirne uno parallelo. `giorni`/`fasce` sono i gemelli
+                STRUTTURATI (il matching non può parsare a mano "Lunedi, Mercoledi");
+                `frequenza`/`preavviso` usano le stringhe ESATTE delle select staff. */
+             disponibilita:null,   // null = mai compilato (diverso da «compilato vuoto»)
              genere:'M',   // dal dato anagrafica (campo del modello socio; non usato in UI al momento)
              // Borsellino allineato al modello della NOSTRA app (record `wallet_balance`
              // = {balance_cents, synced_at}): in Fase 2 l'emulatore leggerà QUEL record dal
@@ -267,22 +282,40 @@ function demoState(){
        replicano da Matchpoint) — qui è lo specchio UX. Nomi scelti per NON collidere coi
        primi nomi degli amici (il roster è per primo nome). `_declina` = questo socio, a
        questo giro, non può → il circolo passa oltre in modo INVISIBILE a Marco (è il senso
-       del «ci pensiamo noi»). Marco è 4.0 → banda ±0.5 = 3.5–4.5; Giorgio/Elena stanno
-       FUORI e compaiono solo se Marco chiede di «allargare» il livello (±1.0). */
+       del «ci pensiamo noi»). Marco è 4.0 → banda ±0.5 = 3.5–4.5.
+
+       ⭐ REGISTRO (Fase 2): `optIn` + `disponibilita` sostituiscono il vecchio `_openOptOut`.
+       Il flip di POLARITÀ è il punto di tutta la modifica: prima l'assenza di flag valeva
+       «contattabile» (opt-out) — e siccome nessuno scriveva mai quel flag, erano di fatto
+       contattabili TUTTI. Ora l'assenza vale «NON contattabile». È ciò che protegge il
+       quality rating della WABA: si scrive solo a chi ha detto sì, quel giorno, quella fascia.
+
+       Taratura demo — ogni socio illustra UN ramo del filtro:
+       · Matteo  match pieno ma declina → assorbito backstage (comportamento invariato)
+       · Marta   match pieno → è lei che chiude la partita
+       · Andrea  solo di SERA → di mattina esce solo al giro «fascia allargata»
+       · Chiara  match pieno MA cap settimanale già esaurito → esclusa (freno anti-spam)
+       · Giorgio fuori banda → solo se Marco chiede «allarga il livello» (±1.0)
+       · Elena   NIENTE opt-in → non compare MAI, nemmeno allargando */
     pool:[
-      {id:31,nome:'Matteo Conti', livello:'4.0', _declina:true},   // in banda, ma stavolta non può → assorbito backstage
-      {id:32,nome:'Marta Belli',  livello:'4.0'},                  // in banda → accetta (il "quarto" tipico)
-      {id:33,nome:'Andrea Longo', livello:'4.5'},                  // in banda (limite alto)
-      {id:34,nome:'Chiara Riva',  livello:'3.5'},                  // in banda (limite basso)
-      {id:35,nome:'Giorgio Pini', livello:'3.0'},                  // FUORI ±0.5 → solo con "allarga" (±1.0)
-      {id:36,nome:'Elena Sarti',  livello:'5.0'}                   // FUORI ±0.5 → solo con "allarga" (±1.0)
+      {id:31,nome:'Matteo Conti', livello:'4.0', _declina:true, optIn:true,
+       disponibilita:dispoDemo([1,2,3,4,5,6,0],['mattina','pomeriggio','sera'],'3+ volte a settimana','Anche in giornata')},
+      {id:32,nome:'Marta Belli',  livello:'4.0', optIn:true,
+       disponibilita:dispoDemo([1,2,3,4,5,6,0],['mattina','pomeriggio','sera'],'2 volte a settimana','Anche in giornata')},
+      {id:33,nome:'Andrea Longo', livello:'4.5', optIn:true,
+       disponibilita:dispoDemo([1,2,3,4,5,6,0],['sera'],'2 volte a settimana','Anche in giornata')},
+      {id:34,nome:'Chiara Riva',  livello:'3.5', optIn:true, _contattiSettimana:2,
+       disponibilita:dispoDemo([1,2,3,4,5,6,0],['mattina','pomeriggio','sera'],'2 volte a settimana','Anche in giornata')},
+      {id:35,nome:'Giorgio Pini', livello:'3.0', optIn:true,
+       disponibilita:dispoDemo([1,2,3,4,5,6,0],['mattina','pomeriggio','sera'],'Quando capita','Anche in giornata')},
+      {id:36,nome:'Elena Sarti',  livello:'5.0', optIn:false, disponibilita:null}
     ],
     /* Demo pulita: una prenotazione già al completo come esempio. Lo stato
        "da completare" (confermato) lo si vede prenotando un nuovo campo. */
     prenotazioni:(function(){ var dd=dayInfo(2); var gs=daySlotGroups(dd.off,dd.dow,90);
       var fissi=(gs.filter(function(g){return g.kind==='fisso';})[0]||{slots:[]}).slots;
       var pick=fissi[Math.min(1,fissi.length-1)]||{ora:'19:30',prezzo:12};   // slot REALE del listino (mai orfano) → l'edit lo può pre-selezionare
-      return [{ id:1, giorno:dd.giorno, ora:pick.ora, campo:3, tipo:'Partita', durata:90, stato:'completo', target:4, amici:['Luca','Sara','Paolo'], prezzoTesta:pick.prezzo }]; })(),
+      return [{ id:1, giorno:dd.giorno, dow:dd.dow, ora:pick.ora, campo:3, tipo:'Partita', durata:90, stato:'completo', target:4, amici:['Luca','Sara','Paolo'], prezzoTesta:pick.prezzo }]; })(),
     seq:100
   };
 }
@@ -834,6 +867,9 @@ function doProfilo(){
   addListMessage({ body:'Da qui gestisci il tuo profilo<br>Autovalutazione del livello, notifiche e dati.', button:'Apri', title:'Gestisci il profilo', rows:[
     {section:'Profilo', ic:'📊', label:'Valuta il tuo livello', desc:'Autovalutazione del livello di gioco', action:()=>botSay(()=>addFlowLaunch('Apriamo il questionario livello — 8 domande a risposta chiusa.', openAssessmentFlow))},
     {ic:'ℹ️', label:'Il mio livello', desc:'Cosa significa la scala da 1.0 a 7.0', action:()=>botSay(explainLevel)},
+    /* Riga 7 di 10 (limite List reale) ✓ · titolo 20 char ≤24 ✓ · descrizione DINAMICA
+       (≤72): lo stato del registro si legge senza aprire il Flow. */
+    {ic:'📅', label:'Le mie disponibilità', desc:dispoSummary(), action:()=>botSay(()=>addFlowLaunch('Apriamo le tue disponibilità — i giorni e le fasce in cui cercarti.', openDispoFlow))},
     {ic:'🔔', label:'Preferenze notifiche', desc:'Scegli i messaggi che vuoi ricevere', action:()=>botSay(()=>addFlowLaunch('Apriamo le preferenze notifiche.', openNotifPrefs))},
     {ic:'✏️', label:'Aggiorna i tuoi dati', desc:'Email e contatti', action:()=>botSay(editData)},
     {section:'Oppure', ic:'🗑️', label:'Cancella i miei dati', desc:'Richiesta di cancellazione alla segreteria', action:()=>botSay(startDeleteData)},
@@ -977,14 +1013,18 @@ function submitAssessment(answers){
    (marketing). L'opt-out delle promozioni è igiene Meta. Fedele WA = CheckboxGroup
    + 1 Footer; il business poi rispetta le scelte. */
 function openNotifPrefs(){
-  const p=S.player.prefs||(S.player.prefs={promemoria:true,novita:false});
-  const st={ promemoria:!!p.promemoria, novita:!!p.novita };
+  const p=S.player.prefs||(S.player.prefs={promemoria:true,novita:false,openMatch:false});
+  const st={ promemoria:!!p.promemoria, novita:!!p.novita, openMatch:!!p.openMatch };
+  const eraOpenMatch=st.openMatch;
   const body=el('flow');
   body.appendChild(el('luce-hint','Scegli quali messaggi vuoi ricevere. Le comunicazioni <b>di servizio</b> sulle tue prenotazioni le mandiamo sempre.'));
   body.appendChild(fieldLabel('Messaggi proattivi'));
   const fl=el('friend-list');
-  /* Titolo ≤30 (limite CheckboxGroup reale) + descrizione secondaria (≤300). */
+  /* Titolo ≤30 (limite CheckboxGroup reale) + descrizione secondaria (≤300).
+     «Cercami per le partite» (24 char) è l'opt-IN che abilita il push mirato: senza
+     questa spunta il socio non entra MAI nei candidati dell'open-match. */
   [['promemoria','🔔 Promemoria prenotazioni','Ti ricordiamo le tue partite'],
+   ['openMatch','🎾 Cercami per le partite','Ti scriviamo se manca un giocatore nei giorni e nelle fasce che indichi'],
    ['novita','📣 Novità e promozioni','Offerte e iniziative del circolo']].forEach(x=>{
     const row=document.createElement('label'); row.className='friend-row';
     const cb=document.createElement('input'); cb.type='checkbox'; cb.checked=st[x[0]]; cb.onchange=()=>{ st[x[0]]=cb.checked; };
@@ -993,14 +1033,193 @@ function openNotifPrefs(){
   });
   body.appendChild(fl);
   const foot=document.createElement('button'); foot.className='flow-submit'; foot.textContent='Salva preferenze';
-  foot.onclick=()=>{ S.player.prefs={promemoria:st.promemoria,novita:st.novita}; save(); closeSheet();
+  foot.onclick=()=>{ S.player.prefs={promemoria:st.promemoria,novita:st.novita,openMatch:st.openMatch}; save(); closeSheet();
     addOut('🔔 Preferenze notifiche');
-    botSay(()=>{ addInHtml('✅ <b>Preferenze aggiornate</b>'
+    const riga='✅ <b>Preferenze aggiornate</b>'
       +'<br>🔔 Promemoria prenotazioni: <b>'+(st.promemoria?'sì':'no')+'</b>'
-      +'<br>📣 Novità e promozioni: <b>'+(st.novita?'sì':'no')+'</b>',true);
+      +'<br>🎾 Cercami per le partite: <b>'+(st.openMatch?'sì':'no')+'</b>'
+      +'<br>📣 Novità e promozioni: <b>'+(st.novita?'sì':'no')+'</b>';
+    // Opt-in appena acceso ma registro vuoto = consenso che non serve a nulla (senza
+    // giorni/fasce il socio non matcha mai). Si aggancia il Flow disponibilità ALLA
+    // STESSA bolla: un messaggio con corpo + CTA Flow è UN messaggio, non due — la
+    // conferma separata + il lancio costerebbero il doppio (rilevante dal 1/10/2026).
+    const daCompilare = st.openMatch && !eraOpenMatch && dispoVuota(S.player.disponibilita);
+    botSay(()=>{
+      if(daCompilare){
+        addFlowLaunch(riga+'<br>📅 Manca solo <b>quando</b> cercarti: indicami giorni e fasce.', openDispoFlow, 'Le mie disponibilità');
+      } else {
+        addInHtml(riga,true);
+      }
       addQuick([{label:'👤 Il mio profilo',text:'Il mio profilo'},menuBtn()]); }); };
   body.appendChild(foot);
   openSheet('Preferenze notifiche', body, 'I messaggi che ricevi');
+}
+
+/* ---------- REGISTRO DISPONIBILITÀ (Flow «Le mie disponibilità») ------------
+   Sostituisce il blast dell'open-match con un push di PRECISIONE. Perché esiste:
+   contattare 5 soci «giusti di livello ma occupati» costa 5 template marketing
+   (€0,0658 l'uno) e soprattutto genera segnalazioni → il quality rating della WABA
+   scende → limiti di invio o sospensione, cioè si perde il canale. Chi ha DICHIARATO
+   giorno e fascia non segnala: per lui l'invito è atteso, non spam.
+
+   Fedeltà WA — un solo Flow, schermata unica a sezioni (come openAssessmentFlow):
+   · CheckboxGroup «giorni» = 7 voci (limite reale 20) ✓
+   · CheckboxGroup «fasce»  = 3 voci ✓
+   · Dropdown frequenza/preavviso/validità = 3-4 voci l'uno (limite 200) ✓
+   Costo: 2 messaggi per aggiornamento (il CTA ↗ + la conferma), esattamente come le
+   preferenze notifiche. La compilazione DENTRO il Flow non costa nulla.
+
+   Vocabolario allineato alla scheda socio della web app staff (`availabilityProfile`
+   = {days,time,frequency,notice,matchType,source,updatedAt}): `frequenza` e `preavviso`
+   usano le stringhe ESATTE delle select staff, così il Flow scrive nel registro che la
+   segreteria già vede e modifica. `matchType` (Maschile/Femminile/Mista) NON entra nel
+   Flow: decisione D4 = niente filtro di genere nell'open-match. */
+const DISPO_GIORNI=[{v:1,lb:'Lunedì'},{v:2,lb:'Martedì'},{v:3,lb:'Mercoledì'},{v:4,lb:'Giovedì'},{v:5,lb:'Venerdì'},{v:6,lb:'Sabato'},{v:0,lb:'Domenica'}];
+const DISPO_DOW_LB=['Dom','Lun','Mar','Mer','Gio','Ven','Sab'];
+/* Le 3 fasce ricalcano i confini VERI del LISTINO (la fascia diurna chiude dove
+   iniziano gli slot fissi: 18:00 lun–gio, 17:30 ven) — non orari inventati. Nel weekend
+   i fissi finiscono alle 18:00: la «sera» di sabato/domenica non esiste e l'intersezione
+   col calendario la scarta da sé, senza bisogno di regole in più qui. */
+const DISPO_FASCE=[
+  {id:'mattina',    lb:'☀️ Mattina e pranzo', d:'Dalle 09:00 alle 15:00'},
+  {id:'pomeriggio', lb:'🌤️ Pomeriggio',       d:'Dalle 15:00 alle 17:30'},
+  {id:'sera',       lb:'🌙 Sera',             d:'Dalle 17:30 in poi'}
+];
+/* Stringhe IDENTICHE alle select della scheda socio staff (#newDesiredFrequency e
+   #newNotice): stesso vocabolario = stesso registro, nessuna traduzione da mantenere. */
+const DISPO_FREQ=[
+  {s:'1 volta a settimana',   max:1},
+  {s:'2 volte a settimana',   max:2},
+  {s:'3+ volte a settimana',  max:3},
+  {s:'Quando capita',         max:99}
+];
+const DISPO_PREAVVISO=[
+  {s:'Anche in giornata',       gg:0},
+  {s:'Almeno 1 giorno prima',   gg:1},
+  {s:'Almeno 2 giorni prima',   gg:2},
+  {s:'Solo con largo anticipo', gg:4}
+];
+const DISPO_VALIDITA=[{s:'Ancora 1 mese',m:1},{s:'Ancora 3 mesi',m:3},{s:'Fino a fine stagione',m:null}];
+
+function fasciaDiOra(ora){ const t=String(ora||''); if(t<'15:00') return 'mattina'; if(t<'17:30') return 'pomeriggio'; return 'sera'; }
+function isoDa(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function isoOggi(){ return isoDa(new Date()); }
+function isoTraMesi(m){ const d=new Date(); if(m==null) d.setMonth(11,31); else d.setMonth(d.getMonth()+m); return isoDa(d); }
+function stampNow(){ const d=new Date(); return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+' · '+now(); }
+function dispoLookup(list,s,def){ return list.filter(x=>x.s===s)[0]||def; }
+function dispoMaxSettimana(d){ return dispoLookup(DISPO_FREQ, d&&d.frequenza, {max:2}).max; }
+function dispoPreavvisoGiorni(d){ return dispoLookup(DISPO_PREAVVISO, d&&d.preavviso, {gg:0}).gg; }
+function dispoVuota(d){ return !d || !(d.giorni||[]).length || !(d.fasce||[]).length; }
+function dispoScaduta(d){ return !!(d && d.validoFino && isoOggi() > d.validoFino); }
+/* Disponibilità dei soci demo del pool (in Fase 2 arrivano da Supabase). */
+function dispoDemo(giorni,fasce,frequenza,preavviso){
+  return {giorni:giorni, fasce:fasce, frequenza:frequenza, preavviso:preavviso,
+          validoFino:isoTraMesi(3), source:'whatsapp', updatedAt:''};
+}
+/* Chiave con cui si interroga il registro a partire da UNA prenotazione. `dow` è sul
+   rec per le prenotazioni nuove; per quelle salvate prima del campo si ricava dal
+   giorno. `preavvisoGiorni` = a quanti giorni di distanza è la partita. */
+function slotDiPrenotazione(rec){
+  const off=offsetForGiorno(rec.giorno);
+  return { dow:(rec.dow==null && off!=null) ? dayInfo(off).dow : rec.dow,
+           fascia:fasciaDiOra(rec.ora),
+           preavvisoGiorni:(off==null?0:off) };
+}
+/* Il match. `mode`:
+   · 'esatto' → giorno E fascia dichiarati (giro 1, precisione massima)
+   · 'giorno' → solo il giorno (giro 2: il GIORNO l'ha scelto lui, la fascia la
+     allarghiamo noi → resta un invito atteso, non un blast). */
+function dispoMatch(d, slot, mode){
+  if(dispoVuota(d) || dispoScaduta(d)) return false;
+  if(slot.dow==null) return false;
+  if((d.giorni||[]).indexOf(slot.dow)<0) return false;
+  if(slot.preavvisoGiorni < dispoPreavvisoGiorni(d)) return false;
+  if(mode==='giorno') return true;
+  return (d.fasce||[]).indexOf(slot.fascia)>=0;
+}
+/* Descrizione della riga List (≤72 char) — lo stato si legge senza aprire nulla, e un
+   registro scaduto o mancante si vede a colpo d'occhio. */
+function dispoSummary(){
+  const p=S.player;
+  if(!p.prefs || !p.prefs.openMatch) return 'Attiva «Cercami per le partite» per usarle';
+  const d=p.disponibilita;
+  if(dispoVuota(d)) return 'Non le hai ancora indicate';
+  if(dispoScaduta(d)) return 'Scadute — aggiornale per farti ricontattare';
+  const gg=(d.giorni||[]).slice().sort((a,b)=>((a+6)%7)-((b+6)%7)).map(v=>DISPO_DOW_LB[v]).join(', ');
+  const ff=(d.fasce||[]).join(' e ');
+  const s=gg+' · '+ff;
+  return s.length>72 ? s.slice(0,71)+'…' : s;
+}
+/* Dropdown fedele (Flow reale = Dropdown, ≤200 voci). Riusa `.flow-inp` per non
+   introdurre CSS nuovo. */
+function dispoSelect(opts, cur, onPick){
+  const s=document.createElement('select'); s.className='flow-inp';
+  opts.forEach(o=>{ const op=document.createElement('option'); op.value=o; op.textContent=o; if(o===cur) op.selected=true; s.appendChild(op); });
+  s.onchange=()=>onPick(s.value);
+  return s;
+}
+function openDispoFlow(){
+  const d=S.player.disponibilita||{};
+  const st={ giorni:(d.giorni||[]).slice(), fasce:(d.fasce||[]).slice(),
+             frequenza:d.frequenza||DISPO_FREQ[1].s,
+             preavviso:d.preavviso||DISPO_PREAVVISO[0].s,
+             validita:DISPO_VALIDITA[1].s };
+  const body=el('flow');
+  body.appendChild(el('luce-hint','Ti scriviamo <b>solo</b> quando manca un giocatore in una di queste finestre. Puoi cambiarle o toglierle quando vuoi.'));
+  body.appendChild(fieldLabel('Che giorni puoi giocare'));
+  const gl=el('friend-list');
+  DISPO_GIORNI.forEach(g=>{
+    const row=document.createElement('label'); row.className='friend-row';
+    const cb=document.createElement('input'); cb.type='checkbox'; cb.checked=st.giorni.indexOf(g.v)>=0;
+    cb.onchange=()=>{ const i=st.giorni.indexOf(g.v); if(cb.checked){ if(i<0) st.giorni.push(g.v); } else if(i>=0) st.giorni.splice(i,1); };
+    const sp=document.createElement('span'); sp.textContent=g.lb;
+    row.appendChild(cb); row.appendChild(sp); gl.appendChild(row);
+  });
+  body.appendChild(gl);
+  body.appendChild(fieldLabel('In che fasce'));
+  const fl=el('friend-list');
+  DISPO_FASCE.forEach(f=>{
+    const row=document.createElement('label'); row.className='friend-row';
+    const cb=document.createElement('input'); cb.type='checkbox'; cb.checked=st.fasce.indexOf(f.id)>=0;
+    cb.onchange=()=>{ const i=st.fasce.indexOf(f.id); if(cb.checked){ if(i<0) st.fasce.push(f.id); } else if(i>=0) st.fasce.splice(i,1); };
+    const sp=document.createElement('span'); sp.innerHTML=esc(f.lb)+'<span class="opt-d">'+esc(f.d)+'</span>';
+    row.appendChild(cb); row.appendChild(sp); fl.appendChild(row);
+  });
+  body.appendChild(fl);
+  /* La frequenza è IL freno anti-spam: è il socio a dire quante volte tollera di
+     essere cercato, e il matching lo rispetta (cap in poolCandidates). */
+  body.appendChild(fieldLabel('Quante partite a settimana'));
+  body.appendChild(dispoSelect(DISPO_FREQ.map(x=>x.s), st.frequenza, v=>{ st.frequenza=v; }));
+  body.appendChild(fieldLabel('Con quanto preavviso'));
+  body.appendChild(dispoSelect(DISPO_PREAVVISO.map(x=>x.s), st.preavviso, v=>{ st.preavviso=v; }));
+  body.appendChild(fieldLabel('Per quanto vale'));
+  body.appendChild(dispoSelect(DISPO_VALIDITA.map(x=>x.s), st.validita, v=>{ st.validita=v; }));
+  body.appendChild(el('luce-hint','Passata questa data smettiamo di cercarti finché non la rinnovi: serve a non farti arrivare inviti per finestre che non valgono più.'));
+  const foot=document.createElement('button'); foot.className='flow-submit'; foot.textContent='Salva disponibilità';
+  foot.onclick=()=>{
+    if(!st.giorni.length){ toast('Scegli almeno un giorno.'); return; }
+    if(!st.fasce.length){ toast('Scegli almeno una fascia.'); return; }
+    const val=dispoLookup(DISPO_VALIDITA, st.validita, DISPO_VALIDITA[1]);
+    S.player.disponibilita={ giorni:st.giorni.slice(), fasce:st.fasce.slice(),
+      frequenza:st.frequenza, preavviso:st.preavviso, validoFino:isoTraMesi(val.m),
+      source:'whatsapp', updatedAt:stampNow() };
+    // Compilare le disponibilità implica volerle usare: se l'opt-in era spento lo
+    // accendiamo (il Flow stesso È il consenso esplicito) e lo DICIAMO nella conferma —
+    // un consenso acceso di nascosto non sarebbe un consenso.
+    const acceso=!S.player.prefs.openMatch; S.player.prefs.openMatch=true;
+    save(); closeSheet();
+    addOut('📅 Disponibilità aggiornate');
+    botSay(()=>{
+      addInHtml('✅ <b>Disponibilità salvate</b>'
+        +'<br>📅 '+esc(dispoSummary())
+        +'<br>🔁 '+esc(st.frequenza)+'<br>⏱️ '+esc(st.preavviso)
+        +(acceso?'<br>🎾 Ho attivato «<b>Cercami per le partite</b>»':'')
+        +'<br>Ti scriviamo <b>solo</b> in queste finestre. Per smettere: 🔔 Preferenze notifiche.',true);
+      addQuick([{label:'👤 Il mio profilo',text:'Il mio profilo'},menuBtn()]);
+    });
+  };
+  body.appendChild(foot);
+  openSheet('Le mie disponibilità', body, 'Quando cercarti per una partita');
 }
 
 /* ---------- Aggiorna i tuoi dati -------------------------------------------
@@ -1493,7 +1712,10 @@ function commitOpzione(draft){
   const off=offsetForGiorno(draft.giorno);
   const target=draft.target||4;
   const invited=(draft.names||(draft.amici||[]).map(friendName).filter(Boolean)).slice(0,target-1);
-  const rec={id:++S.seq,giorno:draft.giorno,ora:draft.ora,campo:draft.campo,tipo:draft.tipo,durata:draft.durata,
+  /* `dow` = giorno della settimana: è la chiave con cui l'open-match interroga il
+     registro disponibilità. Salvato qui alla creazione perché `giorno` è un'etichetta
+     ("Sab 20/07") e ricavarlo dopo costerebbe una scansione (offsetForGiorno). */
+  const rec={id:++S.seq,giorno:draft.giorno,dow:(off!=null?dayInfo(off).dow:null),ora:draft.ora,campo:draft.campo,tipo:draft.tipo,durata:draft.durata,
     target:target, amici:[], invitati:invited.slice(),
     prezzoTesta:(draft.prezzoTesta!=null?draft.prezzoTesta:null)};
   recomputeCompletion(rec);                 // completo (4/4) oppure confermato (da completare)
@@ -1927,20 +2149,39 @@ function ensurePool(){ if(!S.pool || !S.pool.length){ S.pool=demoState().pool; s
 /* C'è ancora almeno un amico ⚪ da invitare per questa partita? (decide se PROMUOVERE
    l'open-match: se Marco ha esaurito gli amici, il circolo si fa avanti — "garbo" D6). */
 function hasInvitableFriend(rec){ return S.friends.some(f=>inviteStateOf(rec,f).can); }
-/* Candidati del pool compatibili per livello, ordinati dal più vicino di livello.
-   Esclude: opt-out da open-match, già in roster/invitati, già TENTATI per questa
-   partita (rec._poolTried → non ricontattiamo chi ha già declinato). NIENTE filtro
-   genere/categoria (D4). Marco non vede mai questo elenco: è solo il "cervello" del bot. */
-function poolCandidates(rec, band){
+/* Candidati compatibili, ordinati per «quanto ha senso disturbarli». Esclude: chi NON
+   ha dato l'opt-in, chi non è disponibile quel giorno/fascia, chi ha esaurito il cap
+   settimanale, chi vuole più preavviso, chi è già in roster/invitato e chi è già stato
+   TENTATO per questa partita (rec._poolTried → non ricontattiamo chi ha già declinato).
+   NIENTE filtro genere/categoria (D4). Marco non vede mai questo elenco: è il "cervello"
+   del bot, non una lista di soci.
+
+   ⭐ La prima riga del filtro è il cuore della Fase 2: `!p.optIn` → fuori. Prima c'era
+   `_openOptOut` (opt-OUT: chi non aveva il flag veniva contattato) — e siccome quel flag
+   non lo scriveva mai nessuno, erano contattabili TUTTI. Ora vale il contrario: si scrive
+   solo a chi ha detto sì. È questo che protegge il quality rating della WABA. */
+function poolCandidates(rec, band, mode){
   const my=parseFloat(S.player.livello)||4.0; const b=(band||OPEN_BAND)+1e-9;
   const tried=rec._poolTried||[];
   const inRoster=new Set([].concat(rec.amici||[], rec.invitati||[]));
+  const slot=slotDiPrenotazione(rec);
   return ensurePool().filter(p=>{
-    if(p._openOptOut) return false;
+    if(!p.optIn) return false;                                                   // consenso esplicito, o niente
     if(tried.indexOf(p.id)>=0) return false;
     if(inRoster.has(p.nome.split(' ')[0])) return false;
-    return Math.abs((parseFloat(p.livello)||0)-my) <= b;
-  }).sort((a,b2)=>Math.abs(parseFloat(a.livello)-my)-Math.abs(parseFloat(b2.livello)-my));
+    if(Math.abs((parseFloat(p.livello)||0)-my) > b) return false;
+    if((p._contattiSettimana||0) >= dispoMaxSettimana(p.disponibilita)) return false;   // freno anti-spam
+    return dispoMatch(p.disponibilita, slot, mode||'esatto');
+  }).sort((x,y)=>dispoScore(x,my,slot)-dispoScore(y,my,slot));
+}
+/* Ordinamento: chi ha dichiarato ESATTAMENTE quel giorno+fascia viene prima di tutti;
+   poi la vicinanza di livello; a parità, chi è stato disturbato di meno — così il carico
+   si distribuisce invece di martellare sempre il solito volenteroso (che è il modo in cui
+   si brucia un socio disponibile). */
+function dispoScore(p, my, slot){
+  return (dispoMatch(p.disponibilita, slot, 'esatto') ? 0 : 100)
+       + Math.abs((parseFloat(p.livello)||0)-my)*10
+       + (p._contattiSettimana||0);
 }
 /* Entry-point «ci pensiamo noi». Riga calma (nessuna lista di soci → D1 mediato),
    poi la ricerca simulata. `band` cresce a 1.0 se Marco chiede di allargare. */
@@ -1964,13 +2205,23 @@ function doOpenMatch(rec, band){
 function resolveOpenMatch(r, band){
   const rr=S.prenotazioni.find(x=>x.id===r.id)||r;
   if(rosterPosti(rr)<=0){ return; }
-  const cands=poolCandidates(rr, band);
+  // Scala di degradazione: prima il match ESATTO (giorno+fascia), poi solo il GIORNO
+  // (fascia allargata). Entrambi i giri contattano soci che hanno dato l'opt-in E
+  // nominato quel giorno → restano inviti attesi. Il terzo gradino (allargare il
+  // LIVELLO) resta una scelta ESPLICITA di Marco in openMatchNoResult: non lo facciamo
+  // di nostra iniziativa, perché è l'unico che allarga davvero la platea.
+  let cands=poolCandidates(rr, band, 'esatto');
+  if(!cands.length) cands=poolCandidates(rr, band, 'giorno');
   if(!cands.length){ openMatchNoResult(rr, band); return; }
   // Consenso del contattato (D7): un candidato può declinare (backstage). Contiamo i
   // rifiuti SOLO per ammorbidire il copy («ci ho messo un attimo»), senza svelare CHI.
   let declines=0, picked=null;
   for(const c of cands){
     rr._poolTried.push(c.id);
+    // Qui parte IL messaggio → si consuma una unità del cap settimanale che il socio si è
+    // dato nel Flow. Nell'emulatore il contatore non si azzera mai (non c'è rollover
+    // settimanale); in Fase 2 è una conta scorrevole a 7 giorni sul log dei contatti.
+    c._contattiSettimana=(c._contattiSettimana||0)+1;
     if(c._declina && !c._declinaUsed){ c._declinaUsed=true; declines++; continue; }  // rifiuto assorbito
     picked=c; break;
   }
@@ -1995,7 +2246,9 @@ function openMatchNoResult(r, band){
   if(rosterPosti(rr)<=0) return;
   const canWiden = (band||OPEN_BAND) < 1.0;
   const quanti = rosterPosti(rr)>1 ? 'altri giocatori' : 'un altro giocatore';
-  addInHtml('Per <b>'+esc(rr.giorno)+'</b> alle '+rr.ora+' non ho ancora trovato '+quanti+' del tuo livello 😕'
+  // Copy onesta dopo il registro: il tappo può essere la DISPONIBILITÀ, non il livello
+  // (prima era sempre «del tuo livello» — con l'opt-in sarebbe spesso una bugia).
+  addInHtml('Per <b>'+esc(rr.giorno)+'</b> alle '+rr.ora+' non ho ancora trovato '+quanti+' libero 😕'
     +'<br>Nessun problema: tengo l\'invito <b>aperto</b> e continuo a cercare.'
     +(canWiden?'<br>Vuoi che <b>allarghi un po\'</b> il livello?':''));
   const qs=[];
