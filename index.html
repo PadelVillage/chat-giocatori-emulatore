@@ -206,7 +206,7 @@
 const LS_KEY='pmo_emu_state_v11';
 /* Versione visibile nel footer: serve a capire SUBITO se il browser sta
    mostrando una versione vecchia in cache (Cmd+Shift+R per forzare il reload). */
-const APP_BUILD='v0.98 · 18/07';
+const APP_BUILD='v0.99 · 18/07';
 
 /* ─── freshnessGuard: auto-guarigione da cache vecchia ──────────────────────
    GitHub Pages / il browser del telefono possono servire un index.html VECCHIO
@@ -2072,9 +2072,16 @@ function openInviteFriendsList(rec){
   // La riga «ci pensiamo noi al quarto» (open-match mediato): PRIMA se Marco è a corto di
   // amici, altrimenti dopo la lista amici come alternativa calma. Marco non vede soci: tocca
   // e il circolo cerca per lui (doOpenMatch).
-  const openRow = posti>0 ? [{ section: noInvitable?'Al quarto ci pensiamo noi':'Oppure', ic:'🎾',
-    label: noInvitable?'Al quarto pensiamo noi':'Trovate voi il quarto',
-    desc:'Cerchiamo un socio del tuo livello libero', action:()=>botSay(()=>doOpenMatch(r)) }] : [];
+  // Due strade, stessa promessa: SCEGLIE IL CIRCOLO (un tap, contattiamo noi il primo
+  // disponibile) oppure SCEGLIE MARCO (gli diamo fino a 6 nomi disponibili e decide lui).
+  // La seconda per prima quando è a corto di amici: lì è la più utile.
+  const openRow = posti>0 ? [
+    { section: noInvitable?'Al quarto ci pensiamo noi':'Oppure', ic:'👤',
+      label:'Scelgo io chi contattare', desc:'Ti mostro i soci liberi in questa fascia',
+      action:()=>botSay(()=>openPlafondList(r)) },
+    { section: noInvitable?'Al quarto ci pensiamo noi':'Oppure', ic:'🎾',
+      label: noInvitable?'Al quarto pensiamo noi':'Trovate voi il quarto',
+      desc:'Cerchiamo un socio del tuo livello libero', action:()=>botSay(()=>doOpenMatch(r)) }] : [];
   const rows = (noInvitable ? openRow.concat(friendRows) : friendRows.concat(openRow));
   rows.push({section:'Altro', ic:'👥', label:'Gestisci i giocatori', desc:'Togli o revoca chi hai già invitato', action:()=>botSay(()=>addFlowLaunch('Apriamo il modulo — togli o revoca.', ()=>openAddPlayersFlow(r)))});
   rows.push({section:'Altro', ic:'➕', label:'Aggiungi un amico', desc:'Condividi un contatto per invitarlo', action:()=>botSay(()=>openAddFriendFlow({backTo:r.id, invite:true}))});
@@ -2160,14 +2167,17 @@ function hasInvitableFriend(rec){ return S.friends.some(f=>inviteStateOf(rec,f).
    `_openOptOut` (opt-OUT: chi non aveva il flag veniva contattato) — e siccome quel flag
    non lo scriveva mai nessuno, erano contattabili TUTTI. Ora vale il contrario: si scrive
    solo a chi ha detto sì. È questo che protegge il quality rating della WABA. */
-function poolCandidates(rec, band, mode){
+function poolCandidates(rec, band, mode, includeTried){
   const my=parseFloat(S.player.livello)||4.0; const b=(band||OPEN_BAND)+1e-9;
   const tried=rec._poolTried||[];
   const inRoster=new Set([].concat(rec.amici||[], rec.invitati||[]));
   const slot=slotDiPrenotazione(rec);
   return ensurePool().filter(p=>{
     if(!p.optIn) return false;                                                   // consenso esplicito, o niente
-    if(tried.indexOf(p.id)>=0) return false;
+    // `includeTried` = lo usa il PLAFOND: lì i già contattati non spariscono, restano
+    // in lista con lo stato 🟡/❌ (come gli amici). Nel percorso automatico invece
+    // vanno esclusi, altrimenti si ricontatterebbe chi ha già declinato.
+    if(!includeTried && tried.indexOf(p.id)>=0) return false;
     if(inRoster.has(p.nome.split(' ')[0])) return false;
     if(Math.abs((parseFloat(p.livello)||0)-my) > b) return false;
     if((p._contattiSettimana||0) >= dispoMaxSettimana(p.disponibilita)) return false;   // freno anti-spam
@@ -2265,8 +2275,12 @@ function maybeOfferOpenMatch(rec){
   if(rosterPosti(r)<=0) return false;
   if(hasInvitableFriend(r)) return false;         // ha ancora amici ⚪ → non forziamo (amici prima)
   addInHtml('Finiti gli amici da invitare? Tranquillo 🎾'
-    +'<br><b>Al quarto ci pensiamo noi</b>: cerco un socio del tuo livello libero per '+esc(r.giorno)+' alle '+r.ora+'.');
-  addQuick([{label:'🎾 Trovate voi il quarto', action:()=>{ addOut('Trovate voi il quarto'); botSay(()=>doOpenMatch(r)); }}, menuBtn()]);
+    +'<br><b>Al quarto ci pensiamo noi</b>: ci sono soci che hanno detto di essere liberi per '+esc(r.giorno)+' alle '+r.ora+'.'
+    +'<br>Vuoi <b>sceglierli tu</b> o faccio io?');
+  // Reply-button: max 3, titolo ≤20 char (qui 12 e 11) → si sta.
+  addQuick([{label:'👤 Scelgo io', action:()=>{ addOut('Scelgo io'); botSay(()=>openPlafondList(r)); }},
+            {label:'🎾 Cercate voi', action:()=>{ addOut('Cercate voi'); botSay(()=>doOpenMatch(r)); }},
+            menuBtn()]);
   return true;
 }
 /* Dopo un ❌/🔕 (inviteResponse): SOLO se ha senso (posti aperti + niente amici ⚪) offro
@@ -2276,6 +2290,137 @@ function rosterOfferAfterMiss(rec){
   const r=S.prenotazioni.find(x=>x.id===rec.id)||rec;
   if(rosterPosti(r)>0 && !hasInvitableFriend(r)){ botSay(()=>maybeOfferOpenMatch(r)); }
 }
+/* ---------- PLAFOND «scelgo io chi contattare» ------------------------------
+   Riletta la promessa «al quarto ci pensiamo noi»: non «facciamo tutto noi di
+   nascosto», ma «ti diamo un GRUPPO di persone disponibili e scegli tu chi contattare».
+   Il circolo resta il tramite (il messaggio parte dal suo numero: i soci non si
+   scrivono mai tra loro), quindi paga e si prende le eventuali lamentele → i freni
+   restano tutti.
+
+   DUE freni distinti, che fanno cose diverse:
+   · PLAFOND (lato mittente) = quante persone il circolo mette a disposizione di Marco
+     per volta — `PLAFOND_MAX`. Evita che uno chieda a venti persone in un colpo.
+   · CAP settimanale (lato destinatario) = quante volte quella persona ha accettato di
+     essere cercata (scelto da lei nel Flow disponibilità). Prima la proteggeva dai
+     messaggi del circolo, ora la protegge dalle richieste DEGLI ALTRI SOCI.
+     È già applicato da poolCandidates → chi ha esaurito il cap non compare proprio.
+
+   PRIVACY: si mostra **nome + iniziale del cognome** («Marta B.»), mai il cognome
+   intero. Il solo nome non basterebbe: in un circolo ci sono tre Marco e due Marta, e
+   l'app usa già il primo nome come chiave del roster — Marco chiederebbe alla persona
+   sbagliata senza accorgersene. NIENTE filtro per sesso: il gruppo è misto (D4).
+
+   Un tap = una richiesta = un messaggio: si contatta UNA persona per volta (come gli
+   amici), non in blocco. Chi ha già ricevuto la richiesta resta in lista con 🟡/❌
+   invece di sparire, così Marco vede a che punto è. */
+const PLAFOND_MAX=6;                 // quante persone il circolo propone per volta
+/* «Marta Belli» → «Marta B.» — identità sufficiente a distinguere due omonimi, senza
+   consegnare il cognome di un socio a un altro socio. */
+function nomeIniziale(nomeCompleto){
+  const parti=String(nomeCompleto||'').trim().split(/\s+/);
+  return parti.length<2 ? (parti[0]||'') : (parti[0]+' '+parti[1].charAt(0).toUpperCase()+'.');
+}
+/* Stato di un socio del plafond rispetto a QUESTA prenotazione — stesso linguaggio
+   visivo degli amici (⚪🟡🟢❌), così Marco non impara due grammatiche diverse. */
+function plafondStateOf(rec, p){
+  if((rec.amici||[]).indexOf(p.nome.split(' ')[0])>=0) return {ic:'🟢', can:false, txt:'in partita'};
+  if((rec._plafondNo||[]).indexOf(p.id)>=0)            return {ic:'❌', can:false, txt:'non può'};
+  if((rec._plafondAttesa||[]).indexOf(p.id)>=0)        return {ic:'🟡', can:false, txt:'in attesa'};
+  return {ic:'⚪', can:true, txt:'da contattare'};
+}
+/* I candidati del plafond: stessa selezione e stesso ordinamento del percorso
+   automatico (opt-in ∧ disponibilità ∧ cap ∧ livello, ordinati per match esatto →
+   livello → chi è stato disturbato meno), ma senza escludere i già contattati e
+   troncati a PLAFOND_MAX. */
+function plafondCandidates(rec, band){
+  let c=poolCandidates(rec, band, 'esatto', true);
+  if(c.length<PLAFOND_MAX){
+    const ids=new Set(c.map(x=>x.id));
+    c=c.concat(poolCandidates(rec, band, 'giorno', true).filter(x=>!ids.has(x.id)));
+  }
+  return c.slice(0, PLAFOND_MAX);
+}
+function openPlafondList(rec){
+  const r=S.prenotazioni.find(x=>x.id===rec.id)||rec;
+  if(rosterPosti(r)<=0){ addInHtml('La tua partita è già <b>al completo</b> 🎾.'); botSay(()=>rosterActionButtons(r)); return; }
+  const slot=slotDiPrenotazione(r);
+  const cands=plafondCandidates(r);
+  if(!cands.length){ openMatchNoResult(r, OPEN_BAND); return; }       // mai vicolo cieco
+  const posti=rosterPosti(r);
+  const rows=cands.map(p=>{
+    const st=plafondStateOf(r,p);
+    // Onestà nella descrizione: «disponibile mar sera» solo se ha davvero dichiarato
+    // QUELLA fascia; se lo abbiamo preso allargando, si dice che è un'altra fascia.
+    const esatto=dispoMatch(p.disponibilita, slot, 'esatto');
+    const quando=esatto ? ('disponibile '+DISPO_DOW_LB[slot.dow].toLowerCase()+' '+slot.fascia)
+                        : ('libero '+DISPO_DOW_LB[slot.dow].toLowerCase()+', in altra fascia');
+    const desc = st.can ? ('Livello '+p.livello+' · '+quando)
+                        : (st.ic==='🟡' ? 'Richiesta inviata · aspettiamo la risposta'
+                        : (st.ic==='🟢' ? 'Ha accettato · è in partita'
+                        : 'Ha detto che non può · tocca per riprovare'));
+    return { section:'Disponibili in questa fascia', ic:st.ic, label:nomeIniziale(p.nome), desc:desc,
+             action: st.can ? (()=>contattaSocio(r.id, p.id)) : (()=>botSay(()=>plafondInfoTap(r.id, p.id))) };
+  });
+  rows.push({ section:'Oppure', ic:'🎾', label:'Scegliete voi per me',
+              desc:'Ci pensiamo noi: contattiamo il primo disponibile', action:()=>botSay(()=>doOpenMatch(r)) });
+  rows.push(menuBackRow('Oppure'));
+  addListMessage({
+    body:'👤 <b>Scegli chi contattare</b>'
+      +'<br>🕒 '+esc(r.giorno)+' alle '+r.ora+' · Campo '+r.campo
+      +'<br>🎾 '+(posti>1?('Mancano <b>'+posti+'</b> giocatori'):'Manca <b>1</b> giocatore')
+      +'<br>Sono soci che hanno <b>dichiarato</b> di essere liberi in questa fascia. Scrivo io per te, uno alla volta.',
+    button:'Apri', title:'Chi vuoi che contatti?', rows:rows.slice(0,10) });
+}
+/* Tap su un socio NON contattabile (🟡/🟢/❌): nota onesta, mai vicolo cieco. */
+function plafondInfoTap(recId, pid){
+  const r=S.prenotazioni.find(x=>x.id===recId); if(!r) return;
+  const p=(S.pool||[]).filter(x=>x.id===pid)[0]; if(!p) return;
+  const st=plafondStateOf(r,p), nm=nomeIniziale(p.nome);
+  if(st.ic==='❌'){
+    addInHtml('❌ <b>'+esc(nm)+'</b> ha detto che <b>non può</b> per '+esc(r.giorno)+' alle '+r.ora+'. Vuoi che riprovi lo stesso?');
+    addQuick([{label:'✉️ Richiedi ancora',action:()=>contattaSocio(recId,pid)},
+              {label:'👤 Torna alla lista',action:()=>botSay(()=>openPlafondList(r))}]);
+    return;
+  }
+  addInHtml(st.ic==='🟡' ? ('🟡 La richiesta a <b>'+esc(nm)+'</b> è già partita — aspettiamo la risposta.')
+                         : ('🟢 <b>'+esc(nm)+'</b> ha già accettato: è in partita.'));
+  addQuick([{label:'👤 Torna alla lista',action:()=>botSay(()=>openPlafondList(r))}, menuBtn()]);
+}
+/* Un tap = UNA richiesta = UN messaggio (che paga il circolo). Consuma una unità del
+   cap settimanale di chi la riceve, esattamente come il percorso automatico. */
+function contattaSocio(recId, pid){
+  const r=S.prenotazioni.find(x=>x.id===recId); if(!r){ addInHtml('Prenotazione non più disponibile.'); return; }
+  const p=(S.pool||[]).filter(x=>x.id===pid)[0]; if(!p) return;
+  if(rosterPosti(r)<=0){ addInHtml('La partita è già al completo 🎾.'); botSay(()=>rosterActionButtons(r)); return; }
+  const nm=nomeIniziale(p.nome);
+  r._poolTried=(r._poolTried||[]).concat(p.id);
+  r._plafondNo=(r._plafondNo||[]).filter(x=>x!==p.id);          // ri-richiesta dopo un ❌
+  r._plafondAttesa=(r._plafondAttesa||[]).concat(p.id);
+  p._contattiSettimana=(p._contattiSettimana||0)+1;             // il freno che protegge LEI
+  save();
+  addSys('✉️ Richiesta inviata a '+nm+' — la manda il circolo per te; ti avviso appena risponde.');
+  setTimeout(()=>{ const rr=S.prenotazioni.find(x=>x.id===recId);
+    if(!rr || rr.stato==='completo') return;
+    if((rr._plafondAttesa||[]).indexOf(p.id)<0) return;          // già risolta
+    botSay(()=>plafondResponse(rr, p), TYPING_MS); }, 2500);
+}
+function plafondResponse(r, p){
+  const nm=nomeIniziale(p.nome);
+  r._plafondAttesa=(r._plafondAttesa||[]).filter(x=>x!==p.id);
+  if(p._declina && !p._declinaUsed){                              // demo: Matteo declina
+    p._declinaUsed=true; r._plafondNo=(r._plafondNo||[]).concat(p.id); save();
+    addInHtml('❌ <b>'+esc(nm)+'</b> non può per '+esc(r.giorno)+' alle '+r.ora+'. Resta <b>❌</b> in lista: prova con un altro.');
+    botSay(()=>{ rosterActionButtons(r); }, TYPING_MS); return;
+  }
+  r.amici=(r.amici||[]).concat(p.nome.split(' ')[0]); save();     // il roster resta a primo nome (chiave esistente)
+  if(rosterPosti(r)===0){
+    addInHtml('✅ <b>'+esc(nm)+'</b> ci sta! Partita <b>al completo</b> 🎾',true);
+    botSay(()=>confirmBooking(r), TYPING_MS); return;
+  }
+  addInHtml('✅ <b>'+esc(nm)+'</b> ci sta! Ora siete <b>'+rosterFilled(r)+'/'+rosterTarget(r)+'</b> — manca'+(rosterPosti(r)>1?('no '+rosterPosti(r)):' 1')+'.',true);
+  botSay(()=>rosterActionButtons(r), TYPING_MS);
+}
+
 /* ---------- Annulla / Modifica --------------------------------------------- */
 function startCancel(){
   if(!S.prenotazioni.length){ addInHtml('Non hai prenotazioni da annullare.'); addQuick([{label:'🎾 Prenota un campo',text:'Vorrei prenotare un campo'}, menuBtn()]); return; }
